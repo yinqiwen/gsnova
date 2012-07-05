@@ -3,6 +3,7 @@ package event
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"reflect"
 )
 
@@ -63,7 +64,7 @@ func decodeBytesValue(buf *bytes.Buffer) (b []byte, err error) {
 	return
 }
 
-func encodeValue(buf *bytes.Buffer, v reflect.Value) {
+func encodeValue(buf *bytes.Buffer, v *reflect.Value) {
 	switch v.Type().Kind() {
 	case reflect.Bool:
 		encodeBoolValue(buf, v.Bool())
@@ -79,7 +80,8 @@ func encodeValue(buf *bytes.Buffer, v reflect.Value) {
 		} else {
 			encodeUInt64Value(buf, uint64(v.Len()))
 			for i := 0; i < v.Len(); i++ {
-				encodeValue(buf, v.Index(i))
+				iv := v.Index(i)
+				encodeValue(buf, &iv)
 			}
 		}
 	case reflect.Map:
@@ -89,24 +91,27 @@ func encodeValue(buf *bytes.Buffer, v reflect.Value) {
 			ks := v.MapKeys()
 			encodeUInt64Value(buf, uint64(len(ks)))
 			for i := 0; i < len(ks); i++ {
-				encodeValue(buf, ks[i])
-				encodeValue(buf, v.MapIndex(ks[i]))
+				encodeValue(buf, &(ks[i]))
+				vv := v.MapIndex(ks[i])
+				encodeValue(buf, &vv)
 			}
 		}
 	case reflect.Ptr:
-		encodeValue(buf, reflect.Indirect(v))
+		rv := reflect.Indirect(*v)
+		encodeValue(buf, &rv)
 	case reflect.Interface:
-		encodeValue(buf, reflect.ValueOf(v.Interface()))
+		rv := reflect.ValueOf(v.Interface())
+		encodeValue(buf, &rv)
 	case reflect.Struct:
 		num := v.NumField()
 		for i := 0; i < num; i++ {
 			f := v.Field(i)
-			encodeValue(buf, f)
+			encodeValue(buf, &f)
 		}
 	}
 }
 
-func decodeValue(buf *bytes.Buffer, v reflect.Value) error {
+func decodeValue(buf *bytes.Buffer, v *reflect.Value) error {
 	switch v.Type().Kind() {
 	case reflect.Bool:
 		b, err := decodeBoolValue(buf)
@@ -140,11 +145,9 @@ func decodeValue(buf *bytes.Buffer, v reflect.Value) error {
 		b, err := binary.ReadUvarint(buf)
 		if nil == err {
 			sv := reflect.MakeSlice(v.Type(), int(b), int(b))
-			kt := v.Type().Elem()
-			var i uint64
-			for i = 0; i < b; i++ {
-				iv := reflect.Zero(kt)
-				reflect.Append(sv, iv)
+			for i := 0; i < int(b); i++ {
+				iv := sv.Index(i)
+				decodeValue(buf, &(iv))
 			}
 			v.Set(sv)
 		} else {
@@ -154,59 +157,77 @@ func decodeValue(buf *bytes.Buffer, v reflect.Value) error {
 		b, err := binary.ReadUvarint(buf)
 		if nil == err {
 			vm := reflect.MakeMap(v.Type())
-			kt := v.Type().Key()
-			vt := v.Type().Elem()
-			var i uint64
-			for i = 0; i < b; i++ {
-				kv := reflect.Zero(kt)
-				vv := reflect.Zero(vt)
-				err := decodeValue(buf, kv)
+			for i := 0; i < int(b); i++ {
+				kv := reflect.New(v.Type().Key()).Elem()
+				vv := reflect.New(v.Type().Elem()).Elem()
+				err := decodeValue(buf, &(kv))
 				if nil != err {
 					return err
 				}
-				err = decodeValue(buf, vv)
+				err = decodeValue(buf, &(vv))
 				if nil != err {
 					return err
 				}
-				v.SetMapIndex(kv, vv)
+				vm.SetMapIndex(kv, vv)
 			}
 			v.Set(vm)
 		} else {
 			return err
 		}
 	case reflect.Ptr:
-		pv := reflect.New(v.Type().Elem())
-		err := decodeValue(buf, reflect.Indirect(pv))
+		var err error
+		if v.IsNil() {
+			pv := reflect.New(v.Type().Elem())
+			err = decodeValue(buf, &pv)
+			v.Set(pv)
+		} else {
+			xv := v.Elem()
+			err = decodeValue(buf, &xv)
+		}
 		if nil != err {
 			return err
 		} else {
-			v.Set(pv)
+			//v.Set(pv.Addr())
 		}
 	case reflect.Interface:
-	    rv := reflect.Zero(v.Type())
-		err := decodeValue(buf, rv)
+		rv := v.Elem()
+		if rv.Type().Kind() == reflect.Interface{
+		   return errors.New("Loop interface:")
+		}
+		if !rv.CanSet(){
+		    return errors.New("Can not set:")
+		}
+		err := decodeValue(buf, &rv)
 		if nil != err {
 			return err
-		} else {
-			v.Set(rv)
-		}
+		} 
 	case reflect.Struct:
 		num := v.NumField()
 		for i := 0; i < num; i++ {
 			f := v.Field(i)
-			decodeValue(buf, f)
+			err := decodeValue(buf, &f)
+			if nil != err{
+			   return err
+			}
 		}
+	default:
+		return errors.New("Unsupported type:" + v.Type().Name())
 	}
 	return nil
 }
 
 func Encode(buf *bytes.Buffer, ev interface{}) {
 	rv := reflect.ValueOf(ev)
-	encodeValue(buf, rv)
+	encodeValue(buf, &rv)
 }
-
 
 func Decode(buf *bytes.Buffer, ev interface{}) error {
 	rv := reflect.ValueOf(ev)
-	return decodeValue(buf, rv)
+//	if !rv.CanSet(){
+//       rv = reflect.ValueOf(&ev).Elem()
+//	}
+//	if !rv.CanSet(){
+//	   return errors.New("arg is not setable.")
+//	}
+	return decodeValue(buf, &rv)
 }
