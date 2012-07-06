@@ -2,14 +2,32 @@ package event
 
 import (
 	"bytes"
+	//	"fmt"
+	//	"reflect"
 	"testing"
+	"time"
 )
 
+type XT struct {
+	X int
+}
+
+//func (x *XT)Encode(buf *bytes.Buffer){
+//   //x.X = 48100
+//   fmt.Println("Encode invoked!")
+//}
+//
+//func (x *XT)Decode(buf *bytes.Buffer)error{
+//    x.X = 48100
+//    fmt.Println("Decode invoked!")
+//    return nil
+//}
 type ST struct {
 	X int
 	Y string
 	Z []string
 	M map[string]int
+	T XT
 }
 
 func TestXYZ(t *testing.T) {
@@ -21,12 +39,13 @@ func TestXYZ(t *testing.T) {
 	s.Y = "wqy"
 	s.M = make(map[string]int)
 	s.M["wqy"] = 101
+	s.T.X = 1001
 	var buf bytes.Buffer
-	Encode(&buf, &s)
+	EncodeValue(&buf, &s)
 
 	var cmp ST
 	//cmp = nil
-	err := Decode(&buf, &cmp)
+	err := DecodeValue(&buf, &cmp)
 	if nil != err {
 		t.Error(err.Error())
 		return
@@ -47,5 +66,36 @@ func TestXYZ(t *testing.T) {
 	if cmp.M["wqy"] != 101 {
 		t.Error("M[\"wqy\"] is not equal", cmp.Z[1], s.Z[1], len(cmp.Z))
 	}
-	
+	if cmp.T.X != s.T.X {
+		t.Error("T.X is not equal", cmp.Z[1], s.Z[1], len(cmp.Z))
+	}
+
+	header := EventHeader{101, 201, 301}
+	RegistEvent(header.Type, header.Version, &cmp)
+	var tmp bytes.Buffer
+	EncodeEvent(&tmp, header, &cmp)
+	err, h, dev := DecodeEvent(&tmp)
+	if nil != err {
+		t.Error(err.Error())
+		return
+	}
+	if *h != header {
+		t.Error("header not equal")
+		return
+	}
+
+	if (dev.(*ST)).Y != cmp.Y {
+		t.Error("event not equal" + cmp.Y)
+		return
+	}
+	start := time.Now().UnixNano()
+	loopcount := 1000000
+	for i:=0; i < loopcount; i++{
+	   var tbuf bytes.Buffer
+	   EncodeEvent(&tbuf, header, &cmp)
+	   DecodeEvent(&tbuf)
+	}
+	end := time.Now().UnixNano()
+	t.Errorf("Cost %dns to loop %d to encode&decode", (end-start), loopcount)
+		
 }

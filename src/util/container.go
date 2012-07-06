@@ -1,5 +1,10 @@
 package util
 
+type NameValuePair struct {
+	Name  string
+	Value string
+}
+
 type ListSelector struct {
 	cursor int
 	values []interface{}
