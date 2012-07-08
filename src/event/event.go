@@ -271,6 +271,13 @@ type EventHeader struct {
 	Hash    uint32
 }
 
+func (h *EventHeader) GetHash() uint32 {
+	return h.Hash
+}
+func (h *EventHeader) SetHash(hash uint32) {
+	h.Hash = hash
+}
+
 func (header *EventHeader) Encode(buffer *bytes.Buffer) {
 	EncodeUInt64Value(buffer, uint64(header.Type))
 	EncodeUInt64Value(buffer, uint64(header.Version))
@@ -296,43 +303,60 @@ func (header *EventHeader) Decode(buffer *bytes.Buffer) error {
 type Event interface {
 	Encode(buffer *bytes.Buffer)
 	Decode(buffer *bytes.Buffer) error
+	GetType() uint32
+	GetVersion() uint32
+	GetHash() uint32
+	SetHash(hash uint32)
 }
 
-func EncodeValue(buf *bytes.Buffer, ev interface{}) {
+func EncodeValue(buf *bytes.Buffer, ev interface{}) error {
+	if exist, tk := GetRegistTypeVersion(ev); !exist {
+		return errors.New("No regist info to encode value.")
+	} else {
+		EncodeUInt64Value(buf, uint64(tk.Type))
+		EncodeUInt64Value(buf, uint64(tk.Version))
+		rv := reflect.ValueOf(ev)
+		encodeValue(buf, &rv)
+	}
+	return nil
+}
+
+func DecodeValue(buf *bytes.Buffer) (err error, ev interface{}) {
+	t, err := DecodeUInt32Value(buf)
+	if nil != err {
+		return
+	}
+	version, err := DecodeUInt32Value(buf)
+	if nil != err {
+		return
+	}
+	err, ev = NewObjectInstance(t, version)
 	rv := reflect.ValueOf(ev)
-	encodeValue(buf, &rv)
+	err = decodeValue(buf, &rv)
+	return
 }
 
-func DecodeValue(buf *bytes.Buffer, ev interface{}) error {
-	rv := reflect.ValueOf(ev)
-	return decodeValue(buf, &rv)
-}
 
-func EncodeEvent(buf *bytes.Buffer, header EventHeader, ev interface{}) {
-	EncodeValue(buf, &header)
-	EncodeValue(buf, ev)
-}
-
-func EncodeRawEvent(buf *bytes.Buffer, header EventHeader, ev Event) {
+func EncodeEvent(buf *bytes.Buffer, ev Event) {
+	var header EventHeader
+	header.Type = ev.GetType()
+	header.Version = ev.GetVersion()
+	header.Hash = ev.GetHash()
 	header.Encode(buf)
 	ev.Encode(buf)
 }
 
-func DecodeEvent(buf *bytes.Buffer) (err error, header *EventHeader, ev interface{}) {
-	header = new(EventHeader)
-	if err = DecodeValue(buf, header); nil != err {
+func DecodeEvent(buf *bytes.Buffer) (err error, ev Event) {
+	var header EventHeader
+	if err = header.Decode(buf); nil != err {
 		return
 	}
-	err, ev = NewEventInstance(header.Type, header.Version)
-	err = DecodeValue(buf, ev)
-	return
-}
-
-func DecodeRawEvent(buf *bytes.Buffer) (err error, header *EventHeader, ev Event) {
-	header = new(EventHeader)
-	if err = DecodeValue(buf, header); nil != err {
+	var tmp interface{}
+	if err, tmp = NewEventInstance(header.Type, header.Version); nil != err {
 		return
 	}
+	ev = tmp.(Event)
+	ev.SetHash(header.Hash)
 	err = ev.Decode(buf)
 	return
 }

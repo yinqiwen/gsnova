@@ -40,17 +40,21 @@ func TestXYZ(t *testing.T) {
 	s.M = make(map[string]int)
 	s.M["wqy"] = 101
 	s.T.X = 1001
+	header := EventHeader{101, 201, 301}
+	RegistObject(header.Type, header.Version, &s)
 	var buf bytes.Buffer
-	EncodeValue(&buf, &s)
-
-	var cmp ST
-	//cmp = nil
-	err := DecodeValue(&buf, &cmp)
+	err := EncodeValue(&buf, &s)
 	if nil != err {
 		t.Error(err.Error())
 		return
 	}
-
+	//cmp = nil
+	err, dv := DecodeValue(&buf)
+	if nil != err {
+		t.Error(err.Error())
+		return
+	}
+	cmp := dv.(*ST)
 	if cmp.X != s.X {
 		t.Error("X is not equal")
 	}
@@ -70,32 +74,30 @@ func TestXYZ(t *testing.T) {
 		t.Error("T.X is not equal", cmp.Z[1], s.Z[1], len(cmp.Z))
 	}
 
-	header := EventHeader{101, 201, 301}
-	RegistEvent(header.Type, header.Version, &cmp)
-	var tmp bytes.Buffer
-	EncodeEvent(&tmp, header, &cmp)
-	err, h, dev := DecodeEvent(&tmp)
-	if nil != err {
-		t.Error(err.Error())
-		return
-	}
-	if *h != header {
-		t.Error("header not equal")
-		return
-	}
-
-	if (dev.(*ST)).Y != cmp.Y {
-		t.Error("event not equal" + cmp.Y)
-		return
-	}
+	//	var tmp bytes.Buffer
+	//	EncodeValue(&tmp, cmp)
+	//	err, h, dev := DecodeEvent(&tmp)
+	//	if nil != err {
+	//		t.Error(err.Error())
+	//		return
+	//	}
+	//	if *h != header {
+	//		t.Error("header not equal")
+	//		return
+	//	}
+	//
+	//	if (dev.(*ST)).Y != cmp.Y {
+	//		t.Error("event not equal" + cmp.Y)
+	//		return
+	//	}
 	start := time.Now().UnixNano()
 	loopcount := 1000000
-	for i:=0; i < loopcount; i++{
-	   var tbuf bytes.Buffer
-	   EncodeEvent(&tbuf, header, &cmp)
-	   DecodeEvent(&tbuf)
+	for i := 0; i < loopcount; i++ {
+		var tbuf bytes.Buffer
+		EncodeValue(&tbuf, cmp)
+		DecodeValue(&tbuf)
 	}
 	end := time.Now().UnixNano()
-	t.Errorf("Cost %dns to loop %d to encode&decode", (end-start), loopcount)
-		
+	t.Errorf("Cost %dns to loop %d to encode&decode", (end - start), loopcount)
+
 }

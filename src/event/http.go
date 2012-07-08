@@ -10,6 +10,7 @@ import (
 type HTTPMessageEvent struct {
 	Headers []*util.NameValuePair
 	Content bytes.Buffer
+	EventHeader
 }
 
 func (msg *HTTPMessageEvent) getHeaderEntry(name string) *util.NameValuePair {
@@ -99,16 +100,24 @@ func (msg *HTTPMessageEvent) DoDecode(buffer *bytes.Buffer) error {
 	return nil
 }
 
-type SocketChunkEvent struct {
+type HTTPChunkEvent struct {
 	Content []byte
+	EventHeader
 }
 
-func (chunk *SocketChunkEvent) Encode(buffer *bytes.Buffer) {
+func (chunk *HTTPChunkEvent) Encode(buffer *bytes.Buffer) {
 	EncodeBytesValue(buffer, chunk.Content)
 }
-func (chunk *SocketChunkEvent) Decode(buffer *bytes.Buffer) (err error) {
+func (chunk *HTTPChunkEvent) Decode(buffer *bytes.Buffer) (err error) {
 	chunk.Content, err = DecodeBytesValue(buffer)
 	return
+}
+
+func (req *HTTPChunkEvent) GetType() uint32 {
+   return HTTP_CHUNK_EVENT_TYPE
+}
+func (req *HTTPChunkEvent) GetVersion() uint32 {
+   return 1
 }
 
 type HTTPRequestEvent struct {
@@ -134,6 +143,13 @@ func (req *HTTPRequestEvent) Decode(buffer *bytes.Buffer) (err error) {
 	return req.DoDecode(buffer)
 }
 
+func (req *HTTPRequestEvent) GetType() uint32 {
+   return HTTP_REQUEST_EVENT_TYPE
+}
+func (req *HTTPRequestEvent) GetVersion() uint32 {
+   return 1
+}
+
 type HTTPResponseEvent struct {
 	HTTPMessageEvent
 	Status uint32
@@ -149,4 +165,11 @@ func (res *HTTPResponseEvent) Decode(buffer *bytes.Buffer) (err error) {
 		return
 	}
 	return res.DoDecode(buffer)
+}
+
+func (res *HTTPResponseEvent) GetType() uint32 {
+   return HTTP_RESPONSE_EVENT_TYPE
+}
+func (res *HTTPResponseEvent) GetVersion() uint32 {
+   return 1
 }
