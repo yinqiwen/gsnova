@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 	"util"
+	"net/http"
 )
 
 type HTTPMessageEvent struct {
@@ -124,6 +125,7 @@ type HTTPRequestEvent struct {
 	HTTPMessageEvent
 	Method string
 	Url    string
+	RawReq *http.Request
 }
 
 func (req *HTTPRequestEvent) Encode(buffer *bytes.Buffer) {
