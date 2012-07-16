@@ -24,8 +24,8 @@ func RegistObject(event_type, event_version uint32, ev interface{}) {
 	registed_types[rt] = tk
 }
 
-func RegistEvent(event_type, event_version uint32, ev Event) {
-	RegistObject(event_type, event_version, ev)
+func RegistEvent(ev Event) {
+	RegistObject(ev.GetType(), ev.GetVersion(), ev)
 }
 
 func GetRegistTypeVersion(obj interface{}) (exist bool, tk EventTypeKey) {
@@ -62,4 +62,13 @@ func NewEventInstance(event_type, event_version uint32) (err error, ev Event) {
 		ev = v.Interface().(Event)
 	}
 	return
+}
+
+func Init() {
+	RegistEvent(&AuthRequestEvent{})
+	RegistEvent(&AuthResponseEvent{})
+	RegistEvent(&EncryptEvent{})
+	RegistEvent(&CompressEvent{})
+	RegistEvent(&HTTPResponseEvent{})
+	RegistEvent(&HTTPRequestEvent{})
 }

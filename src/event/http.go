@@ -2,11 +2,15 @@ package event
 
 import (
 	"bytes"
+	"net/http"
 	"strconv"
 	"strings"
 	"util"
-	"net/http"
 )
+
+//const (
+//	MAGIC_NUMBER uint16 = 0xCAFE
+//)
 
 type HTTPMessageEvent struct {
 	Headers []*util.NameValuePair
@@ -115,10 +119,10 @@ func (chunk *HTTPChunkEvent) Decode(buffer *bytes.Buffer) (err error) {
 }
 
 func (req *HTTPChunkEvent) GetType() uint32 {
-   return HTTP_CHUNK_EVENT_TYPE
+	return HTTP_CHUNK_EVENT_TYPE
 }
 func (req *HTTPChunkEvent) GetVersion() uint32 {
-   return 1
+	return 1
 }
 
 type HTTPRequestEvent struct {
@@ -146,10 +150,10 @@ func (req *HTTPRequestEvent) Decode(buffer *bytes.Buffer) (err error) {
 }
 
 func (req *HTTPRequestEvent) GetType() uint32 {
-   return HTTP_REQUEST_EVENT_TYPE
+	return HTTP_REQUEST_EVENT_TYPE
 }
 func (req *HTTPRequestEvent) GetVersion() uint32 {
-   return 1
+	return 1
 }
 
 type HTTPResponseEvent struct {
@@ -170,8 +174,8 @@ func (res *HTTPResponseEvent) Decode(buffer *bytes.Buffer) (err error) {
 }
 
 func (res *HTTPResponseEvent) GetType() uint32 {
-   return HTTP_RESPONSE_EVENT_TYPE
+	return HTTP_RESPONSE_EVENT_TYPE
 }
 func (res *HTTPResponseEvent) GetVersion() uint32 {
-   return 1
+	return 1
 }

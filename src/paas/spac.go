@@ -7,7 +7,7 @@ import (
 var registedRemoteConnManager map[string]RemoteConnectionManager = make(map[string]RemoteConnectionManager)
 
 func RegisteRemoteConnManager(connManager RemoteConnectionManager) {
-    connManager.Init()
+    //connManager.Init()
 	registedRemoteConnManager[connManager.GetName()] = connManager
 }
 

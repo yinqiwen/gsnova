@@ -24,8 +24,7 @@ const (
 )
 
 type RemoteConnection interface {
-	WriteEvent(conn *SessionConnection, ev event.Event) error
-	ReadEvent() (err error, ev event.Event)
+	Request(conn *SessionConnection, ev event.Event) (err error, res event.Event)
 	IsConnected() bool
 	IsAvailable() bool
 	ReConnect() error
@@ -67,14 +66,14 @@ func (session *SessionConnection) processHttpEvent(ev *event.HTTPRequestEvent) e
 	if nil != err {
 		return err
 	}
-	session.RemoteConn.WriteEvent(session, ev)
+	session.RemoteConn.Request(session, ev)
 	return nil
 }
 
 func (session *SessionConnection) processHttpChunkEvent(ev *event.HTTPChunkEvent) error {
 	ev.SetHash(session.SessionID)
 	if nil != session.RemoteConn {
-		session.RemoteConn.WriteEvent(session, ev)
+		session.RemoteConn.Request(session, ev)
 	}
 	return nil
 }

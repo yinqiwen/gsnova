@@ -5,6 +5,7 @@ import (
 	"errors"
 	"snappy"
 	"strconv"
+	//"fmt"
 )
 
 type CompressEvent struct {
@@ -44,7 +45,8 @@ func (ev *CompressEvent) Decode(buffer *bytes.Buffer) (err error) {
 		if err != nil {
 			return
 		}
-		err, ev.Ev = DecodeEvent(buffer)
+		//fmt.Printf("Compress decode  bytes\n")
+		err, ev.Ev = DecodeEvent(bytes.NewBuffer(b))
 		return err
 	default:
 		return errors.New("Not supported compress type:" + strconv.Itoa(int(ev.CompressType)))

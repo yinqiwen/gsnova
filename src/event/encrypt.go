@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"util"
 	"bytes"
+	//"fmt"
 )
 
 type EncryptEvent struct {
@@ -36,6 +37,7 @@ func (ev *EncryptEvent) Decode(buffer *bytes.Buffer) (err error) {
 		return err
 	case ENCRYPTER_SE1:
 		newbuf := util.SimpleDecrypt(buffer)
+		//fmt.Printf("Decrypt decode %d bytes\n", newbuf.Len())
 		err, ev.Ev = DecodeEvent(newbuf)
 	default:
 		return errors.New("Not supported encrypt type:" + strconv.Itoa(int(ev.EncryptType)))
