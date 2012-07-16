@@ -25,9 +25,6 @@ const (
 
 type RemoteConnection interface {
 	Request(conn *SessionConnection, ev event.Event) (err error, res event.Event)
-	IsConnected() bool
-	IsAvailable() bool
-	ReConnect() error
 }
 
 type RemoteConnectionManager interface {
@@ -66,7 +63,10 @@ func (session *SessionConnection) processHttpEvent(ev *event.HTTPRequestEvent) e
 	if nil != err {
 		return err
 	}
-	session.RemoteConn.Request(session, ev)
+	err, _ = session.RemoteConn.Request(session, ev)
+	if nil == err{
+	   
+	}
 	return nil
 }
 

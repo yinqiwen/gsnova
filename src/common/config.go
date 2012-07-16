@@ -13,5 +13,6 @@ func InitConfig() error {
 	if nil != err {
 	   log.Fatalf("Failed to load config file for reason:%s\n", err.Error())
 	}
+	err = util.LoadHostMapping(Home + "hosts.conf")
 	return err
 }

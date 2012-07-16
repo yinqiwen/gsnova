@@ -19,7 +19,7 @@ func NewIni() *Ini {
 	return ini
 }
 
-func (ini *Ini) Load(is io.Reader) (err error){
+func (ini *Ini) Load(is io.Reader) (err error) {
 	var (
 		part   []byte
 		prefix bool
@@ -107,8 +107,9 @@ func (ini *Ini) GetIntProperty(tag, key string) (value int64, exist bool) {
 	return
 }
 
-func (ini *Ini) GetTagProperties(tag string) map[string]string {
-	return ini.props[tag]
+func (ini *Ini) GetTagProperties(tag string) (map[string]string, bool) {
+	v, exist := ini.props[tag]
+	return v, exist
 }
 
 func LoadIniFile(path string) (ini *Ini, err error) {

@@ -10,6 +10,7 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -20,6 +21,16 @@ import (
 const (
 	ANONYMOUSE = "anonymouse"
 )
+
+type GAEConfig struct {
+	Compressor     uint32
+	Encrypter      uint32
+	InjectRange    []string
+	UA             string
+	ConnectionMode string
+}
+
+var gae_cfg *GAEConfig
 
 type GAEAuth struct {
 	appid  string
@@ -56,13 +67,27 @@ type GAEHttpConnection struct {
 	client    *http.Client
 }
 
-func (conn *GAEHttpConnection) Auth() error {
+func (conn *GAEHttpConnection) initHttpClient() {
+	if nil != conn.client {
+		return
+	}
 	conn.client = new(http.Client)
+	tlcfg := &tls.Config{}
+	tlcfg.InsecureSkipVerify = true
+	var dial func(n, addr string) (net.Conn, error)
+	sslDial := func(n, addr string) (net.Conn, error) {
+		conn, err := net.Dial(n, addr)
+		if err != nil {
+			return nil, err
+		}
+		return tls.Client(conn, tlcfg), nil
+	}
 	proxyInfo, exist := common.Cfg.GetProperty("LocalProxy", "Proxy")
 	if exist {
-		log.Printf("GAE use proxy:%s\n", proxyInfo)
-		tlcfg := &tls.Config{}
-		tlcfg.InsecureSkipVerify = true
+		log.Printf("GAE use proxy:%s\n", util.GetUrl(proxyInfo))
+		if strings.HasPrefix(proxyInfo, "https") {
+			dial = sslDial
+		}
 		tr := &http.Transport{
 			Proxy: func(req *http.Request) (*url.URL, error) {
 				proxy := util.GetUrl(proxyInfo)
@@ -79,11 +104,28 @@ func (conn *GAEHttpConnection) Auth() error {
 				//fmt.Println(proxyURL)
 				return proxyURL, nil
 			},
+			Dial:               dial,
+			TLSClientConfig:    tlcfg,
+			DisableCompression: true,
+		}
+		conn.client.Transport = tr
+	} else {
+		if mode, exist := common.Cfg.GetProperty("GAE", "ConnectionMode"); exist {
+			if strings.EqualFold(mode, "https") {
+				dial = sslDial
+			}
+		}
+		tr := &http.Transport{
+			Dial:               dial,
 			TLSClientConfig:    tlcfg,
 			DisableCompression: true,
 		}
 		conn.client.Transport = tr
 	}
+}
+
+func (conn *GAEHttpConnection) Auth() error {
+	conn.initHttpClient()
 	var authEvent event.AuthRequestEvent
 	authEvent.User = conn.auth.user
 	authEvent.Passwd = conn.auth.passwd
@@ -101,19 +143,16 @@ func (conn *GAEHttpConnection) Auth() error {
 		log.Printf("Auth token is %s\n", authres.Token)
 		conn.authToken = authres.Token
 	}
-
 	return nil
 }
 
-func (gae *GAEHttpConnection) Request(conn *SessionConnection, ev event.Event) (err error, res event.Event) {
+func (gae *GAEHttpConnection) requestEvent(conn *SessionConnection, ev event.Event) (err error, res event.Event) {
+	gae.initHttpClient()
 	domain := gae.auth.appid + ".appspot.com"
 	addr := util.GetHost(domain)
 	scheme := "http"
-	mode, exist := common.Cfg.GetProperty("GAE", "ConnectionMode")
-	if exist {
-		if strings.EqualFold(mode, "https") {
-			scheme = "https"
-		}
+	if strings.EqualFold("https", gae_cfg.ConnectionMode) {
+		scheme = "https"
 	}
 	var buf bytes.Buffer
 	var tags event.EventHeaderTags
@@ -123,14 +162,18 @@ func (gae *GAEHttpConnection) Request(conn *SessionConnection, ev event.Event) (
 		var compress event.CompressEvent
 		compress.SetHash(ev.GetHash())
 		compress.Ev = ev
-		compress.CompressType = event.COMPRESSOR_SNAPPY
+		compress.CompressType = gae_cfg.Compressor
 		var encrypt event.EncryptEvent
 		encrypt.SetHash(ev.GetHash())
-		encrypt.EncryptType = event.ENCRYPTER_SE1
+		encrypt.EncryptType = gae_cfg.Encrypter
 		encrypt.Ev = &compress
 		event.EncodeEvent(&buf, &encrypt)
 	} else {
-		event.EncodeEvent(&buf, ev)
+		var encrypt event.EncryptEvent
+		encrypt.SetHash(ev.GetHash())
+		encrypt.EncryptType = gae_cfg.Encrypter
+		encrypt.Ev = ev
+		event.EncodeEvent(&buf, &encrypt)
 	}
 	req := &http.Request{
 		Method:        "POST",
@@ -141,12 +184,12 @@ func (gae *GAEHttpConnection) Request(conn *SessionConnection, ev event.Event) (
 		ContentLength: int64(buf.Len()),
 	}
 
-	if ua, exist := common.Cfg.GetProperty("GAE", "UserAgent"); exist {
-		req.Header.Set("User-Agent", ua)
+	if len(gae_cfg.UA) > 0 {
+		req.Header.Set("User-Agent", gae_cfg.UA)
 	}
 	req.Header.Set("Connection", "keep-alive")
 	req.Header.Set("Content-Type", "application/octet-stream")
-	log.Println(req)
+	//log.Println(req)
 	if response, err := gae.client.Do(req); nil != err {
 		log.Printf("Failed to request data from GAE:%s\n", err.Error())
 		return err, nil
@@ -184,25 +227,87 @@ func (gae *GAEHttpConnection) Request(conn *SessionConnection, ev event.Event) (
 	return nil, nil
 }
 
+func (gae *GAEHttpConnection) Request(conn *SessionConnection, ev event.Event) (err error, res event.Event) {
+	if ev.GetType() == event.HTTP_REQUEST_EVENT_TYPE {
+		httpreq := ev.(*event.HTTPRequestEvent)
+		if strings.EqualFold(httpreq.Method, "CONNECT") {
+			conn.LocalRawConn.Write([]byte("200 OK\r\n\r\n"))
+			conn.LocalRawConn = tls.Server(conn.LocalRawConn, nil)
+			conn.State = STATE_RECV_HTTP
+			return nil, nil
+		} else {
+
+		}
+	}
+	return gae.requestEvent(conn, ev)
+	//	err, res := gae.requestEvent(conn, ev)
+	//	if nil != err {
+	//	}
+}
+
 type GAE struct {
-	conns map[string]*util.ListSelector
-	auths map[string]GAEAuth
+	auths      *util.ListSelector
+	idle_conns chan *GAEHttpConnection
+}
+
+func (manager *GAE) RecycleRemoteConnection(conn *GAEHttpConnection) {
+	select {
+	case manager.idle_conns <- conn:
+		// Buffer on free list; nothing more to do.
+	default:
+		// Free list full, just carry on.
+	}
 }
 
 func (manager *GAE) GetRemoteConnection(ev event.Event) (RemoteConnection, error) {
-
-	return nil, nil
+	var b *GAEHttpConnection
+	// Grab a buffer if available; allocate if not.
+	select {
+	case b = <-manager.idle_conns:
+		// Got one; nothing more to do.
+	default:
+		// None free, so allocate a new one.
+		b = new(GAEHttpConnection)
+		b.authToken = manager.auths.Select().(*GAEAuth).token
+		//b.auth = 
+	} // Read next message from the net.
+	return b, nil
 }
 
 func (manager *GAE) GetName() string {
 	return GAE_NAME
 }
 
+func initConfig() {
+	//init config
+	gae_cfg = new(GAEConfig)
+	if ua, exist := common.Cfg.GetProperty("GAE", "UserAgent"); exist {
+		gae_cfg.UA = ua
+	}
+	gae_cfg.ConnectionMode = "HTTP"
+	if cm, exist := common.Cfg.GetProperty("GAE", "ConnectionMode"); exist {
+		gae_cfg.ConnectionMode = cm
+	}
+	gae_cfg.Compressor = event.COMPRESSOR_SNAPPY
+	if compress, exist := common.Cfg.GetProperty("GAE", "Compressor"); exist {
+		if strings.EqualFold(compress, "None") {
+			gae_cfg.Compressor = event.COMPRESSOR_NONE
+		}
+	}
+	gae_cfg.Encrypter = event.ENCRYPTER_SE1
+	if compress, exist := common.Cfg.GetProperty("GAE", "Encrypter"); exist {
+		if strings.EqualFold(compress, "None") {
+			gae_cfg.Compressor = event.ENCRYPTER_NONE
+		}
+	}
+}
+
 func (manager *GAE) Init() error {
 	log.Println("Init GAE.")
 	RegisteRemoteConnManager(manager)
-	manager.conns = make(map[string]*util.ListSelector)
-	manager.auths = make(map[string]GAEAuth)
+	initConfig()
+	manager.idle_conns = make(chan *GAEHttpConnection, 20)
+	manager.auths = new(util.ListSelector)
 	index := 0
 	for {
 		v, exist := common.Cfg.GetProperty("GAE", "WorkerNode["+strconv.Itoa(index)+"]")
@@ -220,9 +325,8 @@ func (manager *GAE) Init() error {
 			return err
 		}
 		auth.token = conn.authToken
-		manager.auths[auth.appid] = auth
-		manager.conns[auth.appid] = &(util.ListSelector{})
-		manager.conns[auth.appid].Add(conn)
+		manager.auths.Add(&auth)
+		manager.RecycleRemoteConnection(conn)
 		index = index + 1
 	}
 	return nil
