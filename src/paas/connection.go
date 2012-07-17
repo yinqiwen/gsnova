@@ -30,6 +30,7 @@ type RemoteConnection interface {
 
 type RemoteConnectionManager interface {
 	GetRemoteConnection(ev event.Event) (RemoteConnection, error)
+	//RecycleRemoteConnection(conn RemoteConnection)
 	GetName() string
 	Init() error
 }
@@ -57,13 +58,14 @@ func (session *SessionConnection) processHttpEvent(ev *event.HTTPRequestEvent) e
 	ev.SetHash(session.SessionID)
 	proxy, exist := SelectProxy(ev.RawReq)
 	if !exist {
-
 		return errors.New("No proxy found")
 	}
 	var err error
-	session.RemoteConn, err = proxy.GetRemoteConnection(ev)
-	if nil != err {
-		return err
+	if nil == session.RemoteConn {
+		session.RemoteConn, err = proxy.GetRemoteConnection(ev)
+		if nil != err {
+			return err
+		}
 	}
 	err, _ = session.RemoteConn.Request(session, ev)
 	if nil == err {

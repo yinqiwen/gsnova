@@ -24,11 +24,14 @@ const (
 )
 
 type GAEConfig struct {
-	Compressor     uint32
-	Encrypter      uint32
-	InjectRange    []string
-	UA             string
-	ConnectionMode string
+	Compressor           uint32
+	Encrypter            uint32
+	InjectRange          []string
+	UA                   string
+	ConnectionMode       string
+	ConnectionPoolSize   uint32
+	FetchLimitSize       uint32
+	RangeFetchRetryLimit uint32
 }
 
 var gae_cfg *GAEConfig
@@ -66,6 +69,7 @@ type GAEHttpConnection struct {
 	auth      GAEAuth
 	authToken string
 	client    *http.Client
+	manager   *GAE
 }
 
 func (conn *GAEHttpConnection) initHttpClient() {
@@ -228,10 +232,55 @@ func (gae *GAEHttpConnection) requestEvent(conn *SessionConnection, ev event.Eve
 	return nil, nil
 }
 
-func (gae *GAEHttpConnection) handleHttpRes(conn *SessionConnection, ev *event.HTTPResponseEvent) error {
-	//ev.RemoveHeader("TRANSFER_ENCODING")
+func (gae *GAEHttpConnection) handleHttpRes(conn *SessionConnection, req *event.HTTPRequestEvent, ev *event.HTTPResponseEvent) error {
+	contentRange := ev.GetHeader("Content-Range")
+	if len(contentRange) > 0 {
+		httpres := ev.ToResponse()
+		httpres.Header.Del("Content-Range")
+		rangeVal := strings.Split(contentRange, " ")[1]
+		vs := strings.Split(rangeVal, "/")
+		length, _ := strconv.Atoi(vs[1])
+		httpres.ContentLength = int64(length)
+		vs = strings.Split(vs[0], "-")
+		startpos, _ := strconv.Atoi(vs[0])
+		endpos, _ := strconv.Atoi(vs[1])
+		httpres.Write(conn.LocalRawConn)
+
+		for endpos < length-1 {
+			startpos = endpos + 1
+			endpos = endpos + int(gae_cfg.FetchLimitSize)
+			if endpos >= length-1 {
+				endpos = length - 1
+			}
+			req.SetHeader("Range", "bytes="+strconv.Itoa(startpos)+"-"+strconv.Itoa(endpos))
+			err, rangeres := gae.requestEvent(nil, req)
+			if nil == err {
+				rangeHttpRes := rangeres.(*event.HTTPResponseEvent)
+				if rangeHttpRes.Status == 302 {
+					location := rangeHttpRes.GetHeader("Location")
+					xrange := rangeHttpRes.GetHeader("X-Range")
+					if len(location) > 0 && len(xrange) > 0 {
+						req.Url = location
+						req.SetHeader("Range", xrange)
+						err, rangeres = gae.requestEvent(nil, req)
+						if nil != err {
+							return err
+						}
+					}
+				}
+				_, err = conn.LocalRawConn.Write(rangeres.(*event.HTTPResponseEvent).Content.Bytes())
+				if nil != err {
+					return err
+				}
+			} else {
+				return err
+			}
+		}
+		return nil
+	}
+
 	httpres := ev.ToResponse()
-	log.Println(httpres.Header)
+	//log.Println(httpres.Header)
 	return httpres.Write(conn.LocalRawConn)
 }
 
@@ -263,21 +312,31 @@ func (gae *GAEHttpConnection) Request(conn *SessionConnection, ev event.Event) (
 			if !strings.HasPrefix(httpreq.Url, scheme) {
 				httpreq.Url = scheme + httpreq.RawReq.Host + httpreq.Url
 			}
+
+			//inject range header
+			for _, host_pattern := range gae_cfg.InjectRange {
+				if strings.Contains(httpreq.RawReq.Host, host_pattern) {
+					httpreq.SetHeader("Range", "bytes=0-"+strconv.Itoa(int(gae_cfg.FetchLimitSize-1)))
+					break
+				}
+			}
+
 			log.Printf("Request %s %s\n", httpreq.Method, httpreq.Url)
-			httpreq.SetHeader("Connection", "Close")
+			//httpreq.SetHeader("Connection", "Close")
 			err, res = gae.requestEvent(conn, ev)
 			if nil != err {
 				return
 			}
 			conn.State = STATE_RECV_HTTP
 			if nil != conn {
-			    httpres := res.(*event.HTTPResponseEvent)
-				gae.handleHttpRes(conn, httpres)
+				httpres := res.(*event.HTTPResponseEvent)
+				gae.handleHttpRes(conn, httpreq, httpres)
 				//if !httpres.IsKeepAlive(){
 				if conn.Type == HTTPS_TUNNEL {
 					conn.LocalRawConn.Close()
 					conn.State = STATE_SESSION_CLOSE
 				}
+				//gae.manager.RecycleRemoteConnection(gae)
 			}
 			return nil, nil
 		}
@@ -290,10 +349,10 @@ func (gae *GAEHttpConnection) Request(conn *SessionConnection, ev event.Event) (
 
 type GAE struct {
 	auths      *util.ListSelector
-	idle_conns chan *GAEHttpConnection
+	idle_conns chan RemoteConnection
 }
 
-func (manager *GAE) RecycleRemoteConnection(conn *GAEHttpConnection) {
+func (manager *GAE) RecycleRemoteConnection(conn RemoteConnection) {
 	select {
 	case manager.idle_conns <- conn:
 		// Buffer on free list; nothing more to do.
@@ -303,16 +362,18 @@ func (manager *GAE) RecycleRemoteConnection(conn *GAEHttpConnection) {
 }
 
 func (manager *GAE) GetRemoteConnection(ev event.Event) (RemoteConnection, error) {
-	var b *GAEHttpConnection
+	var b RemoteConnection
 	// Grab a buffer if available; allocate if not.
 	select {
 	case b = <-manager.idle_conns:
 		// Got one; nothing more to do.
 	default:
 		// None free, so allocate a new one.
-		b = new(GAEHttpConnection)
-		b.auth = *(manager.auths.Select().(*GAEAuth))
-		b.authToken = b.auth.token
+		gae := new(GAEHttpConnection)
+		gae.auth = *(manager.auths.Select().(*GAEAuth))
+		gae.authToken = gae.auth.token
+		gae.manager = manager
+		b = gae
 		//b.auth = 
 	} // Read next message from the net.
 	return b, nil
@@ -344,13 +405,33 @@ func initConfig() {
 			gae_cfg.Compressor = event.ENCRYPTER_NONE
 		}
 	}
+	gae_cfg.ConnectionPoolSize = 20
+	if poosize, exist := common.Cfg.GetIntProperty("GAE", "ConnectionPoolSize"); exist {
+		gae_cfg.ConnectionPoolSize = uint32(poosize)
+	}
+	//	gae_cfg.ConcurrentRangeFetcher = 3
+	//	if fetcher, exist := common.Cfg.GetIntProperty("GAE", "ConcurrentRangeFetcher"); exist {
+	//		gae_cfg.ConcurrentRangeFetcher = uint32(fetcher)
+	//	}
+	gae_cfg.FetchLimitSize = 256000
+	if limit, exist := common.Cfg.GetIntProperty("GAE", "FetchLimitSize"); exist {
+		gae_cfg.FetchLimitSize = uint32(limit)
+	}
+	gae_cfg.RangeFetchRetryLimit = 1
+	if limit, exist := common.Cfg.GetIntProperty("GAE", "RangeFetchRetryLimit"); exist {
+		gae_cfg.RangeFetchRetryLimit = uint32(limit)
+	}
+	if ranges, exist := common.Cfg.GetProperty("GAE", "InjectRange"); exist {
+		gae_cfg.InjectRange = strings.Split(ranges, "|")
+	}
+
 }
 
 func (manager *GAE) Init() error {
 	log.Println("Init GAE.")
 	RegisteRemoteConnManager(manager)
 	initConfig()
-	manager.idle_conns = make(chan *GAEHttpConnection, 20)
+	manager.idle_conns = make(chan RemoteConnection, gae_cfg.ConnectionPoolSize)
 	manager.auths = new(util.ListSelector)
 	index := 0
 	for {
@@ -364,6 +445,7 @@ func (manager *GAE) Init() error {
 		}
 		conn := new(GAEHttpConnection)
 		conn.auth = auth
+		conn.manager = manager
 		if err := conn.Auth(); nil != err {
 			log.Printf("Failed to auth appid:%s\n", err.Error())
 			return err

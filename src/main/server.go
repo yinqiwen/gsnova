@@ -5,6 +5,7 @@ import (
 	"net"
 	"paas"
 	"sync/atomic"
+	//"runtime"
 )
 
 const (
@@ -25,6 +26,7 @@ func handleServer(lp *net.TCPListener) {
 		if nil != err {
 			continue
 		}
+		//runtime.GC()
 		go handleConn(conn)
 	}
 }
