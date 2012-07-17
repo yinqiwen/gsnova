@@ -4,9 +4,10 @@ import (
 	"bufio"
 	"errors"
 	"event"
+	"io"
+	"log"
 	"net"
 	"net/http"
-	//"strings"
 )
 
 const (
@@ -56,6 +57,7 @@ func (session *SessionConnection) processHttpEvent(ev *event.HTTPRequestEvent) e
 	ev.SetHash(session.SessionID)
 	proxy, exist := SelectProxy(ev.RawReq)
 	if !exist {
+
 		return errors.New("No proxy found")
 	}
 	var err error
@@ -64,8 +66,8 @@ func (session *SessionConnection) processHttpEvent(ev *event.HTTPRequestEvent) e
 		return err
 	}
 	err, _ = session.RemoteConn.Request(session, ev)
-	if nil == err{
-	   
+	if nil == err {
+
 	}
 	return nil
 }
@@ -82,10 +84,17 @@ func (session *SessionConnection) process() error {
 	switch session.State {
 	case STATE_RECV_HTTP:
 		req, err := http.ReadRequest(session.LocalBufferConn)
-		if nil != err {
-			rev := new(event.HTTPRequestEvent)
-			rev.RawReq = req
-			session.processHttpEvent(rev)
+		if nil == err {
+			var rev event.HTTPRequestEvent
+			rev.FromRequest(req)
+			rev.SetHash(session.SessionID)
+			session.processHttpEvent(&rev)
+		} else {
+			if err != io.EOF {
+				log.Printf("Failed to read http request:%s\n", err.Error())
+			}
+			session.LocalRawConn.Close()
+			session.State = STATE_SESSION_CLOSE
 		}
 	case STATE_RECV_HTTP_CHUNK:
 		buf := make([]byte, 8192)

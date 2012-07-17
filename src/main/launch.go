@@ -8,6 +8,7 @@ import (
 	"os"
 	"paas"
 	"path/filepath"
+	//"util"
 )
 
 func main() {
@@ -22,13 +23,14 @@ func main() {
 	event.Init()
 	var gae paas.GAE
 	gae.Init()
-//	var req event.HTTPRequestEvent
-//	req.SetHash(1)
-//	req.Url = "https://twitter.com"
-//	req.Method = "GET"
-//	conn, err := gae.GetRemoteConnection(nil)
-//	err,res  := conn.Request(nil, &req)
-//	fmt.Println(string(res.(*event.HTTPResponseEvent).Content.Bytes()))
+	common.LoadRootCA()
+	//	var req event.HTTPRequestEvent
+	//	req.SetHash(1)
+	//	req.Url = "https://twitter.com"
+	//	req.Method = "GET"
+	//	conn, err := gae.GetRemoteConnection(nil)
+	//	err,res  := conn.Request(nil, &req)
+	//	fmt.Println(string(res.(*event.HTTPResponseEvent).Content.Bytes()))
 	log.Println("=============Start GSnova " + common.Version + "=============")
 	addr, exist := common.Cfg.GetProperty("LocalServer", "Listen")
 	if !exist {

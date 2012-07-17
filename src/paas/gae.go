@@ -1,6 +1,7 @@
 package paas
 
 import (
+	"bufio"
 	"bytes"
 	"common"
 	"crypto/tls"
@@ -189,7 +190,7 @@ func (gae *GAEHttpConnection) requestEvent(conn *SessionConnection, ev event.Eve
 	}
 	req.Header.Set("Connection", "keep-alive")
 	req.Header.Set("Content-Type", "application/octet-stream")
-	//log.Println(req)
+	//log.Println(gae.auth)
 	if response, err := gae.client.Do(req); nil != err {
 		log.Printf("Failed to request data from GAE:%s\n", err.Error())
 		return err, nil
@@ -198,7 +199,7 @@ func (gae *GAEHttpConnection) requestEvent(conn *SessionConnection, ev event.Eve
 			log.Printf("Invalid response:%d\n", response.StatusCode)
 			return errors.New("Invalid response"), nil
 		} else {
-			log.Printf("Response with content len:%d\n", response.ContentLength)
+			//log.Printf("Response with content len:%d\n", response.ContentLength)
 			content := make([]byte, response.ContentLength)
 			_, err := io.ReadFull(response.Body, content)
 			if nil != err {
@@ -227,16 +228,58 @@ func (gae *GAEHttpConnection) requestEvent(conn *SessionConnection, ev event.Eve
 	return nil, nil
 }
 
+func (gae *GAEHttpConnection) handleHttpRes(conn *SessionConnection, ev *event.HTTPResponseEvent) error {
+	//ev.RemoveHeader("TRANSFER_ENCODING")
+	httpres := ev.ToResponse()
+	log.Println(httpres.Header)
+	return httpres.Write(conn.LocalRawConn)
+}
+
 func (gae *GAEHttpConnection) Request(conn *SessionConnection, ev event.Event) (err error, res event.Event) {
 	if ev.GetType() == event.HTTP_REQUEST_EVENT_TYPE {
 		httpreq := ev.(*event.HTTPRequestEvent)
 		if strings.EqualFold(httpreq.Method, "CONNECT") {
-			conn.LocalRawConn.Write([]byte("200 OK\r\n\r\n"))
-			conn.LocalRawConn = tls.Server(conn.LocalRawConn, nil)
+			log.Printf("Request %s %s\n", httpreq.Method, httpreq.Url)
+			conn.LocalRawConn.Write([]byte("HTTP/1.1 200 OK\r\n\r\n"))
+			tlscfg, err := common.TLSConfig(httpreq.GetHeader("Host"))
+			if nil != err {
+				return err, nil
+			}
+			conn.LocalRawConn = tls.Server(conn.LocalRawConn, tlscfg)
+			conn.LocalBufferConn = bufio.NewReader(conn.LocalRawConn)
 			conn.State = STATE_RECV_HTTP
+			conn.Type = HTTPS_TUNNEL
 			return nil, nil
 		} else {
-
+			if httpreq.Content.Len() == 0 {
+				body := make([]byte, httpreq.RawReq.ContentLength)
+				io.ReadFull(httpreq.RawReq.Body, body)
+				httpreq.Content.Write(body)
+			}
+			scheme := "http://"
+			if conn.Type == HTTPS_TUNNEL {
+				scheme = "https://"
+			}
+			if !strings.HasPrefix(httpreq.Url, scheme) {
+				httpreq.Url = scheme + httpreq.RawReq.Host + httpreq.Url
+			}
+			log.Printf("Request %s %s\n", httpreq.Method, httpreq.Url)
+			httpreq.SetHeader("Connection", "Close")
+			err, res = gae.requestEvent(conn, ev)
+			if nil != err {
+				return
+			}
+			conn.State = STATE_RECV_HTTP
+			if nil != conn {
+			    httpres := res.(*event.HTTPResponseEvent)
+				gae.handleHttpRes(conn, httpres)
+				//if !httpres.IsKeepAlive(){
+				if conn.Type == HTTPS_TUNNEL {
+					conn.LocalRawConn.Close()
+					conn.State = STATE_SESSION_CLOSE
+				}
+			}
+			return nil, nil
 		}
 	}
 	return gae.requestEvent(conn, ev)
@@ -268,7 +311,8 @@ func (manager *GAE) GetRemoteConnection(ev event.Event) (RemoteConnection, error
 	default:
 		// None free, so allocate a new one.
 		b = new(GAEHttpConnection)
-		b.authToken = manager.auths.Select().(*GAEAuth).token
+		b.auth = *(manager.auths.Select().(*GAEAuth))
+		b.authToken = b.auth.token
 		//b.auth = 
 	} // Read next message from the net.
 	return b, nil

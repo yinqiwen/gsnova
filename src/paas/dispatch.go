@@ -1,16 +1,18 @@
 package paas
 
 import (
+	"bufio"
+	"log"
 	"net"
 	"strings"
-	//"net/http"
-	"bufio"
 )
 
 func HandleConn(sessionId int32, conn net.Conn) {
 	bufreader := bufio.NewReader(conn)
 	b, err := bufreader.Peek(6)
 	if nil != err {
+		log.Printf("Failed to peek data:%s\n", err.Error())
+		conn.Close()
 		return
 	}
 	session := newSessionConnection(sessionId, conn, bufreader)
@@ -21,10 +23,10 @@ func HandleConn(sessionId int32, conn net.Conn) {
 	} else {
 		session.Type = HTTP_TUNNEL
 	}
-	for ;session.State != STATE_SESSION_CLOSE;{
-	    err := session.process()
-	    if nil != err{
-	       return
-	    }
+	for session.State != STATE_SESSION_CLOSE {
+		err := session.process()
+		if nil != err {
+			return
+		}
 	}
 }

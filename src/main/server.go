@@ -15,6 +15,7 @@ var seed int32 = 0
 
 func handleConn(conn *net.TCPConn) {
 	sessionID := atomic.AddInt32(&seed, 1)
+	//log.Printf("Session:%d created\n", sessionID)
 	paas.HandleConn(sessionID, conn)
 }
 
@@ -36,7 +37,7 @@ func startLocalProxyServer(addr string) bool {
 	var lp *net.TCPListener
 	lp, err = net.ListenTCP("tcp", tcpaddr)
 	if nil != err {
-	    log.Fatalf("Can NOT listen on address:%s\n", addr)
+		log.Fatalf("Can NOT listen on address:%s\n", addr)
 		return false
 	}
 	log.Printf("Listen on address:%s\n", addr)

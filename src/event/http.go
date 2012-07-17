@@ -2,6 +2,8 @@ package event
 
 import (
 	"bytes"
+	"container/list"
+	"io/ioutil"
 	"net/http"
 	"strconv"
 	"strings"
@@ -50,6 +52,16 @@ func (msg *HTTPMessageEvent) GetHeader(name string) string {
 	return ""
 }
 
+func (msg *HTTPMessageEvent) RemoveHeader(name string) {
+	for i := 0; i < len(msg.Headers); i++ {
+		header := msg.Headers[i]
+		if strings.EqualFold(header.Name, name) {
+			msg.Headers = append(msg.Headers[:i], msg.Headers[i+1:]...)
+			i--
+		}
+	}
+}
+
 func (msg *HTTPMessageEvent) IsContentFull() bool {
 	length := msg.GetContentLength()
 	if msg.Content.Len() < length {
@@ -68,6 +80,17 @@ func (msg *HTTPMessageEvent) GetContentLength() int {
 		return 0
 	}
 	return v
+}
+
+func (msg *HTTPMessageEvent) IsKeepAlive() bool {
+	he := msg.getHeaderEntry("Connection")
+	if nil == he {
+		return false
+	}
+	if strings.EqualFold(he.Value, "keep-alive"){
+	   return true
+	}
+	return false
 }
 
 func (msg *HTTPMessageEvent) DoEncode(buffer *bytes.Buffer) {
@@ -149,6 +172,37 @@ func (req *HTTPRequestEvent) Decode(buffer *bytes.Buffer) (err error) {
 	return req.DoDecode(buffer)
 }
 
+func (req *HTTPRequestEvent) ToRequest() *http.Request {
+	raw, err := http.NewRequest(req.Method, req.Url, &(req.Content))
+	if err != nil {
+		return nil
+	}
+	for i := 0; i < len(req.Headers); i++ {
+		header := req.Headers[i]
+		raw.Header.Add(header.Name, header.Value)
+	}
+	return raw
+}
+
+func (req *HTTPRequestEvent) FromRequest(raw *http.Request) {
+	req.RawReq = raw
+	req.Url = raw.RequestURI
+	req.Method = raw.Method
+	for key, values := range raw.Header {
+		for _, value := range values {
+			req.AddHeader(key, value)
+		}
+	}
+	//	if !strings.Contains(req.Url, raw.Host) {
+	//	   scheme := "http://"
+	//	   if req.IsHttps{
+	//	      scheme := "https://"
+	//	   }
+	//	   req.Url = scheme + raw.Host + raw.RequestURI
+	//	}
+	req.AddHeader("Host", raw.Host)
+}
+
 func (req *HTTPRequestEvent) GetType() uint32 {
 	return HTTP_REQUEST_EVENT_TYPE
 }
@@ -159,6 +213,7 @@ func (req *HTTPRequestEvent) GetVersion() uint32 {
 type HTTPResponseEvent struct {
 	HTTPMessageEvent
 	Status uint32
+	rawRes *http.Response
 }
 
 func (res *HTTPResponseEvent) Encode(buffer *bytes.Buffer) {
@@ -171,6 +226,75 @@ func (res *HTTPResponseEvent) Decode(buffer *bytes.Buffer) (err error) {
 		return
 	}
 	return res.DoDecode(buffer)
+}
+
+func (res *HTTPResponseEvent) ToResponse() *http.Response {
+	raw := new(http.Response)
+	raw.Proto = "HTTP"
+	raw.ProtoMajor = 1
+	raw.ProtoMinor = 1
+	//raw.Close = true
+	raw.ContentLength = int64(res.Content.Len())
+	raw.Header = make(http.Header)
+	raw.StatusCode = int(res.Status)
+	res.SetHeader("Content-Length", strconv.Itoa(res.Content.Len()))
+	for i := 0; i < len(res.Headers); i++ {
+		header := res.Headers[i]
+		if strings.EqualFold(header.Name, "Set-Cookie") || strings.EqualFold(header.Name, "Set-Cookie2") {
+			tmp := strings.Split(header.Value, ",")
+			if len(tmp) > 1 {
+				var vlist list.List
+				for _, v := range tmp {
+					if (!strings.Contains(v, "=") || strings.Index(v, "=") > strings.Index(v, ";")) && vlist.Len() > 0 {
+						v = vlist.Back().Value.(string) + "," + v
+						vlist.Remove(vlist.Back())
+						vlist.PushBack(v)
+						//headerValues.add(headerValues.removeLast() + "," + v);
+					} else {
+						vlist.PushBack(v)
+					}
+				}
+				e := vlist.Front()
+				for {
+					if e == nil {
+						break
+					}
+					raw.Header.Add(header.Name, e.Value.(string))
+					e = e.Next()
+				}
+			} else {
+				raw.Header.Add(header.Name, header.Value)
+			}
+		} else {
+			raw.Header.Add(header.Name, header.Value)
+		}
+	}
+	if raw.ContentLength > 0 {
+		raw.Body = ioutil.NopCloser(&res.Content)
+	}
+	return raw
+}
+
+//func (res *HTTPResponseEvent) ToBuffer(buf *bytes.Buffer) *http.Response {
+//	raw := new(http.Response)
+//	raw.Header = make(http.Header)
+//	raw.StatusCode = int(res.Status)
+//	for i := 0; i < len(res.Headers); i++ {
+//		header := res.Headers[i]
+//		raw.Header.Add(header.Name, header.Value)
+//	}
+//	raw.Body = ioutil.NopCloser(&res.Content)
+//	return raw
+//}
+
+func (res *HTTPResponseEvent) FromResponse(raw *http.Response) {
+	res.rawRes = raw
+	res.Status = uint32(raw.StatusCode)
+	for key, values := range raw.Header {
+		for _, value := range values {
+			res.AddHeader(key, value)
+		}
+	}
 }
 
 func (res *HTTPResponseEvent) GetType() uint32 {
