@@ -480,7 +480,7 @@ func (manager *GAE) Init() error {
 	index := 0
 	for {
 		v, exist := common.Cfg.GetProperty("GAE", "WorkerNode["+strconv.Itoa(index)+"]")
-		if !exist {
+		if !exist || len(v) == 0 {
 			break
 		}
 		var auth GAEAuth
