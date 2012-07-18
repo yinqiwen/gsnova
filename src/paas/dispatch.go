@@ -29,4 +29,7 @@ func HandleConn(sessionId int32, conn net.Conn) {
 			return
 		}
 	}
+	if nil != session.RemoteConn {
+		session.RemoteConn.GetConnectionManager().RecycleRemoteConnection(session.RemoteConn)
+	}
 }

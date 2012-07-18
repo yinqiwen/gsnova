@@ -1,10 +1,10 @@
 package event
 
 import (
+	"bytes"
 	"errors"
 	"strconv"
 	"util"
-	"bytes"
 	//"fmt"
 )
 
@@ -24,7 +24,9 @@ func (ev *EncryptEvent) Encode(buffer *bytes.Buffer) {
 	case ENCRYPTER_SE1:
 		newbuf := util.SimpleEncrypt(buf)
 		buffer.Write(newbuf.Bytes())
+		newbuf.Reset()
 	}
+	buf.Reset()
 }
 func (ev *EncryptEvent) Decode(buffer *bytes.Buffer) (err error) {
 	ev.EncryptType, err = DecodeUInt32Value(buffer)
@@ -39,6 +41,7 @@ func (ev *EncryptEvent) Decode(buffer *bytes.Buffer) (err error) {
 		newbuf := util.SimpleDecrypt(buffer)
 		//fmt.Printf("Decrypt decode %d bytes\n", newbuf.Len())
 		err, ev.Ev = DecodeEvent(newbuf)
+		newbuf.Reset()
 	default:
 		return errors.New("Not supported encrypt type:" + strconv.Itoa(int(ev.EncryptType)))
 	}

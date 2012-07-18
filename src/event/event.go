@@ -88,6 +88,18 @@ func DecodeBytesValue(buf *bytes.Buffer) (b []byte, err error) {
 	return
 }
 
+func DecodeByteBufferValue(buf *bytes.Buffer, dst *bytes.Buffer) (err error) {
+	var size uint64
+	if size, err = binary.ReadUvarint(buf); nil != err {
+		return
+	}
+	if buf.Len() < int(size) {
+		return errors.New("No sufficient space.")
+	}
+	dst.Write(buf.Next(int(size)))
+	return nil
+}
+
 func DecodeStringValue(buf *bytes.Buffer) (str string, err error) {
 	var size uint64
 	if size, err = binary.ReadUvarint(buf); nil != err {
@@ -340,7 +352,6 @@ func DecodeValue(buf *bytes.Buffer) (err error, ev interface{}) {
 	err = decodeValue(buf, &rv)
 	return
 }
-
 
 func EncodeEvent(buf *bytes.Buffer, ev Event) {
 	var header EventHeader

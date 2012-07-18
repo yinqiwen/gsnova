@@ -101,3 +101,46 @@ func (req *AuthResponseEvent) GetType() uint32 {
 func (req *AuthResponseEvent) GetVersion() uint32 {
 	return 1
 }
+
+//const (
+//	APPID_SHARE   uint32 = 0
+//	APPID_UNSHARE uint32 = 1
+//)
+//
+//type ShareAppIDEvent struct {
+//	Operation uint32
+//	AppId     string
+//	Email     string
+//	EventHeader
+//}
+//
+//func (ev *ShareAppIDEvent) Encode(buffer *bytes.Buffer) {
+//	codec.WriteUvarint(buffer, uint64(ev.Operation))
+//	codec.WriteVarString(buffer, ev.AppId)
+//	codec.WriteVarString(buffer, ev.Email)
+//	return true
+//}
+//func (ev *ShareAppIDEvent) Decode(buffer *bytes.Buffer) bool {
+//	tmp, err := codec.ReadUvarint(buffer)
+//	if err != nil {
+//		return false
+//	}
+//	ev.Operation = uint32(tmp)
+//	var ok bool
+//	ev.AppId, ok = codec.ReadVarString(buffer)
+//	if !ok {
+//		return false
+//	}
+//	ev.Email, ok = codec.ReadVarString(buffer)
+//	if !ok {
+//		return false
+//	}
+//	return true
+//}
+//
+//func (ev *ShareAppIDEvent) GetType() uint32 {
+//	return SHARE_APPID_EVENT_TYPE
+//}
+//func (ev *ShareAppIDEvent) GetVersion() uint32 {
+//	return 1
+//}

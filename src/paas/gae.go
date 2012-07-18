@@ -32,6 +32,7 @@ type GAEConfig struct {
 	ConnectionPoolSize   uint32
 	FetchLimitSize       uint32
 	RangeFetchRetryLimit uint32
+	MasterAppID          string
 }
 
 var gae_cfg *GAEConfig
@@ -66,10 +67,16 @@ func (auth *GAEAuth) parse(line string) error {
 }
 
 type GAEHttpConnection struct {
-	auth      GAEAuth
-	authToken string
-	client    *http.Client
-	manager   *GAE
+	auth        GAEAuth
+	authToken   string
+	client      *http.Client
+	remote_conn net.Conn
+	manager     *GAE
+	rangeStart  int
+}
+
+func (conn *GAEHttpConnection) GetConnectionManager() RemoteConnectionManager {
+	return conn.manager
 }
 
 func (conn *GAEHttpConnection) initHttpClient() {
@@ -192,7 +199,8 @@ func (gae *GAEHttpConnection) requestEvent(conn *SessionConnection, ev event.Eve
 	if len(gae_cfg.UA) > 0 {
 		req.Header.Set("User-Agent", gae_cfg.UA)
 	}
-	req.Header.Set("Connection", "keep-alive")
+	req.Close = false
+	req.Header.Set("Connection", "close")
 	req.Header.Set("Content-Type", "application/octet-stream")
 	//log.Println(gae.auth)
 	if response, err := gae.client.Do(req); nil != err {
@@ -226,6 +234,8 @@ func (gae *GAEHttpConnection) requestEvent(conn *SessionConnection, ev event.Eve
 					}
 				}
 			}
+			buf.Reset()
+			buf = nil
 			return err, res
 		}
 	}
@@ -237,42 +247,41 @@ func (gae *GAEHttpConnection) handleHttpRes(conn *SessionConnection, req *event.
 	if len(contentRange) > 0 {
 		httpres := ev.ToResponse()
 		httpres.Header.Del("Content-Range")
-		rangeVal := strings.Split(contentRange, " ")[1]
-		vs := strings.Split(rangeVal, "/")
-		length, _ := strconv.Atoi(vs[1])
-		httpres.ContentLength = int64(length)
-		vs = strings.Split(vs[0], "-")
-		startpos, _ := strconv.Atoi(vs[0])
-		endpos, _ := strconv.Atoi(vs[1])
+		startpos, endpos, length := util.ParseContentRangeHeaderValue(contentRange)
+		httpres.ContentLength = int64(length - gae.rangeStart)
 		httpres.Write(conn.LocalRawConn)
-
 		for endpos < length-1 {
 			startpos = endpos + 1
 			endpos = endpos + int(gae_cfg.FetchLimitSize)
 			if endpos >= length-1 {
 				endpos = length - 1
 			}
-			req.SetHeader("Range", "bytes="+strconv.Itoa(startpos)+"-"+strconv.Itoa(endpos))
+			req.SetHeader("Range", fmt.Sprintf("bytes=%d-%d", startpos, endpos))
 			err, rangeres := gae.requestEvent(nil, req)
-			if nil == err {
-				rangeHttpRes := rangeres.(*event.HTTPResponseEvent)
-				if rangeHttpRes.Status == 302 {
-					location := rangeHttpRes.GetHeader("Location")
-					xrange := rangeHttpRes.GetHeader("X-Range")
-					if len(location) > 0 && len(xrange) > 0 {
-						req.Url = location
-						req.SetHeader("Range", xrange)
-						err, rangeres = gae.requestEvent(nil, req)
-						if nil != err {
-							return err
-						}
+			//try again
+			if nil != err {
+				err, rangeres = gae.requestEvent(nil, req)
+			}
+			if nil != err {
+				return err
+			}
+			rangeHttpRes := rangeres.(*event.HTTPResponseEvent)
+			if rangeHttpRes.Status == 302 {
+				location := rangeHttpRes.GetHeader("Location")
+				xrange := rangeHttpRes.GetHeader("X-Range")
+				if len(location) > 0 && len(xrange) > 0 {
+					req.Url = location
+					req.SetHeader("Range", xrange)
+					err, rangeres = gae.requestEvent(nil, req)
+					if nil != err {
+						return err
 					}
 				}
-				_, err = conn.LocalRawConn.Write(rangeres.(*event.HTTPResponseEvent).Content.Bytes())
-				if nil != err {
-					return err
-				}
-			} else {
+			}
+			_, err = conn.LocalRawConn.Write(rangeres.(*event.HTTPResponseEvent).Content.Bytes())
+			rangeres.(*event.HTTPResponseEvent).Content.Reset()
+			rangeres = nil
+			if nil != err {
 				return err
 			}
 		}
@@ -281,7 +290,9 @@ func (gae *GAEHttpConnection) handleHttpRes(conn *SessionConnection, req *event.
 
 	httpres := ev.ToResponse()
 	//log.Println(httpres.Header)
-	return httpres.Write(conn.LocalRawConn)
+	err := httpres.Write(conn.LocalRawConn)
+	httpres = nil
+	return err
 }
 
 func (gae *GAEHttpConnection) Request(conn *SessionConnection, ev event.Event) (err error, res event.Event) {
@@ -312,12 +323,22 @@ func (gae *GAEHttpConnection) Request(conn *SessionConnection, ev event.Event) (
 			if !strings.HasPrefix(httpreq.Url, scheme) {
 				httpreq.Url = scheme + httpreq.RawReq.Host + httpreq.Url
 			}
-
-			//inject range header
-			for _, host_pattern := range gae_cfg.InjectRange {
-				if strings.Contains(httpreq.RawReq.Host, host_pattern) {
-					httpreq.SetHeader("Range", "bytes=0-"+strconv.Itoa(int(gae_cfg.FetchLimitSize-1)))
-					break
+			gae.rangeStart = 0
+			rangeHeader := httpreq.GetHeader("Range")
+			if len(rangeHeader) > 0 {
+				startPos, endPos := util.ParseRangeHeaderValue(rangeHeader)
+				if endPos == -1 || endPos-startPos > int(gae_cfg.FetchLimitSize-1) {
+					endPos = startPos + int(gae_cfg.FetchLimitSize-1)
+					httpreq.SetHeader("Range", fmt.Sprintf("bytes=%d-%d", startPos, endPos))
+					gae.rangeStart = startPos
+				}
+			} else {
+				//inject range header
+				for _, host_pattern := range gae_cfg.InjectRange {
+					if strings.Contains(httpreq.RawReq.Host, host_pattern) {
+						httpreq.SetHeader("Range", "bytes=0-"+strconv.Itoa(int(gae_cfg.FetchLimitSize-1)))
+						break
+					}
 				}
 			}
 
@@ -424,7 +445,30 @@ func initConfig() {
 	if ranges, exist := common.Cfg.GetProperty("GAE", "InjectRange"); exist {
 		gae_cfg.InjectRange = strings.Split(ranges, "|")
 	}
+	gae_cfg.MasterAppID = "snova-master"
+	if master, exist := common.Cfg.GetProperty("GAE", "MasterAppID"); exist {
+		gae_cfg.MasterAppID = master
+	}
+}
 
+func (manager *GAE) fetchSharedAppIDs() (error, []string) {
+	var auth GAEAuth
+	auth.appid = gae_cfg.MasterAppID
+	auth.user = ANONYMOUSE
+	auth.passwd = ANONYMOUSE
+	conn := new(GAEHttpConnection)
+	conn.auth = auth
+	conn.manager = manager
+	var req event.RequestAppIDEvent
+	err, res := conn.Request(nil, &req)
+	if nil != err {
+		return err, nil
+	}
+	appidres, ok := res.(*event.RequestAppIDResponseEvent)
+	if ok {
+		return nil, appidres.AppIDs
+	}
+	return errors.New("Invalid response for shared appid."), nil
 }
 
 func (manager *GAE) Init() error {
@@ -443,17 +487,37 @@ func (manager *GAE) Init() error {
 		if err := auth.parse(v); nil != err {
 			return err
 		}
+		manager.auths.Add(&auth)
+		index = index + 1
+	}
+	//no appid found, fetch shared from master
+	if index == 0 {
+		err, appids := manager.fetchSharedAppIDs()
+		if nil != err {
+			return err
+		}
+		for _, appid := range appids {
+			//log.Printf("Fetched appid:%s\n", appid)
+			var auth GAEAuth
+			auth.appid = appid
+			auth.user = ANONYMOUSE
+			auth.passwd = ANONYMOUSE
+			manager.auths.Add(&auth)
+		}
+	}
+	for _, au := range manager.auths.ArrayValues() {
+		auth := au.(*GAEAuth)
 		conn := new(GAEHttpConnection)
-		conn.auth = auth
+		conn.auth = *auth
 		conn.manager = manager
 		if err := conn.Auth(); nil != err {
 			log.Printf("Failed to auth appid:%s\n", err.Error())
 			return err
 		}
 		auth.token = conn.authToken
-		manager.auths.Add(&auth)
+		conn.auth.token = conn.authToken
+		//manager.auths.Add(&auth)
 		manager.RecycleRemoteConnection(conn)
-		index = index + 1
 	}
 	return nil
 }

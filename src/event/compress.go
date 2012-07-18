@@ -29,6 +29,7 @@ func (ev *CompressEvent) Encode(buffer *bytes.Buffer) {
 		newbuf, _ := snappy.Encode(evbuf, buf.Bytes())
 		buffer.Write(newbuf)
 	}
+	buf.Reset()
 }
 func (ev *CompressEvent) Decode(buffer *bytes.Buffer) (err error) {
 	ev.CompressType, err = DecodeUInt32Value(buffer)
@@ -43,10 +44,12 @@ func (ev *CompressEvent) Decode(buffer *bytes.Buffer) (err error) {
 		b := make([]byte, 0, 0)
 		b, err = snappy.Decode(b, buffer.Bytes())
 		if err != nil {
+			b = nil
 			return
 		}
-		//fmt.Printf("Compress decode  bytes\n")
-		err, ev.Ev = DecodeEvent(bytes.NewBuffer(b))
+		tmpbuf := bytes.NewBuffer(b)
+		err, ev.Ev = DecodeEvent(tmpbuf)
+		tmpbuf.Reset()
 		return err
 	default:
 		return errors.New("Not supported compress type:" + strconv.Itoa(int(ev.CompressType)))
@@ -55,8 +58,8 @@ func (ev *CompressEvent) Decode(buffer *bytes.Buffer) (err error) {
 }
 
 func (ev *CompressEvent) GetType() uint32 {
-   return COMPRESS_EVENT_TYPE
+	return COMPRESS_EVENT_TYPE
 }
 func (ev *CompressEvent) GetVersion() uint32 {
-   return 1
+	return 1
 }

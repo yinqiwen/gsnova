@@ -8,6 +8,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	//"runtime"
 )
 
 const (
@@ -26,11 +27,12 @@ const (
 
 type RemoteConnection interface {
 	Request(conn *SessionConnection, ev event.Event) (err error, res event.Event)
+	GetConnectionManager() RemoteConnectionManager
 }
 
 type RemoteConnectionManager interface {
 	GetRemoteConnection(ev event.Event) (RemoteConnection, error)
-	//RecycleRemoteConnection(conn RemoteConnection)
+	RecycleRemoteConnection(conn RemoteConnection)
 	GetName() string
 	Init() error
 }
@@ -51,6 +53,7 @@ func newSessionConnection(sessionId int32, conn net.Conn, reader *bufio.Reader) 
 	session_conn.SessionID = sessionId
 	session_conn.State = STATE_RECV_HTTP
 	session_conn.Type = HTTP_TUNNEL
+
 	return session_conn
 }
 

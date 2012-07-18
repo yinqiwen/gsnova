@@ -10,6 +10,10 @@ type ListSelector struct {
 	values []interface{}
 }
 
+func (se *ListSelector) ArrayValues() []interface{} {
+	return se.values
+}
+
 func (se *ListSelector) Select() interface{} {
 	if len(se.values) == 0 {
 		return nil

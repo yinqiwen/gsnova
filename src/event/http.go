@@ -87,8 +87,8 @@ func (msg *HTTPMessageEvent) IsKeepAlive() bool {
 	if nil == he {
 		return false
 	}
-	if strings.EqualFold(he.Value, "keep-alive"){
-	   return true
+	if strings.EqualFold(he.Value, "keep-alive") {
+		return true
 	}
 	return false
 }
@@ -120,11 +120,11 @@ func (msg *HTTPMessageEvent) DoDecode(buffer *bytes.Buffer) error {
 		pair := util.NameValuePair{string(headerName), string(headerValue)}
 		msg.Headers = append(msg.Headers, &pair)
 	}
-	b, err := DecodeBytesValue(buffer)
+	err = DecodeByteBufferValue(buffer, &msg.Content)
 	if err != nil {
 		return err
 	}
-	msg.Content.Write(b)
+	//msg.Content.Write(b)
 	return nil
 }
 

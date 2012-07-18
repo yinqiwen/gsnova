@@ -72,8 +72,9 @@ func TLSConfig(host string) (*tls.Config, error) {
 
 func getTLSCert(host string) (tls.Certificate, error) {
 	var tls_cer tls.Certificate
-	cf := Home + "cert/" + host + ".cert"
-	kf := Home + "cert/" + host + ".key"
+	os.Mkdir(Home+"cert/host/", 0755)
+	cf := Home + "cert/host/" + host + ".cert"
+	kf := Home + "cert/host/" + host + ".key"
 	_, err := os.Stat(cf)
 	if err == nil {
 		return tls.LoadX509KeyPair(cf, kf)
@@ -101,12 +102,12 @@ func getTLSCert(host string) (tls.Certificate, error) {
 
 	derBytes, err := x509.CreateCertificate(rand.Reader, &template, X509RootCert, &priv.PublicKey, RootCert.PrivateKey)
 	if err != nil {
-		log.Printf("###1 %s\n", err.Error())
+		//log.Printf("###1 %s\n", err.Error())
 		return tls_cer, err
 	}
 	crt, err := x509.ParseCertificate(derBytes)
 	if err != nil {
-		log.Printf("###2 %s\n", err.Error())
+		//log.Printf("###2 %s\n", err.Error())
 		return tls_cer, err
 	}
 	cBytes := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: crt.Raw})

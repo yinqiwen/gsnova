@@ -1,0 +1,17 @@
+GSnova Changelog
+===================
+
+
+Changes in version 0.15.0beta(2012.07.18)
+-------------------------------------------
+Initial version
+
+** Features
+   * GAE support
+      
+** Task
+   * NA
+
+
+
+

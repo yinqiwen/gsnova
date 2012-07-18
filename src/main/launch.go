@@ -22,7 +22,11 @@ func main() {
 	common.InitConfig()
 	event.Init()
 	var gae paas.GAE
-	gae.Init()
+	err = gae.Init()
+	if nil != err {
+		fmt.Printf("Failed to init GAE:%s\n", err.Error())
+		return
+	}
 	common.LoadRootCA()
 	//	var req event.HTTPRequestEvent
 	//	req.SetHash(1)

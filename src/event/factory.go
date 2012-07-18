@@ -71,4 +71,5 @@ func Init() {
 	RegistEvent(&CompressEvent{})
 	RegistEvent(&HTTPResponseEvent{})
 	RegistEvent(&HTTPRequestEvent{})
+	RegistEvent(&RequestAppIDResponseEvent{})
 }

@@ -4,8 +4,8 @@ import (
 	"log"
 	"net"
 	"paas"
-	"sync/atomic"
 	//"runtime"
+	"sync/atomic"
 )
 
 const (
@@ -26,7 +26,11 @@ func handleServer(lp *net.TCPListener) {
 		if nil != err {
 			continue
 		}
-		//runtime.GC()
+		//var stat runtime.MemStats
+		//runtime.ReadMemStats(&stat)
+		//if stat.Alloc >= 10*1024*1024 {
+		//log.Println(stat.EnableGC)
+		//}
 		go handleConn(conn)
 	}
 }
