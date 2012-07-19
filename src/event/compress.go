@@ -3,9 +3,10 @@ package event
 import (
 	"bytes"
 	"errors"
-	"snappy"
+	"io/ioutil"
+//	"misc/lz4"
+	"misc/snappy"
 	"strconv"
-	//"fmt"
 )
 
 type CompressEvent struct {
@@ -28,6 +29,9 @@ func (ev *CompressEvent) Encode(buffer *bytes.Buffer) {
 		evbuf := make([]byte, 0)
 		newbuf, _ := snappy.Encode(evbuf, buf.Bytes())
 		buffer.Write(newbuf)
+//	case COMPRESSOR_LZ4:
+//		newbuf, _ := ioutil.ReadAll(lz4.NewWriter(&buf))
+//		buffer.Write(newbuf)
 	}
 	buf.Reset()
 }
@@ -51,6 +55,13 @@ func (ev *CompressEvent) Decode(buffer *bytes.Buffer) (err error) {
 		err, ev.Ev = DecodeEvent(tmpbuf)
 		tmpbuf.Reset()
 		return err
+//	case COMPRESSOR_LZ4:
+//		lz4r := lz4.NewReader(buffer)
+//		data, _ := ioutil.ReadAll(lz4r)
+//		tmpbuf := bytes.NewBuffer(data)
+//		err, ev.Ev = DecodeEvent(tmpbuf)
+//		tmpbuf.Reset()
+//		return err
 	default:
 		return errors.New("Not supported compress type:" + strconv.Itoa(int(ev.CompressType)))
 	}
