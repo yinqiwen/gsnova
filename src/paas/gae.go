@@ -72,6 +72,7 @@ type GAEHttpConnection struct {
 	client      *http.Client
 	remote_conn net.Conn
 	manager     *GAE
+	proxyURL    *url.URL
 	rangeStart  int
 }
 
@@ -102,6 +103,9 @@ func (conn *GAEHttpConnection) initHttpClient() {
 		}
 		tr := &http.Transport{
 			Proxy: func(req *http.Request) (*url.URL, error) {
+				if nil != conn.proxyURL {
+					return conn.proxyURL, nil
+				}
 				proxy := util.GetUrl(proxyInfo)
 				proxyURL, err := url.Parse(proxy)
 				if err != nil || proxyURL.Scheme == "" {
@@ -113,7 +117,7 @@ func (conn *GAEHttpConnection) initHttpClient() {
 				if err != nil {
 					return nil, fmt.Errorf("invalid proxy address %q: %v", proxy, err)
 				}
-				//fmt.Println(proxyURL)
+				conn.proxyURL = proxyURL
 				return proxyURL, nil
 			},
 			Dial:               dial,
@@ -200,7 +204,8 @@ func (gae *GAEHttpConnection) requestEvent(conn *SessionConnection, ev event.Eve
 		req.Header.Set("User-Agent", gae_cfg.UA)
 	}
 	req.Close = false
-	req.Header.Set("Connection", "close")
+	//req.Header.Set("Connection", "close")
+	req.Header.Set("Connection", "keep-alive")
 	req.Header.Set("Content-Type", "application/octet-stream")
 	//log.Println(gae.auth)
 	if response, err := gae.client.Do(req); nil != err {
@@ -213,11 +218,18 @@ func (gae *GAEHttpConnection) requestEvent(conn *SessionConnection, ev event.Eve
 		} else {
 			//log.Printf("Response with content len:%d\n", response.ContentLength)
 			content := make([]byte, response.ContentLength)
-			_, err := io.ReadFull(response.Body, content)
+			n, err := io.ReadFull(response.Body, content)
+			if int64(n) < response.ContentLength {
+			   return errors.New("No sufficient space in body."), nil
+			}
 			if nil != err {
 				return err, nil
 			}
-			buf := bytes.NewBuffer(content)
+			//trigger EOF to recycle idle conn in net.http
+			tmp := make([]byte, 1)
+			response.Body.Read(tmp)
+			
+			buf := bytes.NewBuffer(content[0:response.ContentLength])
 			if !tags.Decode(buf) {
 				return errors.New("Failed to decode event tag"), nil
 			}
@@ -404,7 +416,7 @@ func (manager *GAE) GetName() string {
 	return GAE_NAME
 }
 
-func initConfig() {
+func initGAEConfig() {
 	//init config
 	gae_cfg = new(GAEConfig)
 	if ua, exist := common.Cfg.GetProperty("GAE", "UserAgent"); exist {
@@ -474,7 +486,7 @@ func (manager *GAE) fetchSharedAppIDs() (error, []string) {
 func (manager *GAE) Init() error {
 	log.Println("Init GAE.")
 	RegisteRemoteConnManager(manager)
-	initConfig()
+	initGAEConfig()
 	manager.idle_conns = make(chan RemoteConnection, gae_cfg.ConnectionPoolSize)
 	manager.auths = new(util.ListSelector)
 	index := 0
