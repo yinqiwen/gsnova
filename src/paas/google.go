@@ -5,15 +5,17 @@ import (
 	"common"
 	"crypto/tls"
 	"event"
-	//"fmt"
+	"fmt"
 	"io"
 	"log"
 	"net"
 	"net/http"
 	"net/url"
-	//"strings"
+	"strings"
 	"util"
 )
+
+var useGlobalProxy bool
 
 type GoogleConnection struct {
 	http_client  net.Conn
@@ -23,12 +25,24 @@ type GoogleConnection struct {
 	manager      *Google
 }
 
+func (conn *GoogleConnection) Close() error {
+	if nil != conn.http_client {
+		conn.http_client.Close()
+		conn.http_client = nil
+	}
+	if nil != conn.https_client {
+		conn.https_client.Close()
+		conn.https_client = nil
+	}
+	return nil
+}
+
 func (conn *GoogleConnection) initHttpsClient() {
 	if nil != conn.https_client {
 		return
 	}
 	proxyInfo, exist := common.Cfg.GetProperty("LocalProxy", "Proxy")
-	if exist {
+	if useGlobalProxy && exist {
 		proxy := util.GetUrl(proxyInfo)
 		log.Printf("Google use proxy:%s\n", proxy)
 		proxyURL, err := url.Parse(proxy)
@@ -61,7 +75,7 @@ func (conn *GoogleConnection) initHttpsClient() {
 		}
 		conn.overProxy = true
 	} else {
-		addr := util.GetHost("GoogleHttpsIP")
+		addr := util.GetHost("GoogleHttps")
 		var err error
 		conn.https_client, err = net.Dial("tcp", addr+":443")
 		if nil != err {
@@ -75,11 +89,21 @@ func (conn *GoogleConnection) initHttpClient() {
 		return
 	}
 	proxyInfo, exist := common.Cfg.GetProperty("LocalProxy", "Proxy")
-	if exist {
+	if useGlobalProxy && exist {
 		proxy := util.GetUrl(proxyInfo)
 		log.Printf("Google use proxy:%s\n", proxy)
 		proxyURL, err := url.Parse(proxy)
-		conn.http_client, err = net.Dial("tcp", proxyURL.Host)
+		target := proxyURL.Host
+
+		if !strings.Contains(proxyURL.Host, ":") {
+			port := 80
+			//log.Println(proxyURL.Scheme)
+			if strings.EqualFold(proxyURL.Scheme, "https") {
+				port = 443
+			}
+			target = fmt.Sprintf("%s:%d", target, port)
+		}
+		conn.http_client, err = net.Dial("tcp", target)
 		if nil != err {
 			log.Printf("Failed to dial address:%s for reason:%s\n", proxyURL.Host, err.Error())
 		}
@@ -106,14 +130,17 @@ func (conn *GoogleConnection) initHttpClient() {
 			return
 		}
 		tlcfg := &tls.Config{InsecureSkipVerify: true}
-		conn.http_client = tls.Client(conn.http_client,tlcfg )
+		conn.http_client = tls.Client(conn.http_client, tlcfg)
 		conn.overProxy = true
 	} else {
 		addr := util.GetHost("GoogleCNIP")
 		var err error
 		conn.http_client, err = net.Dial("tcp", addr+":80")
+		log.Printf("Google use proxy:%s\n", addr)
 		if nil != err {
 			log.Printf("Failed to dial address:%s for reason:%s\n", addr, err.Error())
+			conn.http_client.Close()
+			conn.http_client = nil
 		}
 	}
 }
@@ -146,9 +173,18 @@ func (google *GoogleConnection) Request(conn *SessionConnection, ev event.Event)
 		req := ev.(*event.HTTPRequestEvent)
 		if conn.Type == HTTPS_TUNNEL {
 			google.initHttpsClient()
+			//try again
+			if nil == google.https_client {
+				google.initHttpsClient()
+			}
 			//log.Printf("Host is %s\n", req.RawReq.Host)
-			log.Printf("Request URL:%s %s\n", req.RawReq.Method, req.RawReq.RequestURI)
-			conn.LocalRawConn.Write([]byte("HTTP/1.1 200 OK\r\n\r\n"))
+			log.Printf("Session[%d]Request URL:%s %s\n", ev.GetHash(), req.RawReq.Method, req.RawReq.RequestURI)
+			if nil != google.https_client {
+				conn.LocalRawConn.Write([]byte("HTTP/1.1 200 OK\r\n\r\n"))
+			} else {
+				conn.LocalRawConn.Write([]byte("HTTP/1.1 500 Internal Server Error\r\n\r\n"))
+				return io.EOF, nil
+			}
 			go f(conn.LocalRawConn, google.https_client)
 			go f(google.https_client, conn.LocalRawConn)
 			<-c
@@ -158,20 +194,33 @@ func (google *GoogleConnection) Request(conn *SessionConnection, ev event.Event)
 			conn.State = STATE_SESSION_CLOSE
 		} else {
 			google.initHttpClient()
-			//log.Printf("Host is %s\n", req.RawReq.Host)
-			log.Printf("Request URL:%s %s\n", req.RawReq.Method, req.RawReq.RequestURI)
-			if google.overProxy {
+			//try again
+			if nil == google.http_client {
+				google.initHttpClient()
+			}
+			if nil == google.http_client {
+				log.Printf("Failed to connect google http site.\n")
+				conn.LocalRawConn.Write([]byte("HTTP/1.1 500 Internal Server Error\r\n\r\n"))
+				return nil, nil
+			}
+			log.Printf("Session[%d]Request URL:%s %s\n", ev.GetHash(), req.RawReq.Method, req.RawReq.RequestURI)
+			if useGlobalProxy && google.overProxy {
 				req.RawReq.WriteProxy(google.http_client)
 			} else {
 				req.RawReq.Write(google.http_client)
 			}
-			go f(conn.LocalRawConn, google.http_client)
-			go f(google.http_client, conn.LocalRawConn)
-			<-c
-			<-c
-			google.http_client.Close()
-			google.http_client = nil
-			conn.State = STATE_SESSION_CLOSE
+			resp, err := http.ReadResponse(bufio.NewReader(google.http_client), req.RawReq)
+			if err != nil {
+				return err, nil
+			}
+			resp.Write(conn.LocalRawConn)
+			//			go f(conn.LocalRawConn, google.http_client)
+			//			go f(google.http_client, conn.LocalRawConn)
+			//			<-c
+			//			<-c
+			//			google.http_client.Close()
+			//			google.http_client = nil
+			conn.State = STATE_RECV_HTTP
 		}
 	default:
 	}
@@ -214,7 +263,9 @@ func (manager *Google) GetRemoteConnection(ev event.Event) (RemoteConnection, er
 func (manager *Google) Init() error {
 	log.Println("Init Google.")
 	RegisteRemoteConnManager(manager)
-	//initConfig()
+	if tmp, exist := common.Cfg.GetIntProperty("Google", "UseGlobalProxy"); exist {
+		useGlobalProxy = tmp == 1
+	}
 	manager.idle_conns = make(chan RemoteConnection, 20)
 	return nil
 }

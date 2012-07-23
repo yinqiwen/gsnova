@@ -18,6 +18,15 @@ import (
 	"util"
 )
 
+const (
+	SESSION_INITED                   uint32 = 1
+	SESSION_WAITING_CONNECT_RESPONSE uint32 = 2
+	SESSION_WAITING_RESPONSE         uint32 = 3
+	SESSION_TRANSACTION_COMPELETE    uint32 = 4
+	SESSION_PROCEEDING               uint32 = 5
+	SESSION_COMPLETED                uint32 = 6
+)
+
 type C4Config struct {
 	Compressor         uint32
 	Encrypter          uint32
@@ -41,6 +50,15 @@ type C4SessionHandler struct {
 	lastReadLocalSeq  uint32
 	seqMap            map[uint32]*event.SequentialChunkEvent
 	isHttps           bool
+	state             uint32
+}
+
+func (handler *C4SessionHandler) clear() {
+	handler.lastWriteLocalSeq = 0
+	handler.lastReadLocalSeq = 0
+	handler.isHttps = false
+	handler.seqMap = make(map[uint32]*event.SequentialChunkEvent)
+	handler.state = SESSION_INITED
 }
 
 type C4HttpConnection struct {
@@ -51,6 +69,10 @@ type C4HttpConnection struct {
 	assit    *http.Client
 	ev_chan  []chan event.Event
 	handlers []map[int32]*C4SessionHandler
+}
+
+func (c4 *C4HttpConnection) Close() error {
+	return nil
 }
 
 func (c4 *C4HttpConnection) Auth() error {
@@ -198,26 +220,59 @@ func (c4 *C4HttpConnection) getCreateSessionHandler(ev event.Event) *C4SessionHa
 	index := ev.GetHash() % int32(c4_cfg.ConnectionPoolSize)
 	handler, ok := c4.handlers[index][ev.GetHash()]
 	if !ok {
-		handler = &(C4SessionHandler{isHttps: false})
-		handler.seqMap = make(map[uint32]*event.SequentialChunkEvent)
+		handler = &(C4SessionHandler{})
+		handler.clear()
 		c4.handlers[index][ev.GetHash()] = handler
 	}
 	return handler
 }
 
+func (c4 *C4HttpConnection) requestEvent(ev event.Event) {
+	index := ev.GetHash() % int32(c4_cfg.ConnectionPoolSize)
+	var compress event.CompressEventV2
+	compress.SetHash(ev.GetHash())
+	compress.Ev = ev
+	compress.CompressType = c4_cfg.Compressor
+	var encrypt event.EncryptEventV2
+	encrypt.SetHash(ev.GetHash())
+	encrypt.EncryptType = c4_cfg.Encrypter
+	encrypt.Ev = &compress
+	c4.ev_chan[index] <- &encrypt
+}
+
 func (c4 *C4HttpConnection) Request(conn *SessionConnection, ev event.Event) (err error, res event.Event) {
 	if nil != ev {
-		index := ev.GetHash() % int32(c4_cfg.ConnectionPoolSize)
 		handler := c4.getCreateSessionHandler(ev)
+		handler.conn = conn
 		switch ev.GetType() {
 		case event.HTTP_REQUEST_EVENT_TYPE:
 			req := ev.(*event.HTTPRequestEvent)
 			if strings.EqualFold(req.RawReq.Method, "CONNECT") {
 				handler.isHttps = true
 				conn.State = STATE_RECV_HTTP_CHUNK
+			} else {
+				conn.State = STATE_RECV_HTTP
+				handler.clear()
 			}
-			if strings.HasPrefix(req.Url, "http://") {
-
+			proxyURL, _ := url.Parse(req.Url)
+			req.Url = proxyURL.Path
+			c4.requestEvent(req)
+			if conn.State == STATE_RECV_HTTP {
+				if req.RawReq.ContentLength > 0 {
+					tmpbuf := make([]byte, 8192)
+					for {
+						n, err := req.RawReq.Body.Read(tmpbuf)
+						if nil == err {
+							seq := &(event.SequentialChunkEvent{Content: tmpbuf[0:n]})
+							seq.SetHash(req.GetHash())
+							seq.Sequence = handler.lastReadLocalSeq
+							handler.lastReadLocalSeq = atomic.AddUint32(&handler.lastReadLocalSeq, 1)
+							c4.requestEvent(seq)
+						} else {
+							break
+						}
+					}
+				}
 			}
 		case event.HTTP_CHUNK_EVENT_TYPE:
 			chunk := ev.(*event.HTTPChunkEvent)
@@ -225,18 +280,9 @@ func (c4 *C4HttpConnection) Request(conn *SessionConnection, ev event.Event) (er
 			seq.SetHash(chunk.GetHash())
 			seq.Sequence = handler.lastReadLocalSeq
 			handler.lastReadLocalSeq = atomic.AddUint32(&handler.lastReadLocalSeq, 1)
-			ev = seq
+			c4.requestEvent(seq)
+			conn.State = STATE_RECV_HTTP_CHUNK
 		}
-		var compress event.CompressEventV2
-		compress.SetHash(ev.GetHash())
-		compress.Ev = ev
-		compress.CompressType = c4_cfg.Compressor
-		var encrypt event.EncryptEventV2
-		encrypt.SetHash(ev.GetHash())
-		encrypt.EncryptType = c4_cfg.Encrypter
-		encrypt.Ev = &compress
-		c4.ev_chan[index] <- &encrypt
-		conn.State = STATE_RECV_HTTP_CHUNK
 	}
 	return nil, nil
 }

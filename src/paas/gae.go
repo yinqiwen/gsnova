@@ -76,6 +76,10 @@ type GAEHttpConnection struct {
 	rangeStart  int
 }
 
+func (gae *GAEHttpConnection) Close() error {
+	return nil
+}
+
 func (conn *GAEHttpConnection) GetConnectionManager() RemoteConnectionManager {
 	return conn.manager
 }

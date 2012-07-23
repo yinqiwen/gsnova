@@ -21,15 +21,16 @@ const (
 	STATE_RECV_TCP        = 3
 	STATE_SESSION_CLOSE   = 4
 
-	GAE_NAME = "GAE"
-	C4_NAME  = "C4"
+	GAE_NAME     = "GAE"
+	C4_NAME      = "C4"
 	GOOGLE_NAME  = "GOOGLE"
-	FORWARD_NAME  = "FORWARD"
+	FORWARD_NAME = "FORWARD"
 )
 
 type RemoteConnection interface {
 	Request(conn *SessionConnection, ev event.Event) (err error, res event.Event)
 	GetConnectionManager() RemoteConnectionManager
+	Close() error
 }
 
 type RemoteConnectionManager interface {
@@ -68,10 +69,13 @@ func (session *SessionConnection) processHttpEvent(ev *event.HTTPRequestEvent) e
 	var err error
 	if nil == session.RemoteConn {
 		session.RemoteConn, err = proxy.GetRemoteConnection(ev)
-		if nil != err {
-			return err
+	} else {
+		if session.RemoteConn.GetConnectionManager().GetName() != proxy.GetName() {
+			session.RemoteConn.Close()
+			session.RemoteConn, err = proxy.GetRemoteConnection(ev)
 		}
 	}
+
 	err, _ = session.RemoteConn.Request(session, ev)
 	if nil == err {
 
@@ -110,7 +114,7 @@ func (session *SessionConnection) process() error {
 			rev := new(event.HTTPChunkEvent)
 			rev.Content = buf[0:n]
 			session.processHttpChunkEvent(rev)
-		}else {
+		} else {
 			if err != io.EOF {
 				log.Printf("Failed to read http chunk:%s\n", err.Error())
 			}
