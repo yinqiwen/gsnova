@@ -5,17 +5,17 @@ import (
 )
 
 type SequentialChunkEvent struct {
-	Sequence uint64
+	Sequence uint32
 	Content  []byte
 	EventHeader
 }
 
 func (req *SequentialChunkEvent) Encode(buffer *bytes.Buffer) {
-	EncodeUInt64Value(buffer, req.Sequence)
+	EncodeUInt32Value(buffer, req.Sequence)
 	EncodeBytesValue(buffer, req.Content)
 }
 func (req *SequentialChunkEvent) Decode(buffer *bytes.Buffer) (err error) {
-	req.Sequence, err = DecodeUInt64Value(buffer)
+	req.Sequence, err = DecodeUInt32Value(buffer)
 	if err != nil {
 		return
 	}

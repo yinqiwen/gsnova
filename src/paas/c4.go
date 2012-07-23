@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 	"util"
 )
@@ -34,26 +35,34 @@ type C4HttpAssistConnection struct {
 	client  *http.Client
 }
 
+type C4SessionHandler struct {
+	conn              *SessionConnection
+	lastWriteLocalSeq uint32
+	lastReadLocalSeq  uint32
+	seqMap            map[uint32]*event.SequentialChunkEvent
+	isHttps           bool
+}
+
 type C4HttpConnection struct {
 	server  string
 	manager *C4
 	//ev_list *list.List
-	client      []*http.Client
-	assit       *http.Client
-	ev_chan     []chan event.Event
-	local_conns []map[int32]*SessionConnection
+	client   []*http.Client
+	assit    *http.Client
+	ev_chan  []chan event.Event
+	handlers []map[int32]*C4SessionHandler
 }
 
 func (c4 *C4HttpConnection) Auth() error {
 	c4.assit = &(http.Client{})
 	c4.client = make([]*http.Client, c4_cfg.ConnectionPoolSize)
 	c4.ev_chan = make([]chan event.Event, c4_cfg.ConnectionPoolSize)
-	c4.local_conns = make([]map[int32]*SessionConnection, c4_cfg.ConnectionPoolSize)
+	c4.handlers = make([]map[int32]*C4SessionHandler, c4_cfg.ConnectionPoolSize)
 	for i := 0; i < int(c4_cfg.ConnectionPoolSize); i++ {
 		c4.client[i] = &(http.Client{})
 		c4.ev_chan[i] = make(chan event.Event, 1024)
-		c4.local_conns[i] = make(map[int32]*SessionConnection)
-		go c4.proces(i)
+		c4.handlers[i] = make(map[int32]*C4SessionHandler)
+		go c4.process(i)
 	}
 	go c4.assistLoop()
 	return nil
@@ -63,13 +72,35 @@ func (c4 *C4HttpConnection) assistLoop() {
 	var empty bytes.Buffer
 	for {
 		c4.processClient(c4.assit, &empty)
-        time.Sleep(time.Duration(c4_cfg.MinWritePeriod) * time.Millisecond)
+		time.Sleep(time.Duration(c4_cfg.MinWritePeriod) * time.Millisecond)
 	}
 }
 
 func (c4 *C4HttpConnection) processRecvEvent(ev event.Event) error {
-   
-   return nil
+	handler := c4.getSessionHandler(ev)
+	if nil == handler {
+		return nil
+	}
+	switch ev.GetType() {
+	case event.HTTP_RESPONSE_EVENT_TYPE:
+		res := ev.(*event.HTTPResponseEvent)
+		res.ToResponse().Write(handler.conn.LocalRawConn)
+	case event.EVENT_SEQUNCEIAL_CHUNK_TYPE:
+		chunk := ev.(*event.SequentialChunkEvent)
+		handler.seqMap[chunk.Sequence] = chunk
+		for {
+			chunk, ok := handler.seqMap[handler.lastWriteLocalSeq]
+			if !ok {
+				break
+			}
+			handler.conn.LocalRawConn.Write(chunk.Content)
+			delete(handler.seqMap, handler.lastWriteLocalSeq)
+			handler.lastWriteLocalSeq = atomic.AddUint32(&handler.lastWriteLocalSeq, 1)
+		}
+	case event.EVENT_TRANSACTION_COMPLETE_TYPE:
+		break
+	}
+	return nil
 }
 
 func (c4 *C4HttpConnection) processClient(cli *http.Client, buf *bytes.Buffer) error {
@@ -131,7 +162,7 @@ func (c4 *C4HttpConnection) processClient(cli *http.Client, buf *bytes.Buffer) e
 	return nil
 }
 
-func (c4 *C4HttpConnection) proces(index int) error {
+func (c4 *C4HttpConnection) process(index int) error {
 	client := c4.client[index]
 	ev_chan := c4.ev_chan[index]
 	//conn_table := c4.local_conns[index]
@@ -154,8 +185,48 @@ func (c4 *C4HttpConnection) proces(index int) error {
 	return nil
 }
 
+func (c4 *C4HttpConnection) getSessionHandler(ev event.Event) *C4SessionHandler {
+	index := ev.GetHash() % int32(c4_cfg.ConnectionPoolSize)
+	handler, ok := c4.handlers[index][ev.GetHash()]
+	if !ok {
+		return nil
+	}
+	return handler
+}
+
+func (c4 *C4HttpConnection) getCreateSessionHandler(ev event.Event) *C4SessionHandler {
+	index := ev.GetHash() % int32(c4_cfg.ConnectionPoolSize)
+	handler, ok := c4.handlers[index][ev.GetHash()]
+	if !ok {
+		handler = &(C4SessionHandler{isHttps: false})
+		handler.seqMap = make(map[uint32]*event.SequentialChunkEvent)
+		c4.handlers[index][ev.GetHash()] = handler
+	}
+	return handler
+}
+
 func (c4 *C4HttpConnection) Request(conn *SessionConnection, ev event.Event) (err error, res event.Event) {
 	if nil != ev {
+		index := ev.GetHash() % int32(c4_cfg.ConnectionPoolSize)
+		handler := c4.getCreateSessionHandler(ev)
+		switch ev.GetType() {
+		case event.HTTP_REQUEST_EVENT_TYPE:
+			req := ev.(*event.HTTPRequestEvent)
+			if strings.EqualFold(req.RawReq.Method, "CONNECT") {
+				handler.isHttps = true
+				conn.State = STATE_RECV_HTTP_CHUNK
+			}
+			if strings.HasPrefix(req.Url, "http://") {
+
+			}
+		case event.HTTP_CHUNK_EVENT_TYPE:
+			chunk := ev.(*event.HTTPChunkEvent)
+			seq := &(event.SequentialChunkEvent{Content: chunk.Content})
+			seq.SetHash(chunk.GetHash())
+			seq.Sequence = handler.lastReadLocalSeq
+			handler.lastReadLocalSeq = atomic.AddUint32(&handler.lastReadLocalSeq, 1)
+			ev = seq
+		}
 		var compress event.CompressEventV2
 		compress.SetHash(ev.GetHash())
 		compress.Ev = ev
@@ -164,9 +235,7 @@ func (c4 *C4HttpConnection) Request(conn *SessionConnection, ev event.Event) (er
 		encrypt.SetHash(ev.GetHash())
 		encrypt.EncryptType = c4_cfg.Encrypter
 		encrypt.Ev = &compress
-		index := ev.GetHash() % int32(c4_cfg.ConnectionPoolSize)
 		c4.ev_chan[index] <- &encrypt
-		c4.local_conns[index][ev.GetHash()] = conn
 		conn.State = STATE_RECV_HTTP_CHUNK
 	}
 	return nil, nil

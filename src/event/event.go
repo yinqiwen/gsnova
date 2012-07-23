@@ -22,6 +22,12 @@ func DecodeInt64Value(buf *bytes.Buffer) (int64, error) {
 	return binary.ReadVarint(buf)
 }
 
+func EncodeUInt32Value(buf *bytes.Buffer, v uint32) {
+	b := make([]byte, 10)
+	size := binary.PutUvarint(b, uint64(v))
+	buf.Write(b[:size])
+}
+
 func EncodeUInt64Value(buf *bytes.Buffer, v uint64) {
 	b := make([]byte, 10)
 	size := binary.PutUvarint(b, v)
