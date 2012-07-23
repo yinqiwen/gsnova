@@ -133,15 +133,25 @@ func (conn *GoogleConnection) initHttpClient() {
 		conn.http_client = tls.Client(conn.http_client, tlcfg)
 		conn.overProxy = true
 	} else {
-		addr := util.GetHost("GoogleCNIP")
-		var err error
-		conn.http_client, err = net.Dial("tcp", addr+":80")
+		//		addr := util.GetHost("GoogleCNIP")
+		//		var err error
+		//		conn.http_client, err = net.Dial("tcp", addr+":80")
+		//		log.Printf("Google use proxy:%s\n", addr)
+		//		if nil != err {
+		//			log.Printf("Failed to dial address:%s for reason:%s\n", addr, err.Error())
+		//			conn.http_client.Close()
+		//			conn.http_client = nil
+		//		}
+		addr := util.GetHost("GoogleHttps")
 		log.Printf("Google use proxy:%s\n", addr)
+		var err error
+		conn.http_client, err = net.Dial("tcp", addr + ":443")
 		if nil != err {
 			log.Printf("Failed to dial address:%s for reason:%s\n", addr, err.Error())
-			conn.http_client.Close()
-			conn.http_client = nil
+			return
 		}
+		tlcfg := &tls.Config{InsecureSkipVerify: true}
+		conn.http_client = tls.Client(conn.http_client, tlcfg)
 	}
 }
 
