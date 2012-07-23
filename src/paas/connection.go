@@ -23,6 +23,8 @@ const (
 
 	GAE_NAME = "GAE"
 	C4_NAME  = "C4"
+	GOOGLE_NAME  = "GOOGLE"
+	FORWARD_NAME  = "FORWARD"
 )
 
 type RemoteConnection interface {
@@ -107,6 +109,13 @@ func (session *SessionConnection) process() error {
 		if nil == err {
 			rev := new(event.HTTPChunkEvent)
 			rev.Content = buf[0:n]
+			session.processHttpChunkEvent(rev)
+		}else {
+			if err != io.EOF {
+				log.Printf("Failed to read http chunk:%s\n", err.Error())
+			}
+			session.LocalRawConn.Close()
+			session.State = STATE_SESSION_CLOSE
 		}
 	case STATE_RECV_TCP:
 

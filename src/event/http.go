@@ -10,9 +10,57 @@ import (
 	"util"
 )
 
-//const (
-//	MAGIC_NUMBER uint16 = 0xCAFE
-//)
+type HTTPConnectionEvent struct {
+	Status int64
+	EventHeader
+}
+
+func (req *HTTPConnectionEvent) Encode(buffer *bytes.Buffer) {
+	EncodeInt64Value(buffer, req.Status)
+}
+func (req *HTTPConnectionEvent) Decode(buffer *bytes.Buffer) (err error) {
+	req.Status, err = DecodeInt64Value(buffer)
+	if err != nil {
+		return
+	}
+	return nil
+}
+
+func (req *HTTPConnectionEvent) GetType() uint32 {
+	return HTTP_CONNECTION_EVENT_TYPE
+}
+func (req *HTTPConnectionEvent) GetVersion() uint32 {
+	return 1
+}
+
+type HTTPErrorEvent struct {
+	Error int64
+	Cause string
+	EventHeader
+}
+
+func (req *HTTPErrorEvent) Encode(buffer *bytes.Buffer) {
+	EncodeInt64Value(buffer, req.Error)
+	EncodeStringValue(buffer, req.Cause)
+}
+func (req *HTTPErrorEvent) Decode(buffer *bytes.Buffer) (err error) {
+	req.Error, err = DecodeInt64Value(buffer)
+	if err != nil {
+		return
+	}
+	req.Cause, err = DecodeStringValue(buffer)
+	if err != nil {
+		return
+	}
+	return nil
+}
+
+func (req *HTTPErrorEvent) GetType() uint32 {
+	return HTTP_ERROR_EVENT_TYPE
+}
+func (req *HTTPErrorEvent) GetVersion() uint32 {
+	return 1
+}
 
 type HTTPMessageEvent struct {
 	Headers []*util.NameValuePair

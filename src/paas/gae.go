@@ -97,7 +97,8 @@ func (conn *GAEHttpConnection) initHttpClient() {
 	}
 	proxyInfo, exist := common.Cfg.GetProperty("LocalProxy", "Proxy")
 	if exist {
-		log.Printf("GAE use proxy:%s\n", util.GetUrl(proxyInfo))
+		proxy := util.GetUrl(proxyInfo)
+		log.Printf("GAE use proxy:%s\n", proxy)
 		if strings.HasPrefix(proxyInfo, "https") {
 			dial = sslDial
 		}
@@ -106,7 +107,6 @@ func (conn *GAEHttpConnection) initHttpClient() {
 				if nil != conn.proxyURL {
 					return conn.proxyURL, nil
 				}
-				proxy := util.GetUrl(proxyInfo)
 				proxyURL, err := url.Parse(proxy)
 				if err != nil || proxyURL.Scheme == "" {
 					if u, err := url.Parse("http://" + proxy); err == nil {
@@ -220,7 +220,7 @@ func (gae *GAEHttpConnection) requestEvent(conn *SessionConnection, ev event.Eve
 			content := make([]byte, response.ContentLength)
 			n, err := io.ReadFull(response.Body, content)
 			if int64(n) < response.ContentLength {
-			   return errors.New("No sufficient space in body."), nil
+				return errors.New("No sufficient space in body."), nil
 			}
 			if nil != err {
 				return err, nil
@@ -228,23 +228,14 @@ func (gae *GAEHttpConnection) requestEvent(conn *SessionConnection, ev event.Eve
 			//trigger EOF to recycle idle conn in net.http
 			tmp := make([]byte, 1)
 			response.Body.Read(tmp)
-			
+
 			buf := bytes.NewBuffer(content[0:response.ContentLength])
 			if !tags.Decode(buf) {
 				return errors.New("Failed to decode event tag"), nil
 			}
 			err, res = event.DecodeEvent(buf)
 			if nil == err {
-				for res.GetType() == event.ENCRYPT_EVENT_TYPE || res.GetType() == event.COMPRESS_EVENT_TYPE {
-					encrypt, ok := res.(*event.EncryptEvent)
-					if ok {
-						res = encrypt.Ev
-					}
-					compress, ok := res.(*event.CompressEvent)
-					if ok {
-						res = compress.Ev
-					}
-				}
+				res = event.ExtractEvent(res)
 			}
 			buf.Reset()
 			buf = nil

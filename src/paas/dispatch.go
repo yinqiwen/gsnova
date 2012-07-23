@@ -9,13 +9,14 @@ import (
 
 func HandleConn(sessionId int32, conn net.Conn) {
 	bufreader := bufio.NewReader(conn)
-	b, err := bufreader.Peek(6)
+	b, err := bufreader.Peek(7)
 	if nil != err {
 		log.Printf("Failed to peek data:%s\n", err.Error())
 		conn.Close()
 		return
 	}
 	session := newSessionConnection(sessionId, conn, bufreader)
+	//log.Printf("First str:%s\n", string(b))
 	if strings.EqualFold(string(b), "Connect") {
 		session.Type = HTTPS_TUNNEL
 	} else if b[0] == byte(4) || b[0] == byte(5) {

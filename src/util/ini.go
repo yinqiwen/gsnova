@@ -107,6 +107,18 @@ func (ini *Ini) GetIntProperty(tag, key string) (value int64, exist bool) {
 	return
 }
 
+func (ini *Ini) GetBoolProperty(tag, key string) (value bool, exist bool) {
+	var str string
+	if str, exist = ini.GetProperty(tag, key); exist {
+		if strings.EqualFold(str, "true") || strings.EqualFold(str, "1") {
+			value = true
+		} else {
+			value = false
+		}
+	}
+	return
+}
+
 func (ini *Ini) GetTagProperties(tag string) (map[string]string, bool) {
 	v, exist := ini.props[tag]
 	return v, exist

@@ -376,3 +376,25 @@ func DecodeEvent(buf *bytes.Buffer) (err error, ev Event) {
 	err = ev.Decode(buf)
 	return
 }
+
+func ExtractEvent(ev Event) Event {
+	for ev.GetType() == ENCRYPT_EVENT_TYPE || ev.GetType() == COMPRESS_EVENT_TYPE {
+		encrypt, ok := ev.(*EncryptEvent)
+		if ok {
+			ev = encrypt.Ev
+		}
+		encryptv2, ok := ev.(*EncryptEventV2)
+		if ok {
+			ev = encryptv2.Ev
+		}
+		compress, ok := ev.(*CompressEvent)
+		if ok {
+			ev = compress.Ev
+		}
+		compressv2, ok := ev.(*CompressEventV2)
+		if ok {
+			ev = compressv2.Ev
+		}
+	}
+	return ev
+}
