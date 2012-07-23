@@ -2,8 +2,8 @@ package paas
 
 import (
 	"bufio"
-	//"bytes"
 	"common"
+	"crypto/tls"
 	"event"
 	//"fmt"
 	"io"
@@ -46,7 +46,7 @@ func (conn *GoogleConnection) initHttpsClient() {
 			ContentLength: 0,
 		}
 		req.Write(conn.https_client)
-		res, err := http.ReadResponse(bufio.NewReader(conn.https_client),req)
+		res, err := http.ReadResponse(bufio.NewReader(conn.https_client), req)
 		if nil != err {
 			log.Printf("Failed to connect address:%s:443 for reason:%s\n", addr, err.Error())
 			conn.https_client.Close()
@@ -79,13 +79,34 @@ func (conn *GoogleConnection) initHttpClient() {
 		proxy := util.GetUrl(proxyInfo)
 		log.Printf("Google use proxy:%s\n", proxy)
 		proxyURL, err := url.Parse(proxy)
-		//		if strings.HasPrefix(proxyInfo, "https") {
-		//			dial = sslDial
-		//		}
 		conn.http_client, err = net.Dial("tcp", proxyURL.Host)
 		if nil != err {
 			log.Printf("Failed to dial address:%s for reason:%s\n", proxyURL.Host, err.Error())
 		}
+		addr := util.GetHost("GoogleHttps")
+		req := &http.Request{
+			Method:        "CONNECT",
+			URL:           &url.URL{Scheme: "https", Host: addr},
+			Host:          addr,
+			Header:        make(http.Header),
+			ContentLength: 0,
+		}
+		req.Write(conn.http_client)
+		res, err := http.ReadResponse(bufio.NewReader(conn.http_client), req)
+		if nil != err {
+			log.Printf("Failed to connect address:%s:443 for reason:%s\n", addr, err.Error())
+			conn.http_client.Close()
+			conn.http_client = nil
+			return
+		}
+		if res.StatusCode != 200 {
+			log.Printf("Failed to connect address:%s:443 for response code:%d\n", addr, res.StatusCode)
+			conn.http_client.Close()
+			conn.http_client = nil
+			return
+		}
+		tlcfg := &tls.Config{InsecureSkipVerify: true}
+		conn.http_client = tls.Client(conn.http_client,tlcfg )
 		conn.overProxy = true
 	} else {
 		addr := util.GetHost("GoogleCNIP")
@@ -114,8 +135,8 @@ func (google *GoogleConnection) Request(conn *SessionConnection, ev event.Event)
 					log.Printf("Failed to read for reason:%s from:%s\n", err.Error(), local.RemoteAddr().String())
 					local.Close()
 					remote.Close()
-					break
 				}
+				break
 			}
 		}
 		c <- 1
