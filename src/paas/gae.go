@@ -306,7 +306,7 @@ func (gae *GAEHttpConnection) Request(conn *SessionConnection, ev event.Event) (
 	if ev.GetType() == event.HTTP_REQUEST_EVENT_TYPE {
 		httpreq := ev.(*event.HTTPRequestEvent)
 		if strings.EqualFold(httpreq.Method, "CONNECT") {
-			log.Printf("Request %s %s\n", httpreq.Method, httpreq.Url)
+			log.Printf("Request %s %s\n", httpreq.Method, httpreq.RawReq.RequestURI)
 			conn.LocalRawConn.Write([]byte("HTTP/1.1 200 OK\r\n\r\n"))
 			tlscfg, err := common.TLSConfig(httpreq.GetHeader("Host"))
 			if nil != err {
@@ -349,7 +349,7 @@ func (gae *GAEHttpConnection) Request(conn *SessionConnection, ev event.Event) (
 				}
 			}
 
-			log.Printf("Request %s %s\n", httpreq.Method, httpreq.Url)
+			log.Printf("Request %s %s\n", httpreq.Method, httpreq.RawReq.RequestURI)
 			//httpreq.SetHeader("Connection", "Close")
 			err, res = gae.requestEvent(conn, ev)
 			if nil != err {
@@ -479,6 +479,11 @@ func (manager *GAE) fetchSharedAppIDs() (error, []string) {
 }
 
 func (manager *GAE) Init() error {
+    if enable, exist := common.Cfg.GetIntProperty("GAE", "Enable"); exist {
+		if enable == 0{
+		   return nil
+		}
+	}
 	log.Println("Init GAE.")
 	RegisteRemoteConnManager(manager)
 	initGAEConfig()

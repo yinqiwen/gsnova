@@ -291,20 +291,20 @@ func decodeValue(buf *bytes.Buffer, v *reflect.Value) error {
 type EventHeader struct {
 	Type    uint32
 	Version uint32
-	Hash    int32
+	Hash    uint32
 }
 
-func (h *EventHeader) GetHash() int32 {
+func (h *EventHeader) GetHash() uint32 {
 	return h.Hash
 }
-func (h *EventHeader) SetHash(hash int32) {
+func (h *EventHeader) SetHash(hash uint32) {
 	h.Hash = hash
 }
 
 func (header *EventHeader) Encode(buffer *bytes.Buffer) {
 	EncodeUInt64Value(buffer, uint64(header.Type))
 	EncodeUInt64Value(buffer, uint64(header.Version))
-	EncodeInt64Value(buffer, int64(header.Hash))
+	EncodeUInt64Value(buffer, uint64(header.Hash))
 }
 func (header *EventHeader) Decode(buffer *bytes.Buffer) error {
 	var err error
@@ -316,7 +316,7 @@ func (header *EventHeader) Decode(buffer *bytes.Buffer) error {
 	if nil != err {
 		return err
 	}
-	header.Hash, err = DecodeInt32Value(buffer)
+	header.Hash, err = DecodeUInt32Value(buffer)
 	if nil != err {
 		return err
 	}
@@ -328,8 +328,8 @@ type Event interface {
 	Decode(buffer *bytes.Buffer) error
 	GetType() uint32
 	GetVersion() uint32
-	GetHash() int32
-	SetHash(hash int32)
+	GetHash() uint32
+	SetHash(hash uint32)
 }
 
 func EncodeValue(buf *bytes.Buffer, ev interface{}) error {

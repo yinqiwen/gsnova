@@ -41,7 +41,7 @@ type RemoteConnectionManager interface {
 }
 
 type SessionConnection struct {
-	SessionID       int32
+	SessionID       uint32
 	LocalBufferConn *bufio.Reader
 	LocalRawConn    net.Conn
 	RemoteConn      RemoteConnection
@@ -49,7 +49,7 @@ type SessionConnection struct {
 	Type            uint32
 }
 
-func newSessionConnection(sessionId int32, conn net.Conn, reader *bufio.Reader) *SessionConnection {
+func newSessionConnection(sessionId uint32, conn net.Conn, reader *bufio.Reader) *SessionConnection {
 	session_conn := new(SessionConnection)
 	session_conn.LocalRawConn = conn
 	session_conn.LocalBufferConn = reader
@@ -99,8 +99,9 @@ func (session *SessionConnection) process() error {
 			var rev event.HTTPRequestEvent
 			rev.FromRequest(req)
 			rev.SetHash(session.SessionID)
-			session.processHttpEvent(&rev)
-		} else {
+			err = session.processHttpEvent(&rev)
+		}
+		if nil != err {
 			if err != io.EOF {
 				log.Printf("Failed to read http request:%s\n", err.Error())
 			}
@@ -113,8 +114,9 @@ func (session *SessionConnection) process() error {
 		if nil == err {
 			rev := new(event.HTTPChunkEvent)
 			rev.Content = buf[0:n]
-			session.processHttpChunkEvent(rev)
-		} else {
+			err = session.processHttpChunkEvent(rev)
+		}
+		if nil != err {
 			if err != io.EOF {
 				log.Printf("Failed to read http chunk:%s\n", err.Error())
 			}

@@ -24,9 +24,15 @@ func main() {
 	paas.InitSpac()
 	var gae paas.GAE
 	var google paas.Google
+	var c4 paas.C4
 	err = gae.Init()
 	if nil != err {
 		fmt.Printf("Failed to init GAE:%s\n", err.Error())
+		return
+	}
+	err = c4.Init()
+	if nil != err {
+		fmt.Printf("Failed to init C4:%s\n", err.Error())
 		return
 	}
 	google.Init()

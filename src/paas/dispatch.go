@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-func HandleConn(sessionId int32, conn net.Conn) {
+func HandleConn(sessionId uint32, conn net.Conn) {
 	bufreader := bufio.NewReader(conn)
 	b, err := bufreader.Peek(7)
 	if nil != err {

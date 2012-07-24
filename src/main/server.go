@@ -12,10 +12,10 @@ const (
 	MAX_READ_CHUNK_SIZE = 8192
 )
 
-var seed int32 = 0
+var seed uint32 = 0
 
 func handleConn(conn *net.TCPConn) {
-	sessionID := atomic.AddInt32(&seed, 1)
+	sessionID := atomic.AddUint32(&seed, 1)
 	//log.Printf("Session:%d created\n", sessionID)
 	paas.HandleConn(sessionID, conn)
 }

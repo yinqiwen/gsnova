@@ -11,15 +11,15 @@ import (
 )
 
 type HTTPConnectionEvent struct {
-	Status int64
+	Status uint64
 	EventHeader
 }
 
 func (req *HTTPConnectionEvent) Encode(buffer *bytes.Buffer) {
-	EncodeInt64Value(buffer, req.Status)
+	EncodeUInt64Value(buffer, req.Status)
 }
 func (req *HTTPConnectionEvent) Decode(buffer *bytes.Buffer) (err error) {
-	req.Status, err = DecodeInt64Value(buffer)
+	req.Status, err = DecodeUInt64Value(buffer)
 	if err != nil {
 		return
 	}
