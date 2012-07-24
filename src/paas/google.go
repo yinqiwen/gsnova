@@ -17,6 +17,8 @@ import (
 )
 
 var useGlobalProxy bool
+var httpHost string
+var httpsHost string
 
 type GoogleConnection struct {
 	http_client  net.Conn
@@ -59,7 +61,7 @@ func (conn *GoogleConnection) initHttpsClient() {
 			log.Printf("Failed to dial address:%s for reason:%s\n", proxyURL.Host, err.Error())
 			return
 		}
-		addr := util.GetHost("GoogleHttps")
+		addr := util.GetHost(httpsHost)
 		req := &http.Request{
 			Method:        "CONNECT",
 			URL:           &url.URL{Scheme: "https", Host: addr},
@@ -83,7 +85,7 @@ func (conn *GoogleConnection) initHttpsClient() {
 		}
 		conn.overProxy = true
 	} else {
-		addr := util.GetHost("GoogleHttps")
+		addr := util.GetHost(httpsHost)
 		var err error
 		conn.https_client, err = net.Dial("tcp", addr+":443")
 		if nil != err {
@@ -115,7 +117,7 @@ func (conn *GoogleConnection) initHttpClient() {
 		if nil != err {
 			log.Printf("Failed to dial address:%s for reason:%s\n", proxyURL.Host, err.Error())
 		}
-		addr := util.GetHost("GoogleHttps")
+		addr := util.GetHost(httpsHost)
 		req := &http.Request{
 			Method:        "CONNECT",
 			URL:           &url.URL{Scheme: "https", Host: addr},
@@ -141,7 +143,7 @@ func (conn *GoogleConnection) initHttpClient() {
 		conn.http_client = tls.Client(conn.http_client, tlcfg)
 		conn.overProxy = true
 	} else {
-		addr := util.GetHost("GoogleHttps")
+		addr := util.GetHost(httpsHost)
 		log.Printf("Google use proxy:%s\n", addr)
 		var err error
 		conn.http_client, err = net.DialTimeout("tcp", addr+":443", 10*time.Second)
@@ -303,6 +305,8 @@ func (manager *Google) Init() error {
 		}
 	}
 	log.Println("Init Google.")
+	httpHost = "GoogleCNIP"
+	httpsHost = "GoogleHttpsIP"
 	RegisteRemoteConnManager(manager)
 	if tmp, exist := common.Cfg.GetIntProperty("Google", "UseGlobalProxy"); exist {
 		useGlobalProxy = tmp == 1

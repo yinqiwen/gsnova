@@ -89,7 +89,7 @@ func processRecvEvent(ev event.Event) error {
 		}
 		return nil
 	}
-	log.Printf("Session:%d process recv event:%T\n", ev.GetHash(), ev)
+	//log.Printf("Session:%d process recv event:%T\n", ev.GetHash(), ev)
 	switch ev.GetType() {
 	case event.HTTP_RESPONSE_EVENT_TYPE:
 		res := ev.(*event.HTTPResponseEvent)
@@ -440,7 +440,7 @@ func (manager *C4) Init() error {
 	for i := 0; i < int(c4_cfg.ConnectionPoolSize); i++ {
 		handlers[i] = make(map[uint32]*C4SessionHandler)
 	}
-	recvEvChan = make(chan event.Event)
+	recvEvChan = make(chan event.Event, 1024)
 
 	index := 0
 	for {

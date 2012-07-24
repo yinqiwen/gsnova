@@ -9,12 +9,18 @@ import (
 	"strings"
 )
 
+type Rule struct {
+	regexs []*regexp.Regexp
+	proxy  string
+}
+
 type SpacConfig struct {
 	defaultRule               string
 	enableGoogleHttpDispatch  bool
 	enableGoogleHttpsDispatch bool
 	googleSites               []string
-	ruleTable                 map[string][]*regexp.Regexp
+	rules                     []*Rule
+	//ruleList                  map[string][]*regexp.Regexp
 }
 
 var spac *SpacConfig
@@ -28,10 +34,9 @@ func RegisteRemoteConnManager(connManager RemoteConnectionManager) {
 
 func InitSpac() {
 	spac = &SpacConfig{}
-	spac.ruleTable = make(map[string][]*regexp.Regexp)
+	spac.rules = make([]*Rule, 0)
 	spac.defaultRule, _ = common.Cfg.GetProperty("SPAC", "DefaultRule")
-	spac.enableGoogleHttpDispatch, _ = common.Cfg.GetBoolProperty("SPAC", "GoogleHttpDispatchEnable")
-	spac.enableGoogleHttpsDispatch, _ = common.Cfg.GetBoolProperty("SPAC", "GoogleHttpsDispatchEnable")
+
 	if sites, exist := common.Cfg.GetProperty("SPAC", "GoogleSites"); exist {
 		spac.googleSites = strings.Split(sites, "|")
 	}
@@ -43,7 +48,9 @@ func InitSpac() {
 		}
 		vv := strings.Split(v, "->")
 		if len(vv) == 2 {
-			key := strings.ToUpper(strings.TrimSpace(vv[1]))
+			r := &Rule{}
+			r.proxy = strings.ToUpper(strings.TrimSpace(vv[1]))
+
 			rules := strings.Split(strings.TrimSpace(vv[0]), "|")
 			for _, originrule := range rules {
 				rule := strings.TrimSpace(originrule)
@@ -53,10 +60,10 @@ func InitSpac() {
 				if nil != err {
 					log.Printf("Invalid pattern:%s for reason:%s\n", originrule, err.Error())
 				} else {
-					regs := spac.ruleTable[key]
-					spac.ruleTable[key] = append(regs, reg)
+					r.regexs = append(r.regexs, reg)
 				}
 			}
+			spac.rules = append(spac.rules, r)
 		} else {
 			log.Printf("Invalid diaptch rule:%s\n", v)
 		}
@@ -75,17 +82,22 @@ func SelectProxy(req *http.Request) (RemoteConnectionManager, bool) {
 		url = "https://" + url
 	}
 	proxyName := spac.defaultRule
-	for name, rules := range spac.ruleTable {
-		for _, rule := range rules {
-			if rule.MatchString(url) {
-				proxyName = name
+	matched := false
+	for _, r := range spac.rules {
+		for _, regex := range r.regexs {
+			if regex.MatchString(url) {
+				proxyName = r.proxy
+				matched = true
 				break
 			}
 		}
+		if matched {
+			break
+		}
 	}
 	v, ok := registedRemoteConnManager[proxyName]
-	if !ok{
-	  log.Printf("No proxy:%s defined.\n", proxyName)
+	if !ok {
+		log.Printf("No proxy:%s defined.\n", proxyName)
 	}
 	return v, ok
 }
