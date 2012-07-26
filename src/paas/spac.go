@@ -29,7 +29,7 @@ var registedRemoteConnManager map[string]RemoteConnectionManager = make(map[stri
 
 func RegisteRemoteConnManager(connManager RemoteConnectionManager) {
 	//connManager.Init()
-	registedRemoteConnManager[connManager.GetName()] = connManager
+	registedRemoteConnManager[strings.ToUpper(connManager.GetName())] = connManager
 }
 
 func InitSpac() {
@@ -95,7 +95,7 @@ func SelectProxy(req *http.Request) (RemoteConnectionManager, bool) {
 			break
 		}
 	}
-	v, ok := registedRemoteConnManager[proxyName]
+	v, ok := registedRemoteConnManager[strings.ToUpper(proxyName)]
 	if !ok {
 		log.Printf("No proxy:%s defined.\n", proxyName)
 	}

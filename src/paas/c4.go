@@ -281,12 +281,15 @@ func (c4 *C4HttpConnection) process(index int) error {
 	sendEvChan := c4.sendEvChans[index]
 	for {
 		var buf bytes.Buffer
+	L:
 		select {
 		case ev := <-sendEvChan:
 			event.EncodeEvent(&buf, ev)
+			break L
 		default:
 			break
 		}
+
 		if buf.Len() == 0 {
 			time.Sleep(time.Duration(c4_cfg.MinWritePeriod) * time.Millisecond)
 		}

@@ -25,6 +25,7 @@ func main() {
 	var gae paas.GAE
 	var google paas.Google
 	var c4 paas.C4
+	var auto paas.AutoHost
 	err = gae.Init()
 	if nil != err {
 		fmt.Printf("Failed to init GAE:%s\n", err.Error())
@@ -36,6 +37,7 @@ func main() {
 		return
 	}
 	google.Init()
+	auto.Init()
 	common.LoadRootCA()
 	log.Println("=============Start GSnova " + common.Version + "=============")
 	addr, exist := common.Cfg.GetProperty("LocalServer", "Listen")

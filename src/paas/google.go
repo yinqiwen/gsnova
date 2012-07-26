@@ -19,6 +19,7 @@ import (
 var useGlobalProxy bool
 var httpHost string
 var httpsHost string
+var connTimeoutSecs time.Duration
 
 type GoogleConnection struct {
 	http_client  net.Conn
@@ -87,7 +88,7 @@ func (conn *GoogleConnection) initHttpsClient() {
 	} else {
 		addr := util.GetHost(httpsHost)
 		var err error
-		conn.https_client, err = net.Dial("tcp", addr+":443")
+		conn.https_client, err = net.DialTimeout("tcp", addr+":443", connTimeoutSecs)
 		if nil != err {
 			log.Printf("Failed to dial address:%s for reason:%s\n", addr, err.Error())
 		}
@@ -113,7 +114,7 @@ func (conn *GoogleConnection) initHttpClient() {
 			}
 			target = fmt.Sprintf("%s:%d", target, port)
 		}
-		conn.http_client, err = net.DialTimeout("tcp", target, 10*time.Second)
+		conn.http_client, err = net.DialTimeout("tcp", target, connTimeoutSecs)
 		if nil != err {
 			log.Printf("Failed to dial address:%s for reason:%s\n", proxyURL.Host, err.Error())
 		}
@@ -146,7 +147,7 @@ func (conn *GoogleConnection) initHttpClient() {
 		addr := util.GetHost(httpsHost)
 		log.Printf("Google use proxy:%s\n", addr)
 		var err error
-		conn.http_client, err = net.DialTimeout("tcp", addr+":443", 10*time.Second)
+		conn.http_client, err = net.DialTimeout("tcp", addr+":443", connTimeoutSecs)
 		if nil != err {
 			log.Printf("Failed to dial address:%s for reason:%s\n", addr, err.Error())
 			return
@@ -172,7 +173,7 @@ func (google *GoogleConnection) writeHttpRequest(req *http.Request) error {
 		if nil != err {
 			log.Printf("Resend request since error:%s occured.\n", err.Error())
 			google.Close()
-			google.initHttpsClient()
+			google.initHttpClient()
 		} else {
 			return nil
 		}
@@ -307,9 +308,15 @@ func (manager *Google) Init() error {
 	log.Println("Init Google.")
 	httpHost = "GoogleCNIP"
 	httpsHost = "GoogleHttpsIP"
+	connTimeoutSecs = 1500 * time.Millisecond
 	RegisteRemoteConnManager(manager)
 	if tmp, exist := common.Cfg.GetIntProperty("Google", "UseGlobalProxy"); exist {
 		useGlobalProxy = tmp == 1
+	}
+	httpHost,_ = common.Cfg.GetProperty("Google", "HTTPHost")
+	httpsHost,_ = common.Cfg.GetProperty("Google", "HTTPSHost")
+	if tmp, exist := common.Cfg.GetIntProperty("Google", "ConnectTimeout"); exist {
+		connTimeoutSecs = time.Duration(tmp) * time.Millisecond
 	}
 	manager.idle_conns = make(chan RemoteConnection, 20)
 	return nil

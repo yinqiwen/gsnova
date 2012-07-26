@@ -23,8 +23,9 @@ const (
 
 	GAE_NAME     = "GAE"
 	C4_NAME      = "C4"
-	GOOGLE_NAME  = "GOOGLE"
-	FORWARD_NAME = "FORWARD"
+	GOOGLE_NAME  = "Google"
+	FORWARD_NAME = "Forward"
+	AUTOHOST_NAME = "AutoHost"
 )
 
 type RemoteConnection interface {
