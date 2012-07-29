@@ -3,7 +3,7 @@ package main
 import (
 	"log"
 	"net"
-	"paas"
+	"proxy"
 	//"runtime"
 	"sync/atomic"
 )
@@ -17,7 +17,7 @@ var seed uint32 = 0
 func handleConn(conn *net.TCPConn) {
 	sessionID := atomic.AddUint32(&seed, 1)
 	//log.Printf("Session:%d created\n", sessionID)
-	paas.HandleConn(sessionID, conn)
+	proxy.HandleConn(sessionID, conn)
 }
 
 func handleServer(lp *net.TCPListener) {
@@ -46,7 +46,7 @@ func startLocalProxyServer(addr string) bool {
 		log.Fatalf("Can NOT listen on address:%s\n", addr)
 		return false
 	}
-	log.Printf("Listen on address:%s\n", addr)
+	log.Printf("Listen on address %s\n", addr)
 	handleServer(lp)
 	return true
 }

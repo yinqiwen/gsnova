@@ -1,16 +1,14 @@
-package paas
+package proxy
 
 import (
 	"bufio"
 	"common"
 	"event"
-	//"fmt"
 	"io"
 	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
-	//"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -22,12 +20,12 @@ import (
 var repoUrls []string
 var hostMapping map[string]string
 var autoConnTimeoutSecs time.Duration
+var autoHostEnable bool
 
 type AutoHostConnection struct {
 	http_client  net.Conn
 	https_client net.Conn
 	forwardChan  chan int
-	//httpsChan chan int
 	manager *AutoHost
 }
 
@@ -51,6 +49,7 @@ func (conn *AutoHostConnection) initHttpsClient(host string) {
 	if nil != conn.https_client {
 		return
 	}
+	host = strings.Split(host, ":")[0]
 	addr, ok := hostMapping[host]
 	if !ok {
 		addr = host
@@ -67,13 +66,14 @@ func (conn *AutoHostConnection) initHttpClient(host string) {
 	if nil != conn.http_client {
 		return
 	}
+	host = strings.Split(host, ":")[0]
 	addr, ok := hostMapping[host]
 	if !ok {
 		addr = host
 	}
 	log.Printf("AutoHost use mapping:%s fost host:%s\n", addr, host)
 	var err error
-	conn.http_client, err = net.DialTimeout("tcp", addr+":443", connTimeoutSecs)
+	conn.http_client, err = net.DialTimeout("tcp", addr+":80", connTimeoutSecs)
 	if nil != err {
 		log.Printf("Failed to dial address:%s for reason:%s\n", addr, err.Error())
 		return
@@ -190,6 +190,10 @@ type AutoHost struct {
 func (manager *AutoHost) GetName() string {
 	return AUTOHOST_NAME
 }
+
+//func (manager *AutoHost) GetArg() string {
+//	return ""
+//}
 func (manager *AutoHost) RecycleRemoteConnection(conn RemoteConnection) {
 	select {
 	case manager.idle_conns <- conn:
@@ -217,7 +221,7 @@ func (manager *AutoHost) GetRemoteConnection(ev event.Event) (RemoteConnection, 
 }
 
 func loadHostFile() {
-    hostMapping = make(map[string]string)
+	hostMapping = make(map[string]string)
 	os.Mkdir(common.Home+"hosts/", 0755)
 	for index, urlstr := range repoUrls {
 		resp, err := http.DefaultClient.Get(urlstr)
@@ -234,8 +238,10 @@ func loadHostFile() {
 	files, err := ioutil.ReadDir(common.Home + "hosts/")
 	if nil == err {
 		for _, file := range files {
-			content, err := ioutil.ReadFile(file.Name())
+			//file.
+			content, err := ioutil.ReadFile(common.Home + "hosts/" + file.Name())
 			if nil == err {
+
 				reader := bufio.NewReader(strings.NewReader(string(content)))
 				for {
 					line, _, err := reader.ReadLine()
@@ -244,29 +250,40 @@ func loadHostFile() {
 					}
 					str := string(line)
 					str = strings.TrimSpace(str)
+
 					if strings.HasPrefix(str, "#") || len(str) == 0 {
 						continue
 					}
 					ss := strings.Split(str, " ")
+					if len(ss) == 1 {
+						ss = strings.Split(str, "\t")
+					}
 					if len(ss) == 2 {
-						v := strings.TrimSpace(ss[0])
 						k := strings.TrimSpace(ss[1])
-						hostMapping[k] = v
+						v := strings.TrimSpace(ss[0])
+						//log.Printf("%s=%s\n",k,v)
+						hostMapping[strings.TrimSpace(k)] = strings.TrimSpace(v)
 					}
 
 				}
 			}
 		}
 	}
+}
 
+func hostMatched(host string) bool {
+	_, exist := hostMapping[host]
+	return exist
 }
 
 func (manager *AutoHost) Init() error {
 	if enable, exist := common.Cfg.GetIntProperty("AutoHost", "Enable"); exist {
 		if enable == 0 {
+			autoHostEnable = false
 			return nil
 		}
 	}
+	autoHostEnable = true
 	log.Println("Init AutoHost.")
 	connTimeoutSecs = 3000 * time.Millisecond
 	RegisteRemoteConnManager(manager)

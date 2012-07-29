@@ -1,4 +1,4 @@
-package paas
+package proxy
 
 import (
 	"bufio"
@@ -8,7 +8,7 @@ import (
 	"log"
 	"net"
 	"net/http"
-	//"runtime"
+	"strings"
 )
 
 const (
@@ -21,11 +21,14 @@ const (
 	STATE_RECV_TCP        = 3
 	STATE_SESSION_CLOSE   = 4
 
-	GAE_NAME     = "GAE"
-	C4_NAME      = "C4"
-	GOOGLE_NAME  = "Google"
-	FORWARD_NAME = "Forward"
-	AUTOHOST_NAME = "AutoHost"
+	GAE_NAME          = "GAE"
+	C4_NAME           = "C4"
+	GOOGLE_NAME       = "Google"
+	GOOGLE_HTTP_NAME  = "GoogleHttp"
+	GOOGLE_HTTPS_NAME = "GoogleHttps"
+	FORWARD_NAME      = "Forward"
+	AUTOHOST_NAME     = "AutoHost"
+	DIRECT_NAME       = "Direct"
 )
 
 type RemoteConnection interface {
@@ -38,7 +41,8 @@ type RemoteConnectionManager interface {
 	GetRemoteConnection(ev event.Event) (RemoteConnection, error)
 	RecycleRemoteConnection(conn RemoteConnection)
 	GetName() string
-	Init() error
+	//	GetArg() string
+//	Init() error
 }
 
 type SessionConnection struct {
@@ -71,7 +75,8 @@ func (session *SessionConnection) processHttpEvent(ev *event.HTTPRequestEvent) e
 	if nil == session.RemoteConn {
 		session.RemoteConn, err = proxy.GetRemoteConnection(ev)
 	} else {
-		if session.RemoteConn.GetConnectionManager().GetName() != proxy.GetName() {
+		rmanager := session.RemoteConn.GetConnectionManager()
+		if rmanager.GetName() != proxy.GetName() {
 			session.RemoteConn.Close()
 			session.RemoteConn, err = proxy.GetRemoteConnection(ev)
 		}
@@ -128,4 +133,32 @@ func (session *SessionConnection) process() error {
 
 	}
 	return nil
+}
+
+func HandleConn(sessionId uint32, conn net.Conn) {
+	bufreader := bufio.NewReader(conn)
+	b, err := bufreader.Peek(7)
+	if nil != err {
+		log.Printf("Failed to peek data:%s\n", err.Error())
+		conn.Close()
+		return
+	}
+	session := newSessionConnection(sessionId, conn, bufreader)
+	//log.Printf("First str:%s\n", string(b))
+	if strings.EqualFold(string(b), "Connect") {
+		session.Type = HTTPS_TUNNEL
+	} else if b[0] == byte(4) || b[0] == byte(5) {
+		session.Type = SOCKS_TUNNEL
+	} else {
+		session.Type = HTTP_TUNNEL
+	}
+	for session.State != STATE_SESSION_CLOSE {
+		err := session.process()
+		if nil != err {
+			return
+		}
+	}
+	if nil != session.RemoteConn {
+		session.RemoteConn.GetConnectionManager().RecycleRemoteConnection(session.RemoteConn)
+	}
 }

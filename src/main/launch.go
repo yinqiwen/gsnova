@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"paas"
+	"proxy"
 	"path/filepath"
 	//"util"
 )
@@ -21,11 +21,11 @@ func main() {
 	common.InitLogger()
 	common.InitConfig()
 	event.Init()
-	paas.InitSpac()
-	var gae paas.GAE
-	var google paas.Google
-	var c4 paas.C4
-	var auto paas.AutoHost
+	proxy.InitSpac()
+	proxy.InitGoogle()
+	var gae proxy.GAE
+	var c4 proxy.C4
+	var auto proxy.AutoHost
 	err = gae.Init()
 	if nil != err {
 		fmt.Printf("Failed to init GAE:%s\n", err.Error())
@@ -36,7 +36,6 @@ func main() {
 		fmt.Printf("Failed to init C4:%s\n", err.Error())
 		return
 	}
-	google.Init()
 	auto.Init()
 	common.LoadRootCA()
 	log.Println("=============Start GSnova " + common.Version + "=============")

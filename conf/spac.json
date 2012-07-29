@@ -1,0 +1,27 @@
+[
+  {
+    "Host" : ["groups.google.com", "*google-analytics.com*","*golang.org","*.gstatic.com*", "*.googleapis.com*", "*.googleusercontent.com*"],
+    "Proxy":"GoogleHttps"
+  },
+  {
+    "Host" : ["*google.com*", "*.doubleclick.net*", "*googleadservices.com*"],
+    "Proxy":"GoogleHttps"
+  },
+  {
+    "Host" : ["*.ytimg.com*", "www.youtube.com*", "code.google.com", "*.googlecode.com", "*.android.com", "*.appspot.com*"],
+    "Proxy":"Google"
+  },
+  {
+    "Method":["CONNECT"],
+    "Host" : ["Target https domain patterns for socks5 proxy"],
+    "Proxy":"socks://127.0.0.1:7070"
+  },
+  {
+    "Host" : ["Target domain patterns for 3rd http proxy"],
+    "Proxy":"http://127.0.0.1:8080"
+  },
+  {
+    "Host" : ["Configure direct access sites, like *.qq.com*"],
+    "Proxy":"Direct"
+  }
+]

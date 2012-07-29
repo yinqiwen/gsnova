@@ -1,4 +1,4 @@
-package paas
+package proxy
 
 import (
 	"bufio"
@@ -410,6 +410,10 @@ func (manager *GAE) GetRemoteConnection(ev event.Event) (RemoteConnection, error
 func (manager *GAE) GetName() string {
 	return GAE_NAME
 }
+
+//func (manager *GAE) GetArg() string {
+//	return ""
+//}
 
 func initGAEConfig() {
 	//init config

@@ -1,4 +1,4 @@
-package paas
+package proxy
 
 import (
 	"bytes"
@@ -394,6 +394,10 @@ func (manager *C4) GetRemoteConnection(ev event.Event) (RemoteConnection, error)
 func (manager *C4) GetName() string {
 	return C4_NAME
 }
+
+//func (manager *C4) GetArg() string {
+//	return ""
+//}
 
 func initC4Config() {
 	//init config
