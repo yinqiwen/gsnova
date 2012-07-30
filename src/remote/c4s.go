@@ -78,7 +78,7 @@ func InvokeCallback(w http.ResponseWriter, req *http.Request) {
 		}
 		getUserProxyService(user).recv_evs <- ev
 	}
-
+    
 }
 
 // hello world, the web server
