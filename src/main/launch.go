@@ -17,10 +17,10 @@ func main() {
 		fmt.Println(err)
 		return
 	}
+	event.Init()
 	common.Home, _ = filepath.Split(path)
 	common.InitLogger()
 	common.InitConfig()
-	event.Init()
 	proxy.InitSpac()
 	proxy.InitGoogle()
 	var gae proxy.GAE
