@@ -60,6 +60,15 @@ func getCreateSessionHandler(ev event.Event, conn *C4HttpConnection) *C4SessionH
 	return handler
 }
 
+func getExistSessionHandler(ev event.Event) (*C4SessionHandler, error) {
+	index := ev.GetHash() % c4_cfg.ConnectionPoolSize
+	handler, ok := handlers[index][ev.GetHash()]
+	if !ok {
+		return nil, errors.New("Not exist handler")
+	}
+	return handler, nil
+}
+
 func recvEventLoop() {
 	for {
 		ev := <-recvEvChan
@@ -68,12 +77,13 @@ func recvEventLoop() {
 }
 
 func delayDeleteSessionEntry(m map[uint32]*C4SessionHandler, h *C4SessionHandler) {
-	time.Sleep(60 * time.Second)
+	//time.Sleep(60 * time.Second)
 	h.conn.LocalRawConn.Close()
 	delete(m, h.conn.SessionID)
 }
 
 func processRecvEvent(ev event.Event) error {
+    log.Printf("Start process event %T", ev)
 	handler, handler_map := getSessionHandler(ev)
 	if nil == handler {
 		if ev.GetHash() != 0 && ev.GetType() != event.HTTP_CONNECTION_EVENT_TYPE {
@@ -96,6 +106,7 @@ func processRecvEvent(ev event.Event) error {
 		res.ToResponse().Write(handler.conn.LocalRawConn)
 	case event.EVENT_SEQUNCEIAL_CHUNK_TYPE:
 		chunk := ev.(*event.SequentialChunkEvent)
+		log.Printf("Session[%d]Chunk sequence is %d\n", ev.GetHash(), chunk.Sequence)
 		handler.seqMap[chunk.Sequence] = chunk
 		for {
 			chunk, ok := handler.seqMap[handler.lastWriteLocalSeq]
@@ -118,7 +129,8 @@ func processRecvEvent(ev event.Event) error {
 		//		log.Printf("Status %d\n", cev.Status)
 		if cev.Status == event.HTTP_CONN_CLOSED {
 			handler.state = SESSION_DELETING
-			go delayDeleteSessionEntry(handler_map, handler)
+			//go delayDeleteSessionEntry(handler_map, handler)
+			delayDeleteSessionEntry(handler_map, handler)
 			//delete(handler_map, ev.GetHash())
 		}
 	default:
@@ -208,12 +220,9 @@ func (c4 *C4HttpConnection) assistLoop() {
 }
 
 func (c4 *C4HttpConnection) processClient(cli *http.Client, buf *bytes.Buffer, isAssist bool) error {
-	//log.Println("#######processClient")
-	//	if buf.Len() == 0 {
-	//		tmp := &(event.EventRestRequest{})
-	//		tmp.SetHash(0)
-	//		event.EncodeEvent(buf, tmp)
-	//	}
+	if !isAssist && buf.Len() == 0 {
+		return nil
+	}
 	req := &http.Request{
 		Method:        "POST",
 		URL:           &url.URL{Scheme: "http", Host: c4.server, Path: "/invoke"},
@@ -233,7 +242,7 @@ func (c4 *C4HttpConnection) processClient(cli *http.Client, buf *bytes.Buffer, i
 	} else {
 		req.Header.Set("ClientActor", "Primary")
 	}
-	//req.Header.Set("UserToken", "123456")
+	req.Header.Set("UserToken", "123456")
 	req.Header.Set("MaxResponseSize", strconv.Itoa(512*1024))
 	if response, err := cli.Do(req); nil != err {
 		log.Printf("Failed to request data from C4:%s for reason:%s\n", c4.server, err.Error())
@@ -243,34 +252,37 @@ func (c4 *C4HttpConnection) processClient(cli *http.Client, buf *bytes.Buffer, i
 			log.Printf("Invalid response:%d from server:%s\n", response.StatusCode, c4.server)
 			return errors.New("Invalid response")
 		} else {
-			//log.Printf("Response with content len:%d while request body:%d\n", response.ContentLength, req.ContentLength)
-			content := make([]byte, response.ContentLength)
-			n, err := io.ReadFull(response.Body, content)
-			if int64(n) < response.ContentLength {
-				return errors.New("No sufficient space in body.")
-			}
-			if nil != err {
-				log.Printf("Failed to read body:%s\n", err.Error())
-				return err
-			}
-			//trigger EOF to recycle idle conn in net.http
-			tmp := make([]byte, 1)
-			response.Body.Read(tmp)
-			buf := bytes.NewBuffer(content[0:response.ContentLength])
-			for {
-				if buf.Len() == 0 {
-					break
+			log.Printf("Response with content len:%d  with role:%s\n", response.ContentLength, req.Header.Get("ClientActor"))
+			if response.ContentLength > 0 {
+				content := make([]byte, response.ContentLength)
+				n, err := io.ReadFull(response.Body, content)
+				if int64(n) < response.ContentLength {
+					return errors.New("No sufficient space in body.")
 				}
-				err, res := event.DecodeEvent(buf)
-				if nil == err {
-					res = event.ExtractEvent(res)
-					//log.Printf("Recv event:%T\n", res)
-					recvEvChan <- res
-				} else {
-					log.Printf("Invalid event:%s\n", err.Error())
+				if nil != err {
+					log.Printf("Failed to read body:%s\n", err.Error())
 					return err
 				}
+				//trigger EOF to recycle idle conn in net.http
+				tmp := make([]byte, 1)
+				response.Body.Read(tmp)
+				buf := bytes.NewBuffer(content[0:response.ContentLength])
+				for {
+					if buf.Len() == 0 {
+						break
+					}
+					err, res := event.DecodeEvent(buf)
+					if nil == err {
+						res = event.ExtractEvent(res)
+						//log.Printf("Recv event:%T\n", res)
+						recvEvChan <- res
+					} else {
+						log.Printf("Invalid event:%s\n", err.Error())
+						return err
+					}
+				}
 			}
+
 		}
 	}
 	return nil
@@ -279,44 +291,55 @@ func (c4 *C4HttpConnection) processClient(cli *http.Client, buf *bytes.Buffer, i
 func (c4 *C4HttpConnection) process(index int) error {
 	client := c4.client[index]
 	sendEvChan := c4.sendEvChans[index]
+	var buf bytes.Buffer
 	for {
-		var buf bytes.Buffer
+		buf.Reset()
 	L:
 		select {
 		case ev := <-sendEvChan:
 			event.EncodeEvent(&buf, ev)
 			break L
 		default:
-			break
-		}
-
-		if buf.Len() == 0 {
-			time.Sleep(time.Duration(c4_cfg.MinWritePeriod) * time.Millisecond)
+			if buf.Len() > 0 {
+				break
+			} else {
+				time.Sleep(2 * time.Millisecond)
+				break L
+			}
 		}
 		c4.processClient(client, &buf, false)
+		if buf.Len() > 0 {
+			time.Sleep(time.Duration(c4_cfg.MinWritePeriod) * time.Millisecond)
+		}
+
 	}
 	return nil
 }
 
 func (c4 *C4HttpConnection) requestEvent(ev event.Event) {
 	index := ev.GetHash() % c4_cfg.ConnectionPoolSize
-	var compress event.CompressEventV2
-	compress.SetHash(ev.GetHash())
-	compress.Ev = ev
-	compress.CompressType = c4_cfg.Compressor
-	var encrypt event.EncryptEventV2
-	encrypt.SetHash(ev.GetHash())
-	encrypt.EncryptType = c4_cfg.Encrypter
-	encrypt.Ev = &compress
-	c4.sendEvChans[index] <- &encrypt
+	switch ev.GetType() {
+	case event.HTTP_REQUEST_EVENT_TYPE, event.EVENT_SEQUNCEIAL_CHUNK_TYPE:
+		var compress event.CompressEventV2
+		compress.SetHash(ev.GetHash())
+		compress.Ev = ev
+		compress.CompressType = c4_cfg.Compressor
+		var encrypt event.EncryptEventV2
+		encrypt.SetHash(ev.GetHash())
+		encrypt.EncryptType = c4_cfg.Encrypter
+		encrypt.Ev = &compress
+		ev = &encrypt
+	default:
+	}
+	c4.sendEvChans[index] <- ev
 }
 
 func (c4 *C4HttpConnection) Request(conn *SessionConnection, ev event.Event) (err error, res event.Event) {
 	if nil != ev {
-		handler := getCreateSessionHandler(ev, c4)
-		handler.conn = conn
 		switch ev.GetType() {
 		case event.HTTP_REQUEST_EVENT_TYPE:
+			handler := getCreateSessionHandler(ev, c4)
+			handler.conn = conn
 			req := ev.(*event.HTTPRequestEvent)
 			if strings.EqualFold(req.RawReq.Method, "CONNECT") {
 				handler.isHttps = true
@@ -347,6 +370,10 @@ func (c4 *C4HttpConnection) Request(conn *SessionConnection, ev event.Event) (er
 				}
 			}
 		case event.HTTP_CHUNK_EVENT_TYPE:
+			handler, err := getExistSessionHandler(ev)
+			if nil != err {
+				return err, nil
+			}
 			chunk := ev.(*event.HTTPChunkEvent)
 			seq := &(event.SequentialChunkEvent{Content: chunk.Content})
 			seq.SetHash(chunk.GetHash())

@@ -3,7 +3,9 @@ package event
 import (
 	"bytes"
 	"container/list"
+	"fmt"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -230,6 +232,19 @@ func (req *HTTPRequestEvent) ToRequest() *http.Request {
 		raw.Header.Add(header.Name, header.Value)
 	}
 	return raw
+}
+
+func (req *HTTPRequestEvent) Write(conn net.Conn) error {
+	var buf bytes.Buffer
+	buf.Write([]byte(fmt.Sprintf("%s %s HTTP/1.1\r\n", req.Method, req.Url)))
+	for i := 0; i < len(req.Headers); i++ {
+		header := req.Headers[i]
+		buf.Write([]byte(fmt.Sprintf("%s:%s\r\n", header.Name, header.Value)))
+	}
+	buf.Write([]byte("\r\n"))
+	buf.Write(req.Content.Bytes())
+	_, err := conn.Write(buf.Bytes())
+	return err
 }
 
 func (req *HTTPRequestEvent) FromRequest(raw *http.Request) {

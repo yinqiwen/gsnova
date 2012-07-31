@@ -3,12 +3,13 @@ package main
 import (
 	"common"
 	"event"
+	"flag"
 	"fmt"
 	"log"
 	"os"
-	"proxy"
 	"path/filepath"
-	//"util"
+	"proxy"
+	"remote"
 )
 
 func main() {
@@ -17,7 +18,13 @@ func main() {
 		fmt.Println(err)
 		return
 	}
+	as_server := flag.Bool("server", false, "Run as remote proxy server")
 	event.Init()
+	flag.Parse()
+	if *as_server {
+		remote.LaunchC4HttpServer()
+		return
+	}
 	common.Home, _ = filepath.Split(path)
 	common.InitLogger()
 	common.InitConfig()
