@@ -229,9 +229,10 @@ func (gae *GAEHttpConnection) requestEvent(conn *SessionConnection, ev event.Eve
 			if nil != err {
 				return err, nil
 			}
-			//trigger EOF to recycle idle conn in net.http
-			tmp := make([]byte, 1)
-			response.Body.Read(tmp)
+			response.Body.Close()
+//			//trigger EOF to recycle idle conn in net.http
+//			tmp := make([]byte, 1)
+//			response.Body.Read(tmp)
 
 			buf := bytes.NewBuffer(content[0:response.ContentLength])
 			if !tags.Decode(buf) {

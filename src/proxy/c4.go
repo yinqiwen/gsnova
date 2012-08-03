@@ -3,7 +3,7 @@ package proxy
 import (
 	"bytes"
 	"common"
-	"container/list"
+	//"container/list"
 	"errors"
 	"event"
 	"io"
@@ -13,7 +13,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
-	"sync/atomic"
+	//	"sync/atomic"
 	"time"
 	"util"
 )
@@ -28,110 +28,158 @@ const (
 	SESSION_DELETING                 uint32 = 7
 )
 
-var handlers []map[uint32]*C4SessionHandler
-var recvEvChan chan event.Event
+var sessions map[uint32]*localProxySession = make(map[uint32]*localProxySession)
 
-func getSessionHandler(ev event.Event) (*C4SessionHandler, map[uint32]*C4SessionHandler) {
-	index := ev.GetHash() % c4_cfg.ConnectionPoolSize
-	handler, ok := handlers[index][ev.GetHash()]
-	if !ok {
-		return nil, handlers[index]
-	}
-	return handler, handlers[index]
+var bufMap map[string]*bytes.Buffer = make(map[string]*bytes.Buffer)
+var readChanMap map[string]chan event.Event = make(map[string]chan event.Event)
+
+type localProxySession struct {
+	id          uint32
+	server      string
+	remote_addr string
+	localConn   *SessionConnection
 }
 
-func firstSessionHandler(ev event.Event) *C4SessionHandler {
-	index := ev.GetHash() % c4_cfg.ConnectionPoolSize
-	for _, v := range handlers[index] {
-		return v
-	}
-	return nil
+func (sess *localProxySession) requestEvent(ev event.Event) {
+	evch := readChanMap[sess.server]
+	//	switch ev.GetType() {
+	//	case event.HTTP_REQUEST_EVENT_TYPE, event.EVENT_TCP_CHUNK_TYPE:
+	//		var compress event.CompressEventV2
+	//		compress.SetHash(ev.GetHash())
+	//		compress.Ev = ev
+	//		compress.CompressType = c4_cfg.Compressor
+	//		ev = &compress
+	//	}
+	var encrypt event.EncryptEventV2
+	encrypt.SetHash(ev.GetHash())
+	encrypt.EncryptType = c4_cfg.Encrypter
+	encrypt.Ev = ev
+	//log.Printf("[%d]Block enter with chan len:%d\n", sess.id, len(evch))
+	evch <- &encrypt
+	//log.Printf("[%d]Block exit\n", sess.id)
 }
 
-func getCreateSessionHandler(ev event.Event, conn *C4HttpConnection) *C4SessionHandler {
-	index := ev.GetHash() % c4_cfg.ConnectionPoolSize
-	handler, ok := handlers[index][ev.GetHash()]
-	if !ok {
-		handler = &(C4SessionHandler{})
-		handler.server = conn.server
-		handler.clear()
-		handlers[index][ev.GetHash()] = handler
+func remote_loop(remote string) {
+	baseDuration := time.Duration(c4_cfg.MinWritePeriod) * time.Millisecond
+	tick := time.NewTicker(baseDuration)
+	//    tickerMap[remote] = tick
+	buf := new(bytes.Buffer)
+	bufMap[remote] = buf
+	read := make(chan event.Event, 4096)
+	readChanMap[remote] = read
+	for {
+		select {
+		case <-tick.C:
+			req := &http.Request{
+				Method:        "POST",
+				URL:           &url.URL{Scheme: "http", Host: remote, Path: "/invoke"},
+				Host:          remote,
+				Header:        make(http.Header),
+				Body:          ioutil.NopCloser(buf),
+				ContentLength: int64(buf.Len()),
+			}
+			req.Header.Set("Content-Type", "application/octet-stream")
+			if len(c4_cfg.UA) > 0 {
+				req.Header.Set("User-Agent", c4_cfg.UA)
+			}
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				log.Println(err.Error())
+				continue
+			}
+			if resp.StatusCode != 200 {
+				log.Printf("Unexpected response %d %s\n", resp.StatusCode, resp.Status)
+				continue
+			}
+			buf.Reset()
+			// write http response response to conn
+			//io.Copy(conn, resp.Body)
+			if resp.ContentLength > 0 {
+				content := make([]byte, resp.ContentLength)
+				n, err := io.ReadFull(resp.Body, content)
+				if int64(n) != resp.ContentLength || nil != err {
+
+				} else {
+					go handleRecvBody(bytes.NewBuffer(content), remote)
+				}
+			}
+			resp.Body.Close()
+		case b := <-read:
+			event.EncodeEvent(buf, b)
+		}
 	}
-	return handler
 }
 
-func getExistSessionHandler(ev event.Event) (*C4SessionHandler, error) {
-	index := ev.GetHash() % c4_cfg.ConnectionPoolSize
-	handler, ok := handlers[index][ev.GetHash()]
+func handleRecvBody(buf *bytes.Buffer, server string) {
+	//log.Printf("Handle content:%d\n", buf.Len())
+	for buf.Len() > 0 {
+		err, ev := event.DecodeEvent(buf)
+		if nil == err {
+			processRecvEvent(ev, server)
+		}
+	}
+}
+
+func getSession(id uint32) (*localProxySession, error) {
+	handler, ok := sessions[id]
 	if !ok {
-		return nil, errors.New("Not exist handler")
+		return nil, errors.New("Not exist session")
 	}
 	return handler, nil
 }
 
-func recvEventLoop() {
-	for {
-		ev := <-recvEvChan
-		processRecvEvent(ev)
+func getCreateSession(ev *event.HTTPRequestEvent, server string) *localProxySession {
+	handler, ok := sessions[ev.GetHash()]
+	if !ok {
+		handler = &(localProxySession{})
+		handler.server = server
+		sessions[ev.GetHash()] = handler
 	}
+	handler.remote_addr = ev.RawReq.Host
+	if !strings.Contains(handler.remote_addr, ":") {
+		handler.remote_addr = handler.remote_addr + ":80"
+	}
+	return handler
 }
 
-func delayDeleteSessionEntry(m map[uint32]*C4SessionHandler, h *C4SessionHandler) {
-	//time.Sleep(60 * time.Second)
-	h.conn.LocalRawConn.Close()
-	delete(m, h.conn.SessionID)
+func deleteSessionEntry(id uint32) {
+	handler, ok := sessions[id]
+	if ok {
+		handler.localConn.LocalRawConn.Close()
+		delete(sessions, id)
+	}
+
 }
 
-func processRecvEvent(ev event.Event) error {
-    log.Printf("Start process event %T", ev)
-	handler, handler_map := getSessionHandler(ev)
-	if nil == handler {
-		if ev.GetHash() != 0 && ev.GetType() != event.HTTP_CONNECTION_EVENT_TYPE {
+func processRecvEvent(ev event.Event, server string) error {
+	ev = event.ExtractEvent(ev)
+	//log.Printf("Start process event %T", ev)
+	handler, err := getSession(ev.GetHash())
+	if nil != err {
+		if ev.GetHash() != 0 && ev.GetType() != event.EVENT_TCP_CONNECTION_TYPE {
 			log.Printf("No session:%d found for %T\n", ev.GetHash(), ev)
-			handler = firstSessionHandler(ev)
 			if nil != handler {
-				conn := handler.conn.RemoteConn.(*C4HttpConnection)
-				closeEv := &event.HTTPConnectionEvent{}
-				closeEv.Status = event.HTTP_CONN_CLOSED
-				closeEv.SetHash(ev.GetHash())
-				conn.requestEvent(closeEv)
+
 			}
 		}
 		return nil
 	}
 	//log.Printf("Session:%d process recv event:%T\n", ev.GetHash(), ev)
 	switch ev.GetType() {
-	case event.HTTP_RESPONSE_EVENT_TYPE:
-		res := ev.(*event.HTTPResponseEvent)
-		res.ToResponse().Write(handler.conn.LocalRawConn)
-	case event.EVENT_SEQUNCEIAL_CHUNK_TYPE:
-		chunk := ev.(*event.SequentialChunkEvent)
-		log.Printf("Session[%d]Chunk sequence is %d\n", ev.GetHash(), chunk.Sequence)
-		handler.seqMap[chunk.Sequence] = chunk
-		for {
-			chunk, ok := handler.seqMap[handler.lastWriteLocalSeq]
-			if !ok {
-				break
-			}
-			handler.conn.LocalRawConn.Write(chunk.Content)
-			delete(handler.seqMap, handler.lastWriteLocalSeq)
-			handler.lastWriteLocalSeq = atomic.AddUint32(&handler.lastWriteLocalSeq, 1)
-		}
-	case event.EVENT_TRANSACTION_COMPLETE_TYPE:
-		handler.state = SESSION_TRANSACTION_COMPELETE
-	case event.EVENT_REST_NOTIFY_TYPE:
-		//		rest := ev.(*event.EventRestNotify)
-		//		if rest.Rest > 0 {
-		//			log.Printf("Rest %d\n", rest.Rest)
-		//		}
-	case event.HTTP_CONNECTION_EVENT_TYPE:
-		cev := ev.(*event.HTTPConnectionEvent)
+	case event.EVENT_TCP_CONNECTION_TYPE:
+		cev := ev.(*event.SocketConnectionEvent)
 		//		log.Printf("Status %d\n", cev.Status)
-		if cev.Status == event.HTTP_CONN_CLOSED {
-			handler.state = SESSION_DELETING
-			//go delayDeleteSessionEntry(handler_map, handler)
-			delayDeleteSessionEntry(handler_map, handler)
-			//delete(handler_map, ev.GetHash())
+		if cev.Status == event.TCP_CONN_CLOSED {
+			if cev.Addr == handler.remote_addr {
+				deleteSessionEntry(ev.GetHash())
+			}
+		}
+	case event.EVENT_TCP_CHUNK_TYPE:
+		chunk := ev.(*event.TCPChunkEvent)
+		_, err := handler.localConn.LocalRawConn.Write(chunk.Content)
+		if nil != err {
+			log.Printf("Failed to write  data to local client:%v.\n", err)
+			deleteSessionEntry(ev.GetHash())
 		}
 	default:
 		log.Printf("Unexpected event type:%d\n", ev.GetType())
@@ -149,237 +197,68 @@ type C4Config struct {
 
 var c4_cfg *C4Config
 
-type C4HttpAssistConnection struct {
-	server  string
-	manager *C4
-	ev_list *list.List
-	client  *http.Client
-}
-
-type C4SessionHandler struct {
-	conn              *SessionConnection
-	lastWriteLocalSeq uint32
-	lastReadLocalSeq  uint32
-	seqMap            map[uint32]*event.SequentialChunkEvent
-	isHttps           bool
-	state             uint32
-	server            string
-}
-
-func (handler *C4SessionHandler) clear() {
-	handler.lastWriteLocalSeq = 0
-	handler.lastReadLocalSeq = 0
-	handler.isHttps = false
-	handler.seqMap = make(map[uint32]*event.SequentialChunkEvent)
-	handler.state = SESSION_INITED
-}
-
 type C4HttpConnection struct {
-	server      string
-	manager     *C4
-	client      []*http.Client
-	assit       *http.Client
-	sendEvChans []chan event.Event
+	lastSessionId uint32
+	manager       *C4
 }
 
 func (c4 *C4HttpConnection) Close() error {
-	return nil
-}
-
-func (c4 *C4HttpConnection) Auth() error {
-	c4.assit = &(http.Client{})
-	c4.client = make([]*http.Client, c4_cfg.ConnectionPoolSize)
-	c4.sendEvChans = make([]chan event.Event, c4_cfg.ConnectionPoolSize)
-
-	for i := 0; i < int(c4_cfg.ConnectionPoolSize); i++ {
-		c4.client[i] = &(http.Client{})
-		c4.sendEvChans[i] = make(chan event.Event, 1024)
-		go c4.process(i)
-	}
-
-	go c4.assistLoop()
-	return nil
-}
-
-func (c4 *C4HttpConnection) assistLoop() {
-	for {
-		var tmp bytes.Buffer
-		req := &(event.EventRestRequest{})
-		req.RestSessions = make([]uint32, 0)
-		for _, hmap := range handlers {
-			for _, v := range hmap {
-				if v.server == c4.server && v.state != SESSION_TRANSACTION_COMPELETE && v.state != SESSION_DELETING {
-					req.RestSessions = append(req.RestSessions, uint32(v.conn.SessionID))
-				}
-			}
-		}
-		event.EncodeEvent(&tmp, req)
-		c4.processClient(c4.assit, &tmp, true)
-		//time.Sleep(time.Duration(c4_cfg.MinWritePeriod) * time.Millisecond)
-	}
-}
-
-func (c4 *C4HttpConnection) processClient(cli *http.Client, buf *bytes.Buffer, isAssist bool) error {
-	if !isAssist && buf.Len() == 0 {
-		return nil
-	}
-	req := &http.Request{
-		Method:        "POST",
-		URL:           &url.URL{Scheme: "http", Host: c4.server, Path: "/invoke"},
-		Host:          c4.server,
-		Header:        make(http.Header),
-		Body:          ioutil.NopCloser(buf),
-		ContentLength: int64(buf.Len()),
-	}
-	if len(c4_cfg.UA) > 0 {
-		req.Header.Set("User-Agent", c4_cfg.UA)
-	}
-	req.Close = false
-	req.Header.Set("Connection", "keep-alive")
-	req.Header.Set("Content-Type", "application/octet-stream")
-	if isAssist {
-		req.Header.Set("ClientActor", "Assist")
-	} else {
-		req.Header.Set("ClientActor", "Primary")
-	}
-	req.Header.Set("UserToken", "123456")
-	req.Header.Set("MaxResponseSize", strconv.Itoa(512*1024))
-	if response, err := cli.Do(req); nil != err {
-		log.Printf("Failed to request data from C4:%s for reason:%s\n", c4.server, err.Error())
-		return err
-	} else {
-		if response.StatusCode != 200 {
-			log.Printf("Invalid response:%d from server:%s\n", response.StatusCode, c4.server)
-			return errors.New("Invalid response")
-		} else {
-			log.Printf("Response with content len:%d  with role:%s\n", response.ContentLength, req.Header.Get("ClientActor"))
-			if response.ContentLength > 0 {
-				content := make([]byte, response.ContentLength)
-				n, err := io.ReadFull(response.Body, content)
-				if int64(n) < response.ContentLength {
-					return errors.New("No sufficient space in body.")
-				}
-				if nil != err {
-					log.Printf("Failed to read body:%s\n", err.Error())
-					return err
-				}
-				//trigger EOF to recycle idle conn in net.http
-				tmp := make([]byte, 1)
-				response.Body.Read(tmp)
-				buf := bytes.NewBuffer(content[0:response.ContentLength])
-				for {
-					if buf.Len() == 0 {
-						break
-					}
-					err, res := event.DecodeEvent(buf)
-					if nil == err {
-						res = event.ExtractEvent(res)
-						//log.Printf("Recv event:%T\n", res)
-						recvEvChan <- res
-					} else {
-						log.Printf("Invalid event:%s\n", err.Error())
-						return err
-					}
-				}
-			}
-
-		}
+	session, err := getSession(c4.lastSessionId)
+	if nil == err {
+		closeEv := &event.SocketConnectionEvent{}
+		closeEv.Status = event.TCP_CONN_CLOSED
+		closeEv.SetHash(c4.lastSessionId)
+		session.requestEvent(closeEv)
+		deleteSessionEntry(c4.lastSessionId)
 	}
 	return nil
-}
-
-func (c4 *C4HttpConnection) process(index int) error {
-	client := c4.client[index]
-	sendEvChan := c4.sendEvChans[index]
-	var buf bytes.Buffer
-	for {
-		buf.Reset()
-	L:
-		select {
-		case ev := <-sendEvChan:
-			event.EncodeEvent(&buf, ev)
-			break L
-		default:
-			if buf.Len() > 0 {
-				break
-			} else {
-				time.Sleep(2 * time.Millisecond)
-				break L
-			}
-		}
-		c4.processClient(client, &buf, false)
-		if buf.Len() > 0 {
-			time.Sleep(time.Duration(c4_cfg.MinWritePeriod) * time.Millisecond)
-		}
-
-	}
-	return nil
-}
-
-func (c4 *C4HttpConnection) requestEvent(ev event.Event) {
-	index := ev.GetHash() % c4_cfg.ConnectionPoolSize
-	switch ev.GetType() {
-	case event.HTTP_REQUEST_EVENT_TYPE, event.EVENT_SEQUNCEIAL_CHUNK_TYPE:
-		var compress event.CompressEventV2
-		compress.SetHash(ev.GetHash())
-		compress.Ev = ev
-		compress.CompressType = c4_cfg.Compressor
-		var encrypt event.EncryptEventV2
-		encrypt.SetHash(ev.GetHash())
-		encrypt.EncryptType = c4_cfg.Encrypter
-		encrypt.Ev = &compress
-		ev = &encrypt
-	default:
-	}
-	c4.sendEvChans[index] <- ev
 }
 
 func (c4 *C4HttpConnection) Request(conn *SessionConnection, ev event.Event) (err error, res event.Event) {
 	if nil != ev {
+		c4.lastSessionId = ev.GetHash()
 		switch ev.GetType() {
 		case event.HTTP_REQUEST_EVENT_TYPE:
-			handler := getCreateSessionHandler(ev, c4)
-			handler.conn = conn
 			req := ev.(*event.HTTPRequestEvent)
+			handler := getCreateSession(req, c4.manager.servers.Select().(string))
+			handler.localConn = conn
+
 			if strings.EqualFold(req.RawReq.Method, "CONNECT") {
-				handler.isHttps = true
 				conn.State = STATE_RECV_HTTP_CHUNK
 			} else {
 				conn.State = STATE_RECV_HTTP
-				handler.clear()
 				proxyURL, _ := url.Parse(req.Url)
 				req.Url = proxyURL.Path
 			}
 			log.Printf("Session[%d]Request %s %s\n", ev.GetHash(), req.Method, req.Url)
-			c4.requestEvent(req)
+			handler.requestEvent(req)
 			if conn.State == STATE_RECV_HTTP {
 				if req.RawReq.ContentLength > 0 {
+					rest := req.RawReq.ContentLength
 					tmpbuf := make([]byte, 8192)
-					for {
+					for rest > 0 {
 						n, err := req.RawReq.Body.Read(tmpbuf)
 						if nil == err {
-							seq := &(event.SequentialChunkEvent{Content: tmpbuf[0:n]})
-							seq.SetHash(req.GetHash())
-							seq.Sequence = handler.lastReadLocalSeq
-							handler.lastReadLocalSeq = atomic.AddUint32(&handler.lastReadLocalSeq, 1)
-							c4.requestEvent(seq)
+							rest = rest - int64(n)
+							chunk := &event.TCPChunkEvent{Content: tmpbuf[0:n]}
+							chunk.SetHash(req.GetHash())
+							handler.requestEvent(chunk)
 						} else {
 							break
 						}
 					}
 				}
+				req.RawReq.Body.Close()
 			}
 		case event.HTTP_CHUNK_EVENT_TYPE:
-			handler, err := getExistSessionHandler(ev)
+			handler, err := getSession(ev.GetHash())
 			if nil != err {
 				return err, nil
 			}
 			chunk := ev.(*event.HTTPChunkEvent)
-			seq := &(event.SequentialChunkEvent{Content: chunk.Content})
-			seq.SetHash(chunk.GetHash())
-			seq.Sequence = handler.lastReadLocalSeq
-			handler.lastReadLocalSeq = atomic.AddUint32(&handler.lastReadLocalSeq, 1)
-			c4.requestEvent(seq)
+			tcp_chunk := &event.TCPChunkEvent{Content: chunk.Content}
+			tcp_chunk.SetHash(ev.GetHash())
+			handler.requestEvent(tcp_chunk)
 			conn.State = STATE_RECV_HTTP_CHUNK
 		}
 	}
@@ -394,37 +273,22 @@ type C4RSocketConnection struct {
 }
 
 type C4 struct {
-	//auths      *util.ListSelector
-	conns []*util.ListSelector
-
-	//idle_conns chan RemoteConnection
+	servers *util.ListSelector
 }
-
-//func (manager *C4) recycleRemoteConnection(conn RemoteConnection) {
-//	select {
-//	case manager.idle_conns <- conn:
-//		// Buffer on free list; nothing more to do.
-//	default:
-//		// Free list full, just carry on.
-//	}
-//}
 
 func (manager *C4) RecycleRemoteConnection(conn RemoteConnection) {
 	//do nothing
 }
 
 func (manager *C4) GetRemoteConnection(ev event.Event) (RemoteConnection, error) {
-	index := int(ev.GetHash()) % len(manager.conns)
-	return manager.conns[index].Select().(RemoteConnection), nil
+	conn := &C4HttpConnection{}
+	conn.manager = manager
+	return conn, nil
 }
 
 func (manager *C4) GetName() string {
 	return C4_NAME
 }
-
-//func (manager *C4) GetArg() string {
-//	return ""
-//}
 
 func initC4Config() {
 	//init config
@@ -469,12 +333,7 @@ func (manager *C4) Init() error {
 	initC4Config()
 	RegisteRemoteConnManager(manager)
 	//manager.auths = new(util.ListSelector)
-	manager.conns = make([]*util.ListSelector, 0)
-	handlers = make([]map[uint32]*C4SessionHandler, c4_cfg.ConnectionPoolSize)
-	for i := 0; i < int(c4_cfg.ConnectionPoolSize); i++ {
-		handlers[i] = make(map[uint32]*C4SessionHandler)
-	}
-	recvEvChan = make(chan event.Event, 1024)
+	manager.servers = &util.ListSelector{}
 
 	index := 0
 	for {
@@ -482,23 +341,13 @@ func (manager *C4) Init() error {
 		if !exist || len(v) == 0 {
 			break
 		}
-		manager.conns = append(manager.conns, &util.ListSelector{})
-		for i := 0; i < int(c4_cfg.ConnectionPoolSize); i++ {
-			conn := new(C4HttpConnection)
-			conn.server = strings.TrimSpace(v)
-			conn.manager = manager
-			if err := conn.Auth(); nil != err {
-				log.Printf("Failed to auth server:%s\n", err.Error())
-				return err
-			}
-			manager.conns[index].Add(conn)
-		}
+		manager.servers.Add(v)
+		go remote_loop(v)
 		index = index + 1
 	}
 	//no appid found, fetch shared from master
 	if index == 0 {
 		return errors.New("No configed C4 server.")
 	}
-	go recvEventLoop()
 	return nil
 }

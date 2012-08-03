@@ -41,8 +41,6 @@ type RemoteConnectionManager interface {
 	GetRemoteConnection(ev event.Event) (RemoteConnection, error)
 	RecycleRemoteConnection(conn RemoteConnection)
 	GetName() string
-	//	GetArg() string
-//	Init() error
 }
 
 type SessionConnection struct {
