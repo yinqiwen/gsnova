@@ -24,14 +24,12 @@ var port = func() string {
 }
 
 type ProxySession struct {
-	closed bool
-	id     uint32
-	conn   net.Conn
-	addr   string
-	//	send_sequence uint32
-	//	recv_sequence uint32
+	closed   bool
+	id       uint32
+	conn     net.Conn
+	addr     string
+	user     string
 	recv_evs chan event.Event
-	//	recv_chunks   map[uint32]*event.SequentialChunkEvent
 }
 
 func (serv *ProxySession) closeSession() {
@@ -39,7 +37,6 @@ func (serv *ProxySession) closeSession() {
 	if nil != serv.conn {
 		serv.conn.Close()
 		serv.conn = nil
-		//log.Printf("Close:%d\n", serv.id)
 	}
 }
 
@@ -65,7 +62,7 @@ func (serv *ProxySession) initConn(method, addr string) (err error) {
 	log.Printf("[%d]Connect remote:%s for method:%s", serv.id, addr, method)
 	serv.conn, err = net.Dial("tcp", addr)
 	if nil == err {
-		//if !closeOldConn {
+		log.Printf("[%d]Connect remote:%s success", serv.id, addr)
 		go serv.readLoop()
 		//}
 		return nil
@@ -73,7 +70,7 @@ func (serv *ProxySession) initConn(method, addr string) (err error) {
 		ev := &event.SocketConnectionEvent{Status: event.TCP_CONN_CLOSED}
 		ev.Addr = addr
 		ev.SetHash(serv.id)
-		offerSendEvent(ev)
+		offerSendEvent(ev, serv.user)
 		log.Printf("Failed to connect %s for reason:%v\n", addr, err)
 	}
 
@@ -95,7 +92,7 @@ func (serv *ProxySession) readLoop() {
 		if n > 0 {
 			ev := &event.TCPChunkEvent{Content: buf[0:n]}
 			ev.SetHash(serv.id)
-			offerSendEvent(ev)
+			offerSendEvent(ev, serv.user)
 			//log.Printf("Session[%d]Offer sequnece:%d\n", serv.id, serv.send_sequence)
 			//serv.send_sequence = serv.send_sequence + 1
 		}
@@ -106,7 +103,7 @@ func (serv *ProxySession) readLoop() {
 	ev := &event.SocketConnectionEvent{Status: event.TCP_CONN_CLOSED}
 	ev.Addr = remote
 	ev.SetHash(serv.id)
-	offerSendEvent(ev)
+	offerSendEvent(ev, serv.user)
 }
 
 func (serv *ProxySession) eventLoop() {
@@ -122,7 +119,8 @@ func (serv *ProxySession) eventLoop() {
 			case event.EVENT_TCP_CONNECTION_TYPE:
 				req := ev.(*event.SocketConnectionEvent)
 				if req.Status == event.TCP_CONN_CLOSED {
-
+				   deleteProxySession(serv.user, serv.id)
+				   return
 				}
 			case event.HTTP_REQUEST_EVENT_TYPE:
 				req := ev.(*event.HTTPRequestEvent)
@@ -139,13 +137,13 @@ func (serv *ProxySession) eventLoop() {
 						res.Content = []byte("HTTP/1.1 200 OK\r\n\r\n")
 						//log.Printf("Return established.\n")
 					}
-					offerSendEvent(res)
+					offerSendEvent(res, serv.user)
 				} else {
 					if nil != serv.conn {
 						err := req.Write(serv.conn)
 						if nil != err {
 							log.Printf("Failed to write http request %v\n", err)
-							serv.closeSession()
+							deleteProxySession(serv.user, serv.id)
 							return
 						}
 
@@ -153,13 +151,13 @@ func (serv *ProxySession) eventLoop() {
 						res := &event.TCPChunkEvent{}
 						res.SetHash(ev.GetHash())
 						res.Content = []byte("HTTP/1.1 503 ServiceUnavailable\r\n\r\n")
-						offerSendEvent(res)
+						offerSendEvent(res, serv.user)
 					}
 				}
 			case event.EVENT_TCP_CHUNK_TYPE:
 				if nil == serv.conn {
 					//log.Printf("[%d]No session conn %d", ev.GetHash())
-					serv.closeSession()
+					deleteProxySession(serv.user, serv.id)
 					return
 				}
 				chunk := ev.(*event.TCPChunkEvent)
@@ -175,17 +173,22 @@ func (serv *ProxySession) eventLoop() {
 	}
 }
 
-var proxySessionMap map[string]map[uint32]*ProxySession
-var global_send_evs chan event.Event
+var proxySessionMap map[string]map[uint32]*ProxySession = make(map[string]map[uint32]*ProxySession)
+var send_evs map[string]chan event.Event = make(map[string]chan event.Event)
 
 func deleteProxySession(name string, sessionID uint32) {
 	sessions, exist := proxySessionMap[name]
 	if exist {
-		delete(sessions, sessionID)
+		sess, exist := proxySessionMap[name][sessionID]
+		if exist {
+		    sess.closeSession()
+			delete(sessions, sessionID)
+		}
+
 	}
 }
 
-func offerSendEvent(ev event.Event) {
+func offerSendEvent(ev event.Event, user string) {
 	switch ev.GetType() {
 	case event.EVENT_TCP_CONNECTION_TYPE, event.EVENT_TCP_CHUNK_TYPE:
 		//		var compress event.CompressEventV2
@@ -198,7 +201,7 @@ func offerSendEvent(ev event.Event) {
 		encrypt.Ev = ev
 		ev = &encrypt
 	}
-	global_send_evs <- ev
+	send_evs[user] <- ev
 }
 
 func getProxySession(name string, sessionID uint32) *ProxySession {
@@ -209,7 +212,7 @@ func getProxySession(name string, sessionID uint32) *ProxySession {
 	}
 	sess, exist := proxySessionMap[name][sessionID]
 	if !exist {
-		sess = &ProxySession{closed: false, id: sessionID, recv_evs: make(chan event.Event, 4096)}
+		sess = &ProxySession{closed: false, id: sessionID, user: name, recv_evs: make(chan event.Event, 4096)}
 		proxySessionMap[name][sessionID] = sess
 		go sess.eventLoop()
 	}
@@ -221,6 +224,11 @@ func InvokeCallback(w http.ResponseWriter, req *http.Request) {
 	if nil != err {
 	}
 	user := req.Header.Get("UserToken")
+	send_ev, exist := send_evs[user]
+	if !exist {
+		send_ev = make(chan event.Event, 4096)
+		send_evs[user] = send_ev
+	}
 	//log.Printf("#####%d\n",len(body))
 	buf := bytes.NewBuffer(body)
 	for {
@@ -242,12 +250,12 @@ func InvokeCallback(w http.ResponseWriter, req *http.Request) {
 	for {
 		select {
 		case <-tick.C:
-			if time.Now().UnixNano()-start >= 50000*1000 {
+			if time.Now().UnixNano()-start >= 250000*1000 {
 				writeData = true
 				break
 			}
 			continue
-		case ev := <-global_send_evs:
+		case ev := <-send_ev:
 			event.EncodeEvent(&send_content, ev)
 			if send_content.Len() >= 64*1024 {
 				writeData = true
@@ -271,8 +279,6 @@ func IndexCallback(w http.ResponseWriter, req *http.Request) {
 func LaunchC4HttpServer() {
 	http.HandleFunc("/", IndexCallback)
 	http.HandleFunc("/invoke", InvokeCallback)
-	global_send_evs = make(chan event.Event, 4096)
-	proxySessionMap = make(map[string]map[uint32]*ProxySession)
 	err := http.ListenAndServe(":"+port(), nil)
 	if err != nil {
 		log.Fatal("ListenAndServe: ", err.Error())

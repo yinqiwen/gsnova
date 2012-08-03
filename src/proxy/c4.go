@@ -9,11 +9,12 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	//"misc/upnp"
+	"net"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
-	//	"sync/atomic"
 	"time"
 	"util"
 )
@@ -78,6 +79,9 @@ func remote_loop(remote string) {
 				Body:          ioutil.NopCloser(buf),
 				ContentLength: int64(buf.Len()),
 			}
+			ifs, _ := net.Interfaces()
+			req.Header.Set("UserToken", ifs[0].HardwareAddr.String())
+			req.Header.Set("Connection", "keep-alive")
 			req.Header.Set("Content-Type", "application/octet-stream")
 			if len(c4_cfg.UA) > 0 {
 				req.Header.Set("User-Agent", c4_cfg.UA)
@@ -222,7 +226,6 @@ func (c4 *C4HttpConnection) Request(conn *SessionConnection, ev event.Event) (er
 			req := ev.(*event.HTTPRequestEvent)
 			handler := getCreateSession(req, c4.manager.servers.Select().(string))
 			handler.localConn = conn
-
 			if strings.EqualFold(req.RawReq.Method, "CONNECT") {
 				conn.State = STATE_RECV_HTTP_CHUNK
 			} else {
@@ -334,7 +337,14 @@ func (manager *C4) Init() error {
 	RegisteRemoteConnManager(manager)
 	//manager.auths = new(util.ListSelector)
 	manager.servers = &util.ListSelector{}
-
+//    nat, err := upnp.Discover()
+//    if nil == err{
+//       err = nat.AddPortMapping("tcp", 48101, 48101, "GSnova", 3000)
+//       err = nat.AddPortMapping("udp", 48101, 48101, "GSnova", 3000)
+//    }
+//    if nil != err {
+//       log.Printf("Failed to discover:%v\n", err)
+//    }
 	index := 0
 	for {
 		v, exist := common.Cfg.GetProperty("C4", "WorkerNode["+strconv.Itoa(index)+"]")

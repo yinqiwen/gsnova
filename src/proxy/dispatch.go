@@ -107,7 +107,7 @@ func (session *SessionConnection) process() error {
 		}
 		if nil != err {
 			if err != io.EOF {
-				log.Printf("Failed to read http request:%s\n", err.Error())
+				log.Printf("Session[%d]Failed to read http request:%v\n", session.SessionID, err)
 			}
 			session.LocalRawConn.Close()
 			session.State = STATE_SESSION_CLOSE
@@ -122,7 +122,7 @@ func (session *SessionConnection) process() error {
 		}
 		if nil != err {
 			if err != io.EOF {
-				log.Printf("Failed to read http chunk:%s\n", err.Error())
+				log.Printf("Session[%d]Failed to read http chunk:%v\n", session.SessionID, err)
 			}
 			session.LocalRawConn.Close()
 			session.State = STATE_SESSION_CLOSE

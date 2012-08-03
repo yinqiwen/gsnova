@@ -9,7 +9,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"time"
+	"time"  
+	"log"
 )
 
 type upnpNAT struct {
@@ -34,7 +35,7 @@ func Discover() (nat NAT, err error) {
 	socket := conn.(*net.UDPConn)
 	defer socket.Close()
 
-	err = socket.SetDeadline(time.Now().Add(3*time.Second))
+	err = socket.SetDeadline(time.Now().Add(3 * time.Second))
 	if err != nil {
 		return
 	}
@@ -61,6 +62,7 @@ func Discover() (nat NAT, err error) {
 			// return
 		}
 		answer := string(answerBytes[0:n])
+		
 		if strings.Index(answer, "\r\n"+st) < 0 {
 			continue
 		}
@@ -78,6 +80,7 @@ func Discover() (nat NAT, err error) {
 			continue
 		}
 		locURL := loc[0:endIndex]
+		
 		var serviceURL string
 		serviceURL, err = getServiceURL(locURL)
 		if err != nil {
@@ -157,10 +160,13 @@ func getServiceURL(rootURL string) (url string, err error) {
 		return
 	}
 	var root Root
+    log.Printf("%v\n",r.Body)
 	err = xml.NewDecoder(r.Body).Decode(&root)
 	if err != nil {
 		return
 	}
+	
+	//log.Printf("%v\n",root)
 	a := &root.Device
 	if a.DeviceType != "urn:schemas-upnp-org:device:InternetGatewayDevice:1" {
 		err = errors.New("No InternetGatewayDevice")
@@ -285,4 +291,3 @@ func (n *upnpNAT) DeletePortMapping(protocol string, externalPort int) (err erro
 	_ = response
 	return
 }
-
