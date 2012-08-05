@@ -35,6 +35,7 @@ type ProxySession struct {
 func (serv *ProxySession) closeSession() {
 	serv.closed = true
 	if nil != serv.conn {
+	    log.Printf("[%d]Close session", serv.id)
 		serv.conn.Close()
 		serv.conn = nil
 	}
@@ -62,7 +63,7 @@ func (serv *ProxySession) initConn(method, addr string) (err error) {
 	log.Printf("[%d]Connect remote:%s for method:%s", serv.id, addr, method)
 	serv.conn, err = net.Dial("tcp", addr)
 	if nil == err {
-		log.Printf("[%d]Connect remote:%s success", serv.id, addr)
+//		log.Printf("[%d]Connect remote:%s success", serv.id, addr)
 		go serv.readLoop()
 		//}
 		return nil
@@ -82,19 +83,22 @@ func (serv *ProxySession) readLoop() {
 		return
 	}
 	remote := serv.addr
+	var sequence uint32
+	sequence = 0
+	buf := make([]byte, 8*1024)
 	for !serv.closed {
-		buf := make([]byte, 64*1024)
 		if nil == serv.conn {
 			//log.Println("[%d]Null conn.\n", serv.id)
 			break
 		}
 		n, err := serv.conn.Read(buf)
 		if n > 0 {
-			ev := &event.TCPChunkEvent{Content: buf[0:n]}
+		    content := make([]byte, n)
+		    copy(content, buf[0:n])
+			ev := &event.TCPChunkEvent{Content: content, Sequence: sequence}
 			ev.SetHash(serv.id)
 			offerSendEvent(ev, serv.user)
-			//log.Printf("Session[%d]Offer sequnece:%d\n", serv.id, serv.send_sequence)
-			//serv.send_sequence = serv.send_sequence + 1
+			sequence = sequence + 1
 		}
 		if nil != err {
 			break
@@ -114,13 +118,14 @@ func (serv *ProxySession) eventLoop() {
 			continue
 		case ev := <-serv.recv_evs:
 			ev = event.ExtractEvent(ev)
-			//log.Printf("[%d]Handle event %T", serv.id, ev.GetHash(), ev)
 			switch ev.GetType() {
+			case event.EVENT_USER_LOGIN_TYPE:
+				req := ev.(*event.UserLoginEvent)
+				closeProxyUser(req.User)
 			case event.EVENT_TCP_CONNECTION_TYPE:
 				req := ev.(*event.SocketConnectionEvent)
 				if req.Status == event.TCP_CONN_CLOSED {
-				   deleteProxySession(serv.user, serv.id)
-				   return
+					deleteProxySession(serv.user, serv.id)
 				}
 			case event.HTTP_REQUEST_EVENT_TYPE:
 				req := ev.(*event.HTTPRequestEvent)
@@ -176,12 +181,38 @@ func (serv *ProxySession) eventLoop() {
 var proxySessionMap map[string]map[uint32]*ProxySession = make(map[string]map[uint32]*ProxySession)
 var send_evs map[string]chan event.Event = make(map[string]chan event.Event)
 
+func closeProxyUser(name string) {
+	sessions, exist := proxySessionMap[name]
+	if exist {
+		for _, sess := range sessions {
+			sess.closeSession()
+		}
+		delete(proxySessionMap, name)
+	}
+	evchan, exist := send_evs[name]
+	if exist {
+		close(evchan)
+		delete(send_evs, name)
+	}
+}
+
+func sessionExist(name string, sessionID uint32) bool {
+	_, exist := proxySessionMap[name]
+	if exist {
+		_, exist := proxySessionMap[name][sessionID]
+		if exist {
+			return true
+		}
+	}
+	return false
+}
+
 func deleteProxySession(name string, sessionID uint32) {
 	sessions, exist := proxySessionMap[name]
 	if exist {
 		sess, exist := proxySessionMap[name][sessionID]
 		if exist {
-		    sess.closeSession()
+			sess.closeSession()
 			delete(sessions, sessionID)
 		}
 
@@ -190,17 +221,18 @@ func deleteProxySession(name string, sessionID uint32) {
 
 func offerSendEvent(ev event.Event, user string) {
 	switch ev.GetType() {
-	case event.EVENT_TCP_CONNECTION_TYPE, event.EVENT_TCP_CHUNK_TYPE:
-		//		var compress event.CompressEventV2
-		//		compress.SetHash(ev.GetHash())
-		//		compress.Ev = ev
-		//		compress.CompressType = event.COMPRESSOR_SNAPPY
-		var encrypt event.EncryptEventV2
-		encrypt.SetHash(ev.GetHash())
-		encrypt.EncryptType = event.ENCRYPTER_SE1
-		encrypt.Ev = ev
-		ev = &encrypt
+	case event.EVENT_TCP_CHUNK_TYPE:
+		var compress event.CompressEventV2
+		compress.SetHash(ev.GetHash())
+		compress.Ev = ev
+		compress.CompressType = event.COMPRESSOR_SNAPPY
+		ev = &compress
 	}
+	var encrypt event.EncryptEventV2
+	encrypt.SetHash(ev.GetHash())
+	encrypt.EncryptType = event.ENCRYPTER_SE1
+	encrypt.Ev = ev
+	ev = &encrypt
 	send_evs[user] <- ev
 }
 
@@ -244,26 +276,29 @@ func InvokeCallback(w http.ResponseWriter, req *http.Request) {
 		getProxySession(user, ev.GetHash()).recv_evs <- ev
 	}
 	var send_content bytes.Buffer
-	writeData := false
 	start := time.Now().UnixNano()
 	tick := time.NewTicker(10 * time.Millisecond)
-	for {
+	expectedData := true
+	for expectedData {
 		select {
 		case <-tick.C:
-			if time.Now().UnixNano()-start >= 250000*1000 {
-				writeData = true
+			if time.Now().UnixNano()-start >= 100000*1000 {
+				expectedData = false
 				break
 			}
 			continue
 		case ev := <-send_ev:
-			event.EncodeEvent(&send_content, ev)
-			if send_content.Len() >= 64*1024 {
-				writeData = true
+		    if nil == ev{
+		       expectedData = false
+		       break
+		    }
+			if sessionExist(user, ev.GetHash()) {
+				event.EncodeEvent(&send_content, ev)
+			}
+			if send_content.Len() >= 16*1024 {
+				expectedData = false
 				break
 			}
-		}
-		if writeData {
-			break
 		}
 	}
 	//strconv.Itoa()

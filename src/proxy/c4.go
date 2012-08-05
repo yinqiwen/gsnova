@@ -3,13 +3,11 @@ package proxy
 import (
 	"bytes"
 	"common"
-	//"container/list"
 	"errors"
 	"event"
 	"io"
 	"io/ioutil"
 	"log"
-	//"misc/upnp"
 	"net"
 	"net/http"
 	"net/url"
@@ -29,28 +27,43 @@ const (
 	SESSION_DELETING                 uint32 = 7
 )
 
+var logined bool
+var userToken string
 var sessions map[uint32]*localProxySession = make(map[uint32]*localProxySession)
-
 var bufMap map[string]*bytes.Buffer = make(map[string]*bytes.Buffer)
 var readChanMap map[string]chan event.Event = make(map[string]chan event.Event)
 
 type localProxySession struct {
-	id          uint32
-	server      string
-	remote_addr string
-	localConn   *SessionConnection
+	closed        bool
+	id            uint32
+	server        string
+	remote_addr   string
+	localConn     *SessionConnection
+	writeBackChan chan event.Event
+}
+
+func (sess *localProxySession) loop() {
+	tick := time.NewTicker(10 * time.Millisecond)
+	for !sess.closed {
+		select {
+		case <-tick.C:
+			break
+		case ev := <-sess.writeBackChan:
+			processRecvEvent(ev, sess.server)
+		}
+	}
 }
 
 func (sess *localProxySession) requestEvent(ev event.Event) {
 	evch := readChanMap[sess.server]
-	//	switch ev.GetType() {
-	//	case event.HTTP_REQUEST_EVENT_TYPE, event.EVENT_TCP_CHUNK_TYPE:
-	//		var compress event.CompressEventV2
-	//		compress.SetHash(ev.GetHash())
-	//		compress.Ev = ev
-	//		compress.CompressType = c4_cfg.Compressor
-	//		ev = &compress
-	//	}
+	switch ev.GetType() {
+	case event.EVENT_TCP_CHUNK_TYPE:
+		var compress event.CompressEventV2
+		compress.SetHash(ev.GetHash())
+		compress.Ev = ev
+		compress.CompressType = c4_cfg.Compressor
+		ev = &compress
+	}
 	var encrypt event.EncryptEventV2
 	encrypt.SetHash(ev.GetHash())
 	encrypt.EncryptType = c4_cfg.Encrypter
@@ -68,6 +81,12 @@ func remote_loop(remote string) {
 	bufMap[remote] = buf
 	read := make(chan event.Event, 4096)
 	readChanMap[remote] = read
+	if !logined {
+		login := &event.UserLoginEvent{}
+		login.User = userToken
+		read <- login
+		logined = true
+	}
 	for {
 		select {
 		case <-tick.C:
@@ -79,9 +98,10 @@ func remote_loop(remote string) {
 				Body:          ioutil.NopCloser(buf),
 				ContentLength: int64(buf.Len()),
 			}
-			ifs, _ := net.Interfaces()
-			req.Header.Set("UserToken", ifs[0].HardwareAddr.String())
+			req.Header.Set("UserToken", userToken)
+			//req.Header.Set("Connection", "close")
 			req.Header.Set("Connection", "keep-alive")
+			//req.Header.Set("Keep-Alive", "timeout=60, max=100")
 			req.Header.Set("Content-Type", "application/octet-stream")
 			if len(c4_cfg.UA) > 0 {
 				req.Header.Set("User-Agent", c4_cfg.UA)
@@ -102,7 +122,7 @@ func remote_loop(remote string) {
 				content := make([]byte, resp.ContentLength)
 				n, err := io.ReadFull(resp.Body, content)
 				if int64(n) != resp.ContentLength || nil != err {
-
+					log.Printf("Failed to read data from body %d or %v", n, err)
 				} else {
 					go handleRecvBody(bytes.NewBuffer(content), remote)
 				}
@@ -111,6 +131,7 @@ func remote_loop(remote string) {
 		case b := <-read:
 			event.EncodeEvent(buf, b)
 		}
+
 	}
 }
 
@@ -119,7 +140,20 @@ func handleRecvBody(buf *bytes.Buffer, server string) {
 	for buf.Len() > 0 {
 		err, ev := event.DecodeEvent(buf)
 		if nil == err {
-			processRecvEvent(ev, server)
+			//processRecvEvent(ev, server)
+			sess, err := getSession(ev.GetHash())
+			if nil == err {
+				sess.writeBackChan <- ev
+			} else {
+				ev = event.ExtractEvent(ev)
+				if ev.GetHash() != 0 && ev.GetType() != event.EVENT_TCP_CONNECTION_TYPE {
+					log.Printf("No session:%d found for %T\n", ev.GetHash(), ev)
+					closeEv := &event.SocketConnectionEvent{}
+					closeEv.Status = event.TCP_CONN_CLOSED
+					closeEv.SetHash(ev.GetHash())
+					readChanMap[server] <- closeEv
+				}
+			}
 		}
 	}
 }
@@ -137,22 +171,23 @@ func getCreateSession(ev *event.HTTPRequestEvent, server string) *localProxySess
 	if !ok {
 		handler = &(localProxySession{})
 		handler.server = server
+		handler.closed = false
+		handler.writeBackChan = make(chan event.Event, 4096)
 		sessions[ev.GetHash()] = handler
+		go handler.loop()
 	}
-	handler.remote_addr = ev.RawReq.Host
-	if !strings.Contains(handler.remote_addr, ":") {
-		handler.remote_addr = handler.remote_addr + ":80"
-	}
+
 	return handler
 }
 
 func deleteSessionEntry(id uint32) {
 	handler, ok := sessions[id]
 	if ok {
+		handler.closed = true
+		close(handler.writeBackChan)
 		handler.localConn.LocalRawConn.Close()
 		delete(sessions, id)
 	}
-
 }
 
 func processRecvEvent(ev event.Event, server string) error {
@@ -160,30 +195,34 @@ func processRecvEvent(ev event.Event, server string) error {
 	//log.Printf("Start process event %T", ev)
 	handler, err := getSession(ev.GetHash())
 	if nil != err {
-		if ev.GetHash() != 0 && ev.GetType() != event.EVENT_TCP_CONNECTION_TYPE {
-			log.Printf("No session:%d found for %T\n", ev.GetHash(), ev)
-			if nil != handler {
 
-			}
-		}
 		return nil
 	}
-	//log.Printf("Session:%d process recv event:%T\n", ev.GetHash(), ev)
+
 	switch ev.GetType() {
 	case event.EVENT_TCP_CONNECTION_TYPE:
 		cev := ev.(*event.SocketConnectionEvent)
 		//		log.Printf("Status %d\n", cev.Status)
 		if cev.Status == event.TCP_CONN_CLOSED {
 			if cev.Addr == handler.remote_addr {
+			    log.Printf("[%d]Close session.\n", ev.GetHash())
 				deleteSessionEntry(ev.GetHash())
 			}
 		}
 	case event.EVENT_TCP_CHUNK_TYPE:
 		chunk := ev.(*event.TCPChunkEvent)
-		_, err := handler.localConn.LocalRawConn.Write(chunk.Content)
+		log.Printf("[%d]Write Chunk:%d with %d bytes", ev.GetHash(), chunk.Sequence, len(chunk.Content))
+		n, err := handler.localConn.LocalRawConn.Write(chunk.Content)
 		if nil != err {
-			log.Printf("Failed to write  data to local client:%v.\n", err)
+			log.Printf("[%d]Failed to write  data to local client:%v.\n", ev.GetHash(), err)
 			deleteSessionEntry(ev.GetHash())
+			closeEv := &event.SocketConnectionEvent{}
+			closeEv.Status = event.TCP_CONN_CLOSED
+			closeEv.SetHash(ev.GetHash())
+			readChanMap[server] <- closeEv
+		}
+		if nil == err && n != len(chunk.Content) {
+			log.Printf("[%d]=================less data=======.\n", ev.GetHash())
 		}
 	default:
 		log.Printf("Unexpected event type:%d\n", ev.GetType())
@@ -225,13 +264,17 @@ func (c4 *C4HttpConnection) Request(conn *SessionConnection, ev event.Event) (er
 		case event.HTTP_REQUEST_EVENT_TYPE:
 			req := ev.(*event.HTTPRequestEvent)
 			handler := getCreateSession(req, c4.manager.servers.Select().(string))
+			handler.remote_addr = req.RawReq.Host
+			if !strings.Contains(handler.remote_addr, ":") {
+				handler.remote_addr = handler.remote_addr + ":80"
+			}
 			handler.localConn = conn
 			if strings.EqualFold(req.RawReq.Method, "CONNECT") {
 				conn.State = STATE_RECV_HTTP_CHUNK
 			} else {
 				conn.State = STATE_RECV_HTTP
 				proxyURL, _ := url.Parse(req.Url)
-				req.Url = proxyURL.Path
+				req.Url = proxyURL.RequestURI()
 			}
 			log.Printf("Session[%d]Request %s %s\n", ev.GetHash(), req.Method, req.Url)
 			handler.requestEvent(req)
@@ -324,6 +367,10 @@ func initC4Config() {
 	if period, exist := common.Cfg.GetIntProperty("C4", "MinWritePeriod"); exist {
 		c4_cfg.MinWritePeriod = uint32(period)
 	}
+	logined = false
+	ifs, _ := net.Interfaces()
+	userToken = ifs[0].HardwareAddr.String()
+	log.Printf("UserToken is %s\n", userToken)
 }
 
 func (manager *C4) Init() error {
@@ -337,14 +384,6 @@ func (manager *C4) Init() error {
 	RegisteRemoteConnManager(manager)
 	//manager.auths = new(util.ListSelector)
 	manager.servers = &util.ListSelector{}
-//    nat, err := upnp.Discover()
-//    if nil == err{
-//       err = nat.AddPortMapping("tcp", 48101, 48101, "GSnova", 3000)
-//       err = nat.AddPortMapping("udp", 48101, 48101, "GSnova", 3000)
-//    }
-//    if nil != err {
-//       log.Printf("Failed to discover:%v\n", err)
-//    }
 	index := 0
 	for {
 		v, exist := common.Cfg.GetProperty("C4", "WorkerNode["+strconv.Itoa(index)+"]")

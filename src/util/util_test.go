@@ -1,9 +1,19 @@
 package util
 
 import (
+	"fmt"
 	"os"
 	"testing"
 )
+
+func TestNet(t *testing.T) {
+	v := IPv42Int("10.10.10.10")
+	ip := Long2IPv4(v)
+	if ip != "10.10.10.10" {
+        fmt.Printf("%s  %d\n", ip, v)
+		t.Error("Failed to conv ip to int:")
+	}
+}
 
 func TestIni(t *testing.T) {
 	ini, err := LoadIniFile("snova.conf")

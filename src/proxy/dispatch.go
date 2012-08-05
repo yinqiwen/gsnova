@@ -106,8 +106,13 @@ func (session *SessionConnection) process() error {
 			err = session.processHttpEvent(&rev)
 		}
 		if nil != err {
+			operr, ok := err.(*net.OpError)
+			if ok && (operr.Timeout() || operr.Temporary()) {
+				log.Printf("Timeout to read\n")
+				return nil
+			}
 			if err != io.EOF {
-				log.Printf("Session[%d]Failed to read http request:%v\n", session.SessionID, err)
+				log.Printf("Session[%d]Failed to read http request:%v %T\n", session.SessionID, err, err)
 			}
 			session.LocalRawConn.Close()
 			session.State = STATE_SESSION_CLOSE
@@ -121,8 +126,13 @@ func (session *SessionConnection) process() error {
 			err = session.processHttpChunkEvent(rev)
 		}
 		if nil != err {
+			operr, ok := err.(*net.OpError)
+			if ok && (operr.Timeout() || operr.Temporary()) {
+				log.Printf("Timeout to read\n")
+				return nil
+			}
 			if err != io.EOF {
-				log.Printf("Session[%d]Failed to read http chunk:%v\n", session.SessionID, err)
+				log.Printf("Session[%d]Failed to read http chunk:%v %T\n", session.SessionID, err, err)
 			}
 			session.LocalRawConn.Close()
 			session.State = STATE_SESSION_CLOSE

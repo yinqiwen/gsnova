@@ -81,4 +81,5 @@ func Init() {
 	RegistEvent(&HTTPErrorEvent{})
 	RegistEvent(&TCPChunkEvent{})
 	RegistEvent(&SocketConnectionEvent{})
+	RegistEvent(&UserLoginEvent{})
 }

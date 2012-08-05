@@ -5,20 +5,20 @@ import (
 )
 
 type TCPChunkEvent struct {
-	//Sequence uint32
+	Sequence uint32
 	Content  []byte
 	EventHeader
 }
 
 func (req *TCPChunkEvent) Encode(buffer *bytes.Buffer) {
-	//EncodeUInt32Value(buffer, req.Sequence)
+	EncodeUInt32Value(buffer, req.Sequence)
 	EncodeBytesValue(buffer, req.Content)
 }
 func (req *TCPChunkEvent) Decode(buffer *bytes.Buffer) (err error) {
-//	req.Sequence, err = DecodeUInt32Value(buffer)
-//	if err != nil {
-//		return
-//	}
+	req.Sequence, err = DecodeUInt32Value(buffer)
+	if err != nil {
+		return
+	}
 	req.Content, err = DecodeBytesValue(buffer)
 	if err != nil {
 		return
@@ -59,6 +59,29 @@ func (req *SocketConnectionEvent) GetType() uint32 {
 	return EVENT_TCP_CONNECTION_TYPE
 }
 func (req *SocketConnectionEvent) GetVersion() uint32 {
+	return 1
+}
+
+type UserLoginEvent struct {
+	User  string
+	EventHeader
+}
+
+func (req *UserLoginEvent) Encode(buffer *bytes.Buffer) {
+	EncodeStringValue(buffer, req.User)
+}
+func (req *UserLoginEvent) Decode(buffer *bytes.Buffer) (err error) {
+	req.User, err = DecodeStringValue(buffer)
+	if err != nil {
+		return
+	}
+	return nil
+}
+
+func (req *UserLoginEvent) GetType() uint32 {
+	return EVENT_USER_LOGIN_TYPE
+}
+func (req *UserLoginEvent) GetVersion() uint32 {
 	return 1
 }
 
