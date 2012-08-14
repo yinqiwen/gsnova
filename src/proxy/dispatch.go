@@ -29,6 +29,11 @@ const (
 	FORWARD_NAME      = "Forward"
 	AUTOHOST_NAME     = "AutoHost"
 	DIRECT_NAME       = "Direct"
+
+	MODE_HTTP    = "http"
+	MODE_HTTPS   = "httpS"
+	MODE_RSOCKET = "rsocket"
+	MODE_XMPP    = "xmpp"
 )
 
 type RemoteConnection interface {

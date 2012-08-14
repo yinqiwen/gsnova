@@ -131,7 +131,7 @@ func (conn *GAEHttpConnection) initHttpClient() {
 		conn.client.Transport = tr
 	} else {
 		if mode, exist := common.Cfg.GetProperty("GAE", "ConnectionMode"); exist {
-			if strings.EqualFold(mode, "https") {
+			if strings.EqualFold(mode, MODE_HTTPS) {
 				dial = sslDial
 			}
 		}
@@ -170,9 +170,9 @@ func (gae *GAEHttpConnection) requestEvent(conn *SessionConnection, ev event.Eve
 	gae.initHttpClient()
 	domain := gae.auth.appid + ".appspot.com"
 	addr := util.GetHost(domain)
-	scheme := "http"
-	if strings.EqualFold("https", gae_cfg.ConnectionMode) {
-		scheme = "https"
+	scheme := MODE_HTTP
+	if strings.EqualFold(MODE_HTTPS, gae_cfg.ConnectionMode) {
+		scheme = MODE_HTTPS
 	}
 	var buf bytes.Buffer
 	var tags event.EventHeaderTags
@@ -422,7 +422,7 @@ func initGAEConfig() {
 	if ua, exist := common.Cfg.GetProperty("GAE", "UserAgent"); exist {
 		gae_cfg.UA = ua
 	}
-	gae_cfg.ConnectionMode = "HTTP"
+	gae_cfg.ConnectionMode = MODE_HTTP
 	if cm, exist := common.Cfg.GetProperty("GAE", "ConnectionMode"); exist {
 		gae_cfg.ConnectionMode = cm
 	}

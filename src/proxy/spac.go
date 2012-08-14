@@ -7,7 +7,6 @@ import (
 	"log"
 	"net/http"
 	"regexp"
-	//"strconv"
 	"strings"
 )
 
@@ -99,8 +98,13 @@ func InitSpac() {
 	if len(spac.defaultRule) == 0 {
 		spac.defaultRule = GAE_NAME
 	}
+	script, exist := common.Cfg.GetProperty("SPAC", "Script")
+	if !exist{
+	   script = "spac.json"
+	}
+	
 	spac.rules = make([]*JsonRule, 0)
-	file, e := ioutil.ReadFile(common.Home + "spac.json")
+	file, e := ioutil.ReadFile(common.Home + script)
 	if e == nil {
 		e = json.Unmarshal(file, &spac.rules)
 		for _, json_rule := range spac.rules {
@@ -137,9 +141,9 @@ func SelectProxy(req *http.Request) (RemoteConnectionManager, bool) {
 		switch proxyName {
 		case GAE_NAME, C4_NAME, AUTOHOST_NAME:
 		case GOOGLE_NAME, GOOGLE_HTTP_NAME:
-		   return httpGoogleManager, true
+			return httpGoogleManager, true
 		case GOOGLE_HTTPS_NAME:
-		   return httpsGoogleManager, true
+			return httpsGoogleManager, true
 		case DIRECT_NAME:
 			forward := &Forward{overProxy: false}
 			forward.target = req.Host
@@ -163,7 +167,12 @@ func SelectProxy(req *http.Request) (RemoteConnectionManager, bool) {
 
 	v, ok := registedRemoteConnManager[proxyName]
 	if !ok {
-		log.Printf("No proxy:%s defined.\n", proxyName)
+		log.Printf("No proxy:%s defined, use GAE instead.\n", proxyName)
+		proxyName = GAE_NAME
+		v, ok = registedRemoteConnManager[proxyName]
+		if !ok {
+			log.Printf("No GAE found.\n")
+		}
 	}
 	return v, ok
 }

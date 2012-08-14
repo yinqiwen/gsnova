@@ -3,6 +3,8 @@ package util
 import (
 	"fmt"
 	"math"
+	"net"
+	"os"
 	"strconv"
 	"strings"
 )
@@ -29,4 +31,16 @@ func IsPrivateIP(ip string) bool {
 		return true
 	}
 	return false
+}
+
+func GetLocalIP() string {
+	hostname, err := os.Hostname()
+	if nil != err {
+		return "127.0.0.1"
+	}
+	ipp, err := net.LookupHost(hostname)
+	if nil != err {
+		return "127.0.0.1"
+	}
+	return ipp[0]
 }

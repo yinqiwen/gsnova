@@ -2,17 +2,20 @@ package util
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"testing"
 )
 
 func TestNet(t *testing.T) {
+	
 	v := IPv42Int("10.10.10.10")
 	ip := Long2IPv4(v)
 	if ip != "10.10.10.10" {
-        fmt.Printf("%s  %d\n", ip, v)
+		fmt.Printf("%s  %d\n", ip, v)
 		t.Error("Failed to conv ip to int:")
 	}
+	t.Error("####")
 }
 
 func TestIni(t *testing.T) {

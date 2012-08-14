@@ -4,6 +4,30 @@ import (
 	"bytes"
 )
 
+type RSocketAcceptedEvent struct{
+    Server string 
+    EventHeader
+}
+
+func (req *RSocketAcceptedEvent) Encode(buffer *bytes.Buffer) {
+	EncodeStringValue(buffer, req.Server)
+}
+func (req *RSocketAcceptedEvent) Decode(buffer *bytes.Buffer) (err error) {
+	req.Server, err = DecodeStringValue(buffer)
+	if err != nil {
+		return
+	}
+	return nil
+}
+
+func (req *RSocketAcceptedEvent) GetType() uint32 {
+	return EVENT_RSOCKET_ACCEPTED_TYPE
+}
+func (req *RSocketAcceptedEvent) GetVersion() uint32 {
+	return 1
+}
+
+
 type TCPChunkEvent struct {
 	Sequence uint32
 	Content  []byte
