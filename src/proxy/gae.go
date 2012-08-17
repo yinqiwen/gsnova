@@ -169,6 +169,9 @@ func (conn *GAEHttpConnection) Auth() error {
 func (gae *GAEHttpConnection) requestEvent(conn *SessionConnection, ev event.Event) (err error, res event.Event) {
 	gae.initHttpClient()
 	domain := gae.auth.appid + ".appspot.com"
+	if strings.Contains(gae.auth.appid, "."){
+	   domain = gae.auth.appid
+	}
 	addr := util.GetHost(domain)
 	scheme := MODE_HTTP
 	if strings.EqualFold(MODE_HTTPS, gae_cfg.ConnectionMode) {
@@ -213,7 +216,7 @@ func (gae *GAEHttpConnection) requestEvent(conn *SessionConnection, ev event.Eve
 	req.Header.Set("Content-Type", "application/octet-stream")
 	//log.Println(gae.auth)
 	if response, err := gae.client.Do(req); nil != err {
-		log.Printf("Failed to request data from GAE:%s\n", err.Error())
+		log.Printf("Failed to request data from GAE:%s for:%s\n",domain, err.Error())
 		return err, nil
 	} else {
 		if response.StatusCode != 200 {

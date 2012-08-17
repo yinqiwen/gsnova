@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"event"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
@@ -130,7 +131,7 @@ func recvEventLoop(user string) {
 }
 
 var proxySessionMap map[string]map[uint32]*ProxySession = make(map[string]map[uint32]*ProxySession)
-var send_evs map[string]chan event.Event = make(map[string]chan event.Event)
+var send_evs map[string][]chan event.Event = make(map[string][]chan event.Event)
 var recv_evs map[string]chan event.Event = make(map[string]chan event.Event)
 var rsock_conns map[string][]net.Conn = make(map[string][]net.Conn)
 var rosck_write_routine_started = false
@@ -214,21 +215,18 @@ func check_rsock_conn(user, server, addr string, pool_size int) {
 		conns = append(conns, conn)
 		rsock_conns[user] = conns
 		go rosck_read_routine(user, conn)
-		evch, ok := send_evs[user]
+		_, ok := send_evs[user]
 		if !ok {
-			send_evs[user] = make(chan event.Event, 1024)
-			evch = send_evs[user]
-			go rosck_write_routine(user)
-
+			send_evs[user] = make([]chan event.Event, pool_size)
+			for i, _ := range send_evs[user] {
+				send_evs[user][i] = make(chan event.Event, 1024)
+				go rosck_write_routine(user, i)
+			}
 		}
 		accept := &event.RSocketAcceptedEvent{}
 		accept.Server = server
-		evch <- accept
+		send_evs[user][len(conns) - 1] <- accept
 	}
-
-	//if !sock_exist {
-
-	//}
 }
 
 func rosck_read_routine(user string, conn net.Conn) {
@@ -285,8 +283,8 @@ func rosck_read_routine(user string, conn net.Conn) {
 	//delete(rsock_conns, user)
 }
 
-func rosck_write_routine(user string) {
-	send_ev := send_evs[user]
+func rosck_write_routine(user string, index int) {
+	send_ev := send_evs[user][index]
 	for {
 		select {
 		case ev := <-send_ev:
@@ -322,11 +320,11 @@ func closeProxyUser(name string) {
 		}
 		delete(proxySessionMap, name)
 	}
-	evchan, exist := send_evs[name]
-	if exist {
-		close(evchan)
-		delete(send_evs, name)
-	}
+	//	evchans, exist := send_evs[name]
+	//	if exist {
+	//		//close(evchan)
+	//		//delete(send_evs, name)
+	//	}
 }
 
 func sessionExist(name string, sessionID uint32) bool {
@@ -365,7 +363,8 @@ func offerSendEvent(ev event.Event, user string) {
 	encrypt.EncryptType = event.ENCRYPTER_SE1
 	encrypt.Ev = ev
 	ev = &encrypt
-	send_evs[user] <- ev
+	idx := int(ev.GetHash()) % len(send_evs[user])
+	send_evs[user][idx] <- ev
 }
 
 func getProxySession(name string, sessionID uint32) *ProxySession {
@@ -386,10 +385,18 @@ func InvokeCallback(w http.ResponseWriter, req *http.Request) {
 	if nil != err {
 	}
 	user := req.Header.Get("UserToken")
-	send_ev, exist := send_evs[user]
+	index := req.Header.Get("FetcherIndex")
+	if len(index) == 0 {
+		index = "0:1"
+	}
+	var idx, poolSize uint32
+	fmt.Sscanf(index, "%d:%d", &idx, &poolSize)
+	send_ev_array, exist := send_evs[user]
 	if !exist {
-		send_ev = make(chan event.Event, 1024)
-		send_evs[user] = send_ev
+		send_evs[user] = make([]chan event.Event, poolSize)
+		for i, _ := range send_evs[user] {
+			send_evs[user][i] = make(chan event.Event, 1024)
+		}
 	}
 	recv_ev, ok := recv_evs[user]
 	if !ok {
@@ -424,7 +431,7 @@ func InvokeCallback(w http.ResponseWriter, req *http.Request) {
 				break
 			}
 			continue
-		case ev := <-send_ev:
+		case ev := <-send_ev_array[idx]:
 			if nil == ev {
 				expectedData = false
 				break

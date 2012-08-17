@@ -35,8 +35,13 @@ var userToken string
 var externIP string
 var sessions map[uint32]*localProxySession = make(map[uint32]*localProxySession)
 var bufMap map[string]*bytes.Buffer = make(map[string]*bytes.Buffer)
-var readChanMap map[string]chan event.Event = make(map[string]chan event.Event)
+var readChanMap map[string][]chan event.Event = make(map[string][]chan event.Event)
 var rsock_conns map[string][]net.Conn = make(map[string][]net.Conn)
+
+func getRequestChan(server string, ev event.Event) chan event.Event {
+	index := int(ev.GetHash()) % len(readChanMap[server])
+	return readChanMap[server][index]
+}
 
 type localProxySession struct {
 	closed        bool
@@ -63,7 +68,6 @@ func (sess *localProxySession) loop() {
 }
 
 func (sess *localProxySession) requestEvent(ev event.Event) {
-	evch := readChanMap[sess.server]
 	switch ev.GetType() {
 	case event.EVENT_TCP_CHUNK_TYPE:
 		var compress event.CompressEventV2
@@ -77,7 +81,7 @@ func (sess *localProxySession) requestEvent(ev event.Event) {
 	encrypt.EncryptType = c4_cfg.Encrypter
 	encrypt.Ev = ev
 	//log.Printf("[%d]Block enter with chan len:%d\n", sess.id, len(evch))
-	evch <- &encrypt
+	getRequestChan(sess.server, ev) <- &encrypt
 	//log.Printf("[%d]Block exit\n", sess.id)
 }
 
@@ -88,16 +92,11 @@ func init_rsock_conn(conn net.Conn, server string) {
 	}
 	conns := rsock_conns[server]
 	rsock_conns[server] = append(conns, conn)
-	_, ok := readChanMap[server]
-	if !ok {
-		read := make(chan event.Event, 1024)
-		readChanMap[server] = read
-		go rsocket_write_loop(server)
-	}
+	go rsocket_write_loop(server, len(rsock_conns[server])-1)
 }
 
-func rsocket_write_loop(server string) {
-	read := readChanMap[server]
+func rsocket_write_loop(server string, index int) {
+	read := readChanMap[server][index]
 	for {
 		select {
 		case ev := <-read:
@@ -109,7 +108,7 @@ func rsocket_write_loop(server string) {
 				//discard event
 				continue
 			}
-			conn := conns[int(ev.GetHash())%len(conns)]
+			conn := conns[int(ev.GetHash()) % len(conns)]
 			var buf bytes.Buffer
 			event.EncodeEvent(&buf, ev)
 			length := uint32(buf.Len())
@@ -249,14 +248,14 @@ func rsocket_hb_loop(remote string) {
 	}
 }
 
-func http_remote_loop(remote string) {
+func http_remote_loop(remote string, index int) {
 	baseDuration := time.Duration(c4_cfg.MinWritePeriod) * time.Millisecond
 	tick := time.NewTicker(baseDuration)
 	//    tickerMap[remote] = tick
 	buf := new(bytes.Buffer)
 	bufMap[remote] = buf
 	read := make(chan event.Event, 4096)
-	readChanMap[remote] = read
+	readChanMap[remote][index] = read
 	if !logined {
 		login := &event.UserLoginEvent{}
 		login.User = userToken
@@ -277,6 +276,7 @@ func http_remote_loop(remote string) {
 			req.Header.Set("UserToken", userToken)
 			//req.Header.Set("Connection", "close")
 			req.Header.Set("Connection", "keep-alive")
+			req.Header.Set("FetcherIndex", fmt.Sprintf("%d:%d", index, c4_cfg.ConnectionPoolSize))
 			//req.Header.Set("Keep-Alive", "timeout=60, max=100")
 			req.Header.Set("Content-Type", "application/octet-stream")
 			if len(c4_cfg.UA) > 0 {
@@ -300,7 +300,7 @@ func http_remote_loop(remote string) {
 				if int64(n) != resp.ContentLength || nil != err {
 					log.Printf("Failed to read data from body %d or %v", n, err)
 				} else {
-					go handleRecvBody(bytes.NewBuffer(content), remote)
+					go handleRecvBody(bytes.NewBuffer(content), remote, index)
 				}
 			}
 			resp.Body.Close()
@@ -311,7 +311,7 @@ func http_remote_loop(remote string) {
 	}
 }
 
-func handleRecvBody(buf *bytes.Buffer, server string) {
+func handleRecvBody(buf *bytes.Buffer, server string, index int) {
 	//log.Printf("Handle content:%d\n", buf.Len())
 	for buf.Len() > 0 {
 		err, ev := event.DecodeEvent(buf)
@@ -327,7 +327,7 @@ func handleRecvBody(buf *bytes.Buffer, server string) {
 					closeEv := &event.SocketConnectionEvent{}
 					closeEv.Status = event.TCP_CONN_CLOSED
 					closeEv.SetHash(ev.GetHash())
-					readChanMap[server] <- closeEv
+					readChanMap[server][index] <- closeEv
 				}
 			}
 		}
@@ -395,7 +395,7 @@ func processRecvEvent(ev event.Event, server string) error {
 			closeEv := &event.SocketConnectionEvent{}
 			closeEv.Status = event.TCP_CONN_CLOSED
 			closeEv.SetHash(ev.GetHash())
-			readChanMap[server] <- closeEv
+			getRequestChan(server, ev) <- closeEv
 		}
 		if nil == err && n != len(chunk.Content) {
 			log.Printf("[%d]=================less data=======.\n", ev.GetHash())
@@ -570,7 +570,9 @@ func (manager *C4) Init() error {
 		if enable == 0 {
 			return nil
 		}
+		log.Println("Enable = %d\n", enable)
 	}
+	
 	log.Println("Init C4.")
 	initC4Config()
 	RegisteRemoteConnManager(manager)
@@ -597,8 +599,14 @@ func (manager *C4) Init() error {
 			break
 		}
 		manager.servers.Add(v)
+		readChanMap[v] = make([]chan event.Event, c4_cfg.ConnectionPoolSize)
+		for i := 0; i < int(c4_cfg.ConnectionPoolSize); i++ {
+			readChanMap[v][i] = make(chan event.Event, 1024)
+		}
 		if strings.EqualFold(c4_cfg.ConnectionMode, MODE_HTTP) {
-			go http_remote_loop(v)
+			for i := 0; i < int(c4_cfg.ConnectionPoolSize); i++ {
+				go http_remote_loop(v, i)
+			}
 		} else {
 			go rsocket_hb_loop(v)
 		}
