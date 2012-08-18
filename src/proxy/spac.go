@@ -94,16 +94,20 @@ func RegisteRemoteConnManager(connManager RemoteConnectionManager) {
 func InitSpac() {
 	spac = &SpacConfig{}
 	//spac.rules = make([]*Rule, 0)
-	spac.defaultRule, _ = common.Cfg.GetProperty("SPAC", "DefaultRule")
+	spac.defaultRule, _ = common.Cfg.GetProperty("SPAC", "Default")
 	if len(spac.defaultRule) == 0 {
 		spac.defaultRule = GAE_NAME
+	}
+	spac.rules = make([]*JsonRule, 0)
+	if enable, exist := common.Cfg.GetIntProperty("SPAC", "Enable"); exist {
+		if enable == 0 {
+			return
+		}
 	}
 	script, exist := common.Cfg.GetProperty("SPAC", "Script")
 	if !exist{
 	   script = "spac.json"
 	}
-	
-	spac.rules = make([]*JsonRule, 0)
 	file, e := ioutil.ReadFile(common.Home + script)
 	if e == nil {
 		e = json.Unmarshal(file, &spac.rules)

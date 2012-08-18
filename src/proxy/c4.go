@@ -34,7 +34,7 @@ var logined bool
 var userToken string
 var externIP string
 var sessions map[uint32]*localProxySession = make(map[uint32]*localProxySession)
-var bufMap map[string]*bytes.Buffer = make(map[string]*bytes.Buffer)
+//var bufMap map[string]*bytes.Buffer = make(map[string]*bytes.Buffer)
 var readChanMap map[string][]chan event.Event = make(map[string][]chan event.Event)
 var rsock_conns map[string][]net.Conn = make(map[string][]net.Conn)
 
@@ -253,7 +253,7 @@ func http_remote_loop(remote string, index int) {
 	tick := time.NewTicker(baseDuration)
 	//    tickerMap[remote] = tick
 	buf := new(bytes.Buffer)
-	bufMap[remote] = buf
+	//bufMap[remote] = buf
 	read := make(chan event.Event, 4096)
 	readChanMap[remote][index] = read
 	if !logined {
@@ -288,7 +288,7 @@ func http_remote_loop(remote string, index int) {
 				continue
 			}
 			if resp.StatusCode != 200 {
-				log.Printf("Unexpected response %d %s\n", resp.StatusCode, resp.Status)
+				log.Printf("Unexpected response %s for %s\n", resp.Status, remote)
 				continue
 			}
 			buf.Reset()
@@ -307,7 +307,6 @@ func http_remote_loop(remote string, index int) {
 		case b := <-read:
 			event.EncodeEvent(buf, b)
 		}
-
 	}
 }
 
@@ -332,6 +331,7 @@ func handleRecvBody(buf *bytes.Buffer, server string, index int) {
 			}
 		}
 	}
+	buf.Reset()
 }
 
 func getSession(id uint32) (*localProxySession, error) {
@@ -374,7 +374,7 @@ func processRecvEvent(ev event.Event, server string) error {
 
 		return nil
 	}
-	log.Printf("Recv event type:%T\n", ev)
+	//log.Printf("Recv event type:%T\n", ev)
 	switch ev.GetType() {
 	case event.EVENT_TCP_CONNECTION_TYPE:
 		cev := ev.(*event.SocketConnectionEvent)
@@ -387,7 +387,7 @@ func processRecvEvent(ev event.Event, server string) error {
 		}
 	case event.EVENT_TCP_CHUNK_TYPE:
 		chunk := ev.(*event.TCPChunkEvent)
-		log.Printf("[%d]Write Chunk:%d with %d bytes", ev.GetHash(), chunk.Sequence, len(chunk.Content))
+		//log.Printf("[%d]Write Chunk:%d with %d bytes", ev.GetHash(), chunk.Sequence, len(chunk.Content))
 		n, err := handler.localConn.LocalRawConn.Write(chunk.Content)
 		if nil != err {
 			log.Printf("[%d]Failed to write  data to local client:%v.\n", ev.GetHash(), err)
@@ -537,7 +537,7 @@ func initC4Config() {
 			c4_cfg.Compressor = event.ENCRYPTER_NONE
 		}
 	}
-	c4_cfg.ConnectionPoolSize = 5
+	c4_cfg.ConnectionPoolSize = 2
 	if poosize, exist := common.Cfg.GetIntProperty("C4", "ConnectionPoolSize"); exist {
 		c4_cfg.ConnectionPoolSize = uint32(poosize)
 	}
@@ -570,7 +570,6 @@ func (manager *C4) Init() error {
 		if enable == 0 {
 			return nil
 		}
-		log.Println("Enable = %d\n", enable)
 	}
 	
 	log.Println("Init C4.")

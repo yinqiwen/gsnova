@@ -1,2 +1,2 @@
 package common
-var Version string = "0.15.0beta2"
+var Version string = "0.15.0"
