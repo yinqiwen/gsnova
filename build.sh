@@ -1,5 +1,5 @@
 #!/bin/sh
-VERSION="0.15.0beta2"
+VERSION="0.15.1"
 
 #this part is copied from ANT's script
 # OS specific support.  $var _must_ be set to either true or false.
@@ -45,23 +45,29 @@ build_dist()
    ARCH="`go env GOARCH`"
    
    exename=gsnova
-   if $cygwin; then
+   if [ "$OS" = "windows" ]; then
       exename=gsnova.exe
    fi
    cp $GSNOVA_DIR/README $GSNOVA_DIR/$DIST_DIR
    cp $GSNOVA_DIR/*.txt $GSNOVA_DIR/$DIST_DIR
-   cp $GSNOVA_DIR/bin/main* $GSNOVA_DIR/$DIST_DIR/$exename
+   cp $GSNOVA_DIR/bin/"$OS"_$ARCH/main* $GSNOVA_DIR/$DIST_DIR/$exename
    cp $GSNOVA_DIR/conf/*.conf $GSNOVA_DIR/$DIST_DIR
    cp $GSNOVA_DIR/conf/Fake* $GSNOVA_DIR/$DIST_DIR/cert
+   cp $GSNOVA_DIR/conf/spac.json $GSNOVA_DIR/$DIST_DIR
    zip -r gsnova_"$VERSION"_"$OS"_"$ARCH".zip $DIST_DIR/*
    rm -rf $GSNOVA_DIR/$DIST_DIR
 }
 
 main()
 {
-    if [ "x$1" == "xdist" ]; then
+    if [ "x$1" = "xdist" ]; then
 	    shift
-		build_dist $*
+            export CGO_ENABLED=0
+            export GOOS=windows
+            export GOARCH=386
+            build_dist $*
+            export GOARCH=amd64
+            build_dist $*
 	else
 		build_gsnova $*
 	fi	
