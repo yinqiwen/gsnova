@@ -492,7 +492,7 @@ const html = `
       <span class="small">by <a href="http://twitter.com/yinqiwen">@yinqiwen</a></span></h1>
 
     <div class="description">
-      Welcome to use GSnova C4 Server(V0.15.0)!
+      Welcome to use GSnova C4 Server(V0.15.1)!
     </div>
 
 	<h2>Code</h2>

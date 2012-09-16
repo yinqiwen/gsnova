@@ -34,6 +34,7 @@ var logined bool
 var userToken string
 var externIP string
 var sessions map[uint32]*localProxySession = make(map[uint32]*localProxySession)
+
 //var bufMap map[string]*bytes.Buffer = make(map[string]*bytes.Buffer)
 var readChanMap map[string][]chan event.Event = make(map[string][]chan event.Event)
 var rsock_conns map[string][]net.Conn = make(map[string][]net.Conn)
@@ -108,7 +109,7 @@ func rsocket_write_loop(server string, index int) {
 				//discard event
 				continue
 			}
-			conn := conns[int(ev.GetHash()) % len(conns)]
+			conn := conns[int(ev.GetHash())%len(conns)]
 			var buf bytes.Buffer
 			event.EncodeEvent(&buf, ev)
 			length := uint32(buf.Len())
@@ -322,7 +323,8 @@ func handleRecvBody(buf *bytes.Buffer, server string, index int) {
 			} else {
 				ev = event.ExtractEvent(ev)
 				if ev.GetHash() != 0 && ev.GetType() != event.EVENT_TCP_CONNECTION_TYPE {
-					log.Printf("No session:%d found for %T\n", ev.GetHash(), ev)
+					chunk := ev.(*event.TCPChunkEvent)
+					log.Printf("No session:%d found chunk[%d] for %T\n", ev.GetHash(), chunk.Sequence, ev)
 					closeEv := &event.SocketConnectionEvent{}
 					closeEv.Status = event.TCP_CONN_CLOSED
 					closeEv.SetHash(ev.GetHash())
@@ -455,7 +457,7 @@ func (c4 *C4HttpConnection) Request(conn *SessionConnection, ev event.Event) (er
 				proxyURL, _ := url.Parse(req.Url)
 				req.Url = proxyURL.RequestURI()
 			}
-			log.Printf("Session[%d]Request %s %s\n", ev.GetHash(), req.Method, req.Url)
+			log.Printf("Session[%d]Request %s %s%s\n", ev.GetHash(), req.Method, req.RawReq.Host, req.Url)
 			handler.requestEvent(req)
 			if conn.State == STATE_RECV_HTTP {
 				if req.RawReq.ContentLength > 0 {
@@ -571,7 +573,7 @@ func (manager *C4) Init() error {
 			return nil
 		}
 	}
-	
+
 	log.Println("Init C4.")
 	initC4Config()
 	RegisteRemoteConnManager(manager)

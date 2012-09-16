@@ -55,6 +55,7 @@ type SessionConnection struct {
 	RemoteConn      RemoteConnection
 	State           uint32
 	Type            uint32
+	
 }
 
 func newSessionConnection(sessionId uint32, conn net.Conn, reader *bufio.Reader) *SessionConnection {
@@ -64,7 +65,7 @@ func newSessionConnection(sessionId uint32, conn net.Conn, reader *bufio.Reader)
 	session_conn.SessionID = sessionId
 	session_conn.State = STATE_RECV_HTTP
 	session_conn.Type = HTTP_TUNNEL
-
+    
 	return session_conn
 }
 

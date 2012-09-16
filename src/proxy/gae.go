@@ -169,8 +169,8 @@ func (conn *GAEHttpConnection) Auth() error {
 func (gae *GAEHttpConnection) requestEvent(conn *SessionConnection, ev event.Event) (err error, res event.Event) {
 	gae.initHttpClient()
 	domain := gae.auth.appid + ".appspot.com"
-	if strings.Contains(gae.auth.appid, "."){
-	   domain = gae.auth.appid
+	if strings.Contains(gae.auth.appid, ".") {
+		domain = gae.auth.appid
 	}
 	addr := util.GetHost(domain)
 	scheme := MODE_HTTP
@@ -216,7 +216,7 @@ func (gae *GAEHttpConnection) requestEvent(conn *SessionConnection, ev event.Eve
 	req.Header.Set("Content-Type", "application/octet-stream")
 	//log.Println(gae.auth)
 	if response, err := gae.client.Do(req); nil != err {
-		log.Printf("Failed to request data from GAE:%s for:%s\n",domain, err.Error())
+		log.Printf("Failed to request data from GAE:%s for:%s\n", domain, err.Error())
 		return err, nil
 	} else {
 		if response.StatusCode != 200 {
@@ -233,9 +233,9 @@ func (gae *GAEHttpConnection) requestEvent(conn *SessionConnection, ev event.Eve
 				return err, nil
 			}
 			response.Body.Close()
-//			//trigger EOF to recycle idle conn in net.http
-//			tmp := make([]byte, 1)
-//			response.Body.Read(tmp)
+			//			//trigger EOF to recycle idle conn in net.http
+			//			tmp := make([]byte, 1)
+			//			response.Body.Read(tmp)
 
 			buf := bytes.NewBuffer(content[0:response.ContentLength])
 			if !tags.Decode(buf) {
@@ -353,7 +353,7 @@ func (gae *GAEHttpConnection) Request(conn *SessionConnection, ev event.Event) (
 				}
 			}
 
-			log.Printf("Request %s %s\n", httpreq.Method, httpreq.RawReq.RequestURI)
+			log.Printf("Request %s %s%s\n", httpreq.Method, httpreq.RawReq.Host, httpreq.RawReq.RequestURI)
 			//httpreq.SetHeader("Connection", "Close")
 			err, res = gae.requestEvent(conn, ev)
 			if nil != err {
@@ -487,9 +487,9 @@ func (manager *GAE) fetchSharedAppIDs() (error, []string) {
 }
 
 func (manager *GAE) Init() error {
-    if enable, exist := common.Cfg.GetIntProperty("GAE", "Enable"); exist {
-		if enable == 0{
-		   return nil
+	if enable, exist := common.Cfg.GetIntProperty("GAE", "Enable"); exist {
+		if enable == 0 {
+			return nil
 		}
 	}
 	log.Println("Init GAE.")

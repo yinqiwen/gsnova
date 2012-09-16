@@ -232,7 +232,7 @@ func (google *GoogleConnection) Request(conn *SessionConnection, ev event.Event)
 				google.initHttpsClient()
 			}
 			//log.Printf("Host is %s\n", req.RawReq.Host)
-			log.Printf("Session[%d]Request URL:%s %s\n", ev.GetHash(), req.RawReq.Method, req.RawReq.RequestURI)
+			log.Printf("Session[%d]Request URL:%s %s%s\n", ev.GetHash(), req.RawReq.Method, req.RawReq.Host, req.RawReq.RequestURI)
 			if nil != google.https_client {
 				conn.LocalRawConn.Write([]byte("HTTP/1.1 200 OK\r\n\r\n"))
 			} else {
