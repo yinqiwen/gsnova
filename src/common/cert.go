@@ -19,6 +19,8 @@ import (
 var RootCert tls.Certificate
 var X509RootCert *x509.Certificate
 
+var cachedCertificates = make(map[string]tls.Certificate)
+
 func randBigInt() (value *big.Int) {
 	value, _ = rand.Int(rand.Reader, big.NewInt(0x7FFFFFFFFFFFFFFF))
 	return
@@ -37,21 +39,11 @@ func LoadRootCA() error {
 	if nil == err {
 		RootCert = root_cert
 		X509RootCert, err = x509.ParseCertificate(root_cert.Certificate[0])
-		//log.Printf("Key type is %T\n", RootCert.PrivateKey)
 		return err
 	}
 	log.Fatalf("Failed to load root cert:%s", err.Error())
 	return err
 }
-
-//type PsuedoRandomReader struct{}
-//
-//func (self *PsuedoRandomReader) Read(p []byte) (n int, err error) {
-//	for index := range p {
-//		p[index] = byte(rand.Intn(256))
-//	}
-//	return len(p), nil
-//}
 
 func TLSConfig(host string) (*tls.Config, error) {
 	cfg := new(tls.Config)
@@ -64,20 +56,26 @@ func TLSConfig(host string) (*tls.Config, error) {
 		return nil, err
 	}
 	cfg.Certificates = []tls.Certificate{cert}
-	//cfg.ClientCAs = x509.NewCertPool()
-	//cfg.ClientCAs.AddCert(X509RootCert)
-	cfg.BuildNameToCertificate()
+	//cfg.BuildNameToCertificate()
 	return cfg, nil
 }
 
 func getTLSCert(host string) (tls.Certificate, error) {
 	var tls_cer tls.Certificate
+	if cert, exist := cachedCertificates[host]; exist {
+		return cert, nil
+	}
+
 	os.Mkdir(Home+"cert/host/", 0755)
 	cf := Home + "cert/host/" + host + ".cert"
 	kf := Home + "cert/host/" + host + ".key"
 	_, err := os.Stat(cf)
 	if err == nil {
-		return tls.LoadX509KeyPair(cf, kf)
+		tls_cer, err = tls.LoadX509KeyPair(cf, kf)
+		if nil == err {
+			cachedCertificates[host] = tls_cer
+		}
+		return tls_cer, err
 	}
 
 	priv, err := rsa.GenerateKey(rand.Reader, 1024)
@@ -102,12 +100,10 @@ func getTLSCert(host string) (tls.Certificate, error) {
 
 	derBytes, err := x509.CreateCertificate(rand.Reader, &template, X509RootCert, &priv.PublicKey, RootCert.PrivateKey)
 	if err != nil {
-		//log.Printf("###1 %s\n", err.Error())
 		return tls_cer, err
 	}
 	crt, err := x509.ParseCertificate(derBytes)
 	if err != nil {
-		//log.Printf("###2 %s\n", err.Error())
 		return tls_cer, err
 	}
 	cBytes := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: crt.Raw})
@@ -115,5 +111,9 @@ func getTLSCert(host string) (tls.Certificate, error) {
 	log.Printf("Write %s & %s\n", cf, kf)
 	ioutil.WriteFile(cf, cBytes, 755)
 	ioutil.WriteFile(kf, kBytes, 755)
-	return tls.X509KeyPair(cBytes, kBytes)
+	tls_cer, err = tls.X509KeyPair(cBytes, kBytes)
+	if nil == err {
+		cachedCertificates[host] = tls_cer
+	}
+	return tls_cer, err
 }

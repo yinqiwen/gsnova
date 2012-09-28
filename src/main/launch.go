@@ -30,9 +30,9 @@ func main() {
 	common.InitConfig()
 	proxy.InitSpac()
 	proxy.InitGoogle()
+	proxy.InitDirect()
 	var gae proxy.GAE
 	var c4 proxy.C4
-	var auto proxy.AutoHost
 	err = gae.Init()
 	if nil != err {
 		fmt.Printf("Failed to init GAE:%s\n", err.Error())
@@ -43,7 +43,6 @@ func main() {
 		fmt.Printf("Failed to init C4:%s\n", err.Error())
 		return
 	}
-	auto.Init()
 	common.LoadRootCA()
 	log.Println("=============Start GSnova " + common.Version + "=============")
 	addr, exist := common.Cfg.GetProperty("LocalServer", "Listen")

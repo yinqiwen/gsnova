@@ -86,14 +86,11 @@ var spac *SpacConfig
 var registedRemoteConnManager map[string]RemoteConnectionManager = make(map[string]RemoteConnectionManager)
 
 func RegisteRemoteConnManager(connManager RemoteConnectionManager) {
-	//connManager.Init()
 	registedRemoteConnManager[connManager.GetName()] = connManager
-
 }
 
 func InitSpac() {
 	spac = &SpacConfig{}
-	//spac.rules = make([]*Rule, 0)
 	spac.defaultRule, _ = common.Cfg.GetProperty("SPAC", "Default")
 	if len(spac.defaultRule) == 0 {
 		spac.defaultRule = GAE_NAME
@@ -123,27 +120,18 @@ func InitSpac() {
 func SelectProxy(req *http.Request) (RemoteConnectionManager, bool) {
 	proxyName := spac.defaultRule
 	selected := false
-	//	if autoHostEnable {
-	//		host := strings.Split(req.Host, ":")[0]
-	//		if hostMatched(host) {
-	//			//log.Printf("Match host:%s\n", host)
-	//			proxyName = AUTOHOST_NAME
-	//			selected = true
-	//		}
-	//	}
-	//var rule *JsonRule
+
 	for _, r := range spac.rules {
 		if r.match(req) {
 			selected = true
 			proxyName = r.Proxy
-			//log.Printf("##########%s\n", proxyName)
 			break
 		}
 	}
 
 	if selected {
 		switch proxyName {
-		case GAE_NAME, C4_NAME, AUTOHOST_NAME:
+		case GAE_NAME, C4_NAME:
 		case GOOGLE_NAME, GOOGLE_HTTP_NAME:
 			return httpGoogleManager, true
 		case GOOGLE_HTTPS_NAME:
@@ -157,7 +145,6 @@ func SelectProxy(req *http.Request) (RemoteConnectionManager, bool) {
 			if !strings.Contains(forward.target, "://") {
 				forward.target = "http://" + forward.target
 			}
-			//log.Printf("User target %s for direct.", forward.target)
 			return forward, true
 		default:
 			forward := &Forward{overProxy: true}

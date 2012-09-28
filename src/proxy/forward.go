@@ -30,10 +30,6 @@ func (conn *ForwardConnection) Close() error {
 }
 
 func (conn *ForwardConnection) initForwardConn(proxyAddr string) {
-//	if conn.proxyAddr != proxyAddr {
-//		conn.Close()
-//		conn.proxyAddr = proxyAddr
-//	}
 	if nil != conn.forward_conn && conn.proxyAddr == proxyAddr {
 		return
 	}
@@ -98,23 +94,8 @@ func (conn *ForwardConnection) writeHttpRequest(req *http.Request) error {
 }
 
 func (auto *ForwardConnection) Request(conn *SessionConnection, ev event.Event) (err error, res event.Event) {
-	//c := make(chan int)
-	//defer close(c)
 	f := func(local, remote net.Conn) {
-		buffer := make([]byte, 8192)
-		for {
-			n, err := local.Read(buffer)
-			if nil == err {
-				remote.Write(buffer[0:n])
-			} else {
-				if err != io.EOF {
-					log.Printf("Failed to read for reason:%v from:%s\n", err, local.RemoteAddr().String())
-					local.Close()
-					remote.Close()
-				}
-				break
-			}
-		}
+		io.Copy(remote, local)
 		auto.forwardChan <- 1
 	}
 	switch ev.GetType() {
@@ -184,7 +165,3 @@ func (manager *Forward) GetRemoteConnection(ev event.Event) (RemoteConnection, e
 	return g, nil
 }
 
-//func (manager *Forward) Init() error {
-//	RegisteRemoteConnManager(manager)
-//	return nil
-//}

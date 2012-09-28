@@ -206,20 +206,7 @@ func (google *GoogleConnection) Request(conn *SessionConnection, ev event.Event)
 	//c := make(chan int)
 	//defer close(c)
 	f := func(local, remote net.Conn) {
-		buffer := make([]byte, 8192)
-		for {
-			n, err := local.Read(buffer)
-			if nil == err {
-				remote.Write(buffer[0:n])
-			} else {
-				if err != io.EOF {
-					log.Printf("Failed to read for reason:%s from:%s\n", err.Error(), local.RemoteAddr().String())
-					local.Close()
-					remote.Close()
-				}
-				break
-			}
-		}
+		io.Copy(remote, local)
 		google.forwardChan <- 1
 	}
 	switch ev.GetType() {
