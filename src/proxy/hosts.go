@@ -3,24 +3,23 @@ package proxy
 import (
 	"bufio"
 	"common"
-	//"event"
-	//"io"
+	"github.com/yinqiwen/godns"
 	"io/ioutil"
 	"log"
-	//"net"
+	"net"
 	"net/http"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
-	"time"
-	//"util"
 )
 
 //var useGlobalProxy bool
 var repoUrls []string
 var hostMapping = make(map[string]string)
-var autoConnTimeoutSecs time.Duration
-var autoHostEnable bool
+var hostsEnable bool
+var trustedDNS = []string{"8.8.8.8", "8.8.4.4", "208.67.222.222", "208.67.220.220"}
+var injectCRLFPatterns = []*regexp.Regexp{}
 
 //type AutoHostConnection struct {
 //	http_client  net.Conn
@@ -212,6 +211,21 @@ func loadHostFile() {
 	os.Mkdir(common.Home+"hosts/", 0755)
 	for index, urlstr := range repoUrls {
 		resp, err := http.DefaultClient.Get(urlstr)
+		if err != nil {
+			http_proxy := os.Getenv("http_proxy")
+			https_proxy := os.Getenv("https_proxy")
+			if addr, exist := common.Cfg.GetProperty("LocalServer", "Listen"); exist {
+				_, port, _ := net.SplitHostPort(addr)
+				os.Setenv("http_proxy", "http://"+net.JoinHostPort("127.0.0.1", port))
+				os.Setenv("https_proxy", "http://"+net.JoinHostPort("127.0.0.1", port))
+			}
+
+			defer func() {
+				os.Setenv("http_proxy", http_proxy)
+				os.Setenv("https_proxy", https_proxy)
+			}()
+			resp, err = http.DefaultClient.Get(urlstr)
+		}
 		if err != nil || resp.StatusCode != 200 {
 			log.Printf("Failed to fetch host from %s\n", urlstr)
 		} else {
@@ -250,42 +264,85 @@ func loadHostFile() {
 						v := strings.TrimSpace(ss[0])
 						hostMapping[strings.TrimSpace(k)] = strings.TrimSpace(v)
 					}
-
 				}
 			}
 		}
 	}
 }
 
-func hostMatched(host string) bool {
-	_, exist := hostMapping[host]
-	return exist
+func getOnlineMappingHost(host string) (string, bool) {
+	v, exist := hostMapping[host]
+	return v, exist
 }
 
-func InitDirect() error {
-	if enable, exist := common.Cfg.GetIntProperty("Direct", "AutoHostEnable"); exist {
+func lookupHostPort(hostport string) string {
+	if !hostsEnable {
+		return hostport
+	}
+	host, port, err := net.SplitHostPort(hostport)
+	if nil != err {
+		return hostport
+	}
+	if v, exist := hostMapping[host]; exist {
+		return net.JoinHostPort(v, port)
+	}
+	addrs, err := godns.LookupHost(host, &godns.LookupOptions{DNSServers: trustedDNS, Cache: true})
+	if nil == err && len(addrs) > 0 {
+		return net.JoinHostPort(addrs[0], port)
+	}
+	return hostport
+}
+
+func needInjectCRLF(host string) bool {
+	for _, regex := range injectCRLFPatterns {
+		if regex.MatchString(host) {
+			return true
+		}
+	}
+	return false
+}
+
+func InitHosts() error {
+	if enable, exist := common.Cfg.GetIntProperty("Hosts", "Enable"); exist {
 		if enable == 0 {
-			autoHostEnable = false
+			hostsEnable = false
 			return nil
 		}
 	}
-	autoHostEnable = true
+	hostsEnable = true
 	log.Println("Init AutoHost.")
-	connTimeoutSecs = 3000 * time.Millisecond
-	//RegisteRemoteConnManager(manager)
-	if tmp, exist := common.Cfg.GetIntProperty("Direct", "ConnectTimeout"); exist {
-		autoConnTimeoutSecs = time.Duration(tmp) * time.Millisecond
+	if dnsserver, exist := common.Cfg.GetProperty("Hosts", "TrustedDNS"); exist {
+		trustedDNS = strings.Split(dnsserver, "|")
 	}
+
+	if pattern, exist := common.Cfg.GetProperty("Hosts", "InjectCRLF"); exist {
+		ps := strings.Split(pattern, "|")
+		for _, p := range ps {
+			originrule := p
+			p = strings.TrimSpace(p)
+			p = strings.Replace(p, ".", "\\.", -1)
+			p = strings.Replace(p, "*", ".*", -1)
+			reg, err := regexp.Compile(p)
+			if nil != err {
+				log.Printf("[ERROR]Invalid pattern:%s for reason:%v\n", originrule, err)
+			} else {
+				injectCRLFPatterns = append(injectCRLFPatterns, reg)
+			}
+		}
+	}
+
 	repoUrls = make([]string, 0)
 	index := 0
 	for {
-		v, exist := common.Cfg.GetProperty("Direct", "HostRepo["+strconv.Itoa(index)+"]")
+		v, exist := common.Cfg.GetProperty("Hosts", "HostsRepo["+strconv.Itoa(index)+"]")
 		if !exist || len(v) == 0 {
 			break
 		}
 		repoUrls = append(repoUrls, v)
 		index++
 	}
-	go loadHostFile()
+	if index > 0 {
+		go loadHostFile()
+	}
 	return nil
 }

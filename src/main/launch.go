@@ -30,7 +30,7 @@ func main() {
 	common.InitConfig()
 	proxy.InitSpac()
 	proxy.InitGoogle()
-	proxy.InitDirect()
+	proxy.InitHosts()
 	var gae proxy.GAE
 	var c4 proxy.C4
 	err = gae.Init()

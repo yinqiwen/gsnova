@@ -27,8 +27,8 @@ const (
 	GOOGLE_HTTP_NAME  = "GoogleHttp"
 	GOOGLE_HTTPS_NAME = "GoogleHttps"
 	FORWARD_NAME      = "Forward"
-//	AUTOHOST_NAME     = "AutoHost"
-	DIRECT_NAME       = "Direct"
+	//	AUTOHOST_NAME     = "AutoHost"
+	DIRECT_NAME = "Direct"
 
 	MODE_HTTP    = "http"
 	MODE_HTTPS   = "httpS"
@@ -55,7 +55,6 @@ type SessionConnection struct {
 	RemoteConn      RemoteConnection
 	State           uint32
 	Type            uint32
-	
 }
 
 func newSessionConnection(sessionId uint32, conn net.Conn, reader *bufio.Reader) *SessionConnection {
@@ -65,30 +64,48 @@ func newSessionConnection(sessionId uint32, conn net.Conn, reader *bufio.Reader)
 	session_conn.SessionID = sessionId
 	session_conn.State = STATE_RECV_HTTP
 	session_conn.Type = HTTP_TUNNEL
-    
+
 	return session_conn
+}
+
+func (session *SessionConnection) tryProxy(proxies []RemoteConnectionManager, ev *event.HTTPRequestEvent) error {
+	for _, proxy := range proxies {
+		session.RemoteConn, _ = proxy.GetRemoteConnection(ev)
+		err, _ := session.RemoteConn.Request(session, ev)
+		if nil == err {
+			return nil
+		} else {
+			log.Printf("[WARN]Failed to request proxy event for reason:%v", err)
+		}
+	}
+	return errors.New("No proxy found")
 }
 
 func (session *SessionConnection) processHttpEvent(ev *event.HTTPRequestEvent) error {
 	ev.SetHash(session.SessionID)
-	proxy, exist := SelectProxy(ev.RawReq)
-	if !exist {
-		return errors.New("No proxy found")
-	}
+	proxies := SelectProxy(ev.RawReq)
+
 	var err error
 	if nil == session.RemoteConn {
-		session.RemoteConn, err = proxy.GetRemoteConnection(ev)
+		err = session.tryProxy(proxies, ev)
 	} else {
 		rmanager := session.RemoteConn.GetConnectionManager()
-		if rmanager.GetName() != proxy.GetName() {
+		matched := false
+		for _, proxy := range proxies {
+			if rmanager.GetName() == proxy.GetName() {
+				matched = true
+				break
+			}
+		}
+		if !matched {
 			session.RemoteConn.Close()
-			session.RemoteConn, err = proxy.GetRemoteConnection(ev)
+			err = session.tryProxy(proxies, ev)
 		}
 	}
 
-	err, _ = session.RemoteConn.Request(session, ev)
-	if nil == err {
-
+	if nil != err {
+		session.LocalRawConn.Write([]byte("HTTP/1.1 500 Internal Server Error\r\n\r\n"))
+		session.LocalRawConn.Close()
 	}
 	return nil
 }

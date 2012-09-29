@@ -24,25 +24,28 @@ type ForwardConnection struct {
 func (conn *ForwardConnection) Close() error {
 	if nil != conn.forward_conn {
 		conn.forward_conn.Close()
-		conn.forward_conn = nil
 	}
 	return nil
 }
 
-func (conn *ForwardConnection) initForwardConn(proxyAddr string) {
+func (conn *ForwardConnection) initForwardConn(proxyAddr string) error {
 	if nil != conn.forward_conn && conn.proxyAddr == proxyAddr {
-		return
+		return nil
 	}
 	conn.Close()
 	var err error
 	conn.conn_url, err = url.Parse(conn.manager.target)
 	if nil != err {
-		return
+		return err
 	}
 	if !strings.Contains(proxyAddr, ":") {
 		proxyAddr = proxyAddr + ":80"
 	}
 	addr := conn.conn_url.Host
+	if !conn.manager.overProxy {
+		addr = lookupHostPort(addr)
+	}
+
 	isSocks := strings.HasPrefix(strings.ToLower(conn.conn_url.Scheme), "socks")
 	if !isSocks {
 		conn.forward_conn, err = net.DialTimeout("tcp", addr, 2*time.Second)
@@ -59,9 +62,11 @@ func (conn *ForwardConnection) initForwardConn(proxyAddr string) {
 	}
 	if nil != err {
 		log.Printf("Failed to dial address:%s for reason:%s\n", addr, err.Error())
+		return err
 	} else {
 		conn.proxyAddr = proxyAddr
 	}
+	return nil
 }
 
 func (conn *ForwardConnection) GetConnectionManager() RemoteConnectionManager {
@@ -101,12 +106,12 @@ func (auto *ForwardConnection) Request(conn *SessionConnection, ev event.Event) 
 	switch ev.GetType() {
 	case event.HTTP_REQUEST_EVENT_TYPE:
 		req := ev.(*event.HTTPRequestEvent)
-		auto.initForwardConn(req.RawReq.Host)
+		err = auto.initForwardConn(req.RawReq.Host)
 		if nil == auto.forward_conn {
 			log.Printf("Failed to connect forward proxy.\n")
-			conn.LocalRawConn.Write([]byte("HTTP/1.1 500 Internal Server Error\r\n\r\n"))
-			conn.LocalRawConn.Close()
-			return io.EOF, nil
+			//conn.LocalRawConn.Write([]byte("HTTP/1.1 500 Internal Server Error\r\n\r\n"))
+			//conn.LocalRawConn.Close()
+			return err, nil
 		}
 		if conn.Type == HTTPS_TUNNEL {
 			log.Printf("Session[%d]Request URL:%s %s\n", ev.GetHash(), req.RawReq.Method, req.RawReq.RequestURI)
@@ -119,6 +124,9 @@ func (auto *ForwardConnection) Request(conn *SessionConnection, ev event.Event) 
 			conn.State = STATE_SESSION_CLOSE
 		} else {
 			log.Printf("Session[%d]Request URL:%s %s\n", ev.GetHash(), req.RawReq.Method, req.RawReq.RequestURI)
+			if !auto.manager.overProxy && needInjectCRLF(req.RawReq.Host) {
+				auto.forward_conn.Write([]byte("\r\n\r\n"))
+			}
 			err := auto.writeHttpRequest(req.RawReq)
 			if nil != err {
 				return err, nil
@@ -164,4 +172,3 @@ func (manager *Forward) GetRemoteConnection(ev event.Event) (RemoteConnection, e
 	g.Close()
 	return g, nil
 }
-
