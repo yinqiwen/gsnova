@@ -2,13 +2,13 @@ package util
 
 import (
 	"fmt"
-	"net"
+	//"net"
 	"os"
 	"testing"
 )
 
 func TestNet(t *testing.T) {
-	
+
 	v := IPv42Int("10.10.10.10")
 	ip := Long2IPv4(v)
 	if ip != "10.10.10.10" {
@@ -16,6 +16,10 @@ func TestNet(t *testing.T) {
 		t.Error("Failed to conv ip to int:")
 	}
 	t.Error("####")
+}
+
+func TestLocalIP(t *testing.T) {
+	t.Error("####" + GetLocalIP())
 }
 
 func TestIni(t *testing.T) {

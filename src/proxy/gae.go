@@ -14,8 +14,10 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
+	"time"
 	"util"
 )
 
@@ -24,18 +26,183 @@ const (
 )
 
 type GAEConfig struct {
-	Compressor           uint32
-	Encrypter            uint32
-	InjectRange          []string
-	UA                   string
-	ConnectionMode       string
-	ConnectionPoolSize   uint32
-	FetchLimitSize       uint32
-	RangeFetchRetryLimit uint32
-	MasterAppID          string
+	Compressor             uint32
+	Encrypter              uint32
+	InjectRange            []*regexp.Regexp
+	UA                     string
+	ConnectionMode         string
+	ConnectionPoolSize     uint32
+	FetchLimitSize         uint32
+	RangeFetchRetryLimit   uint32
+	MasterAppID            string
+	ConcurrentRangeFetcher uint32
 }
 
 var gae_cfg *GAEConfig
+var gae_enable bool
+
+//var pipeliningConns = make(map[string]*util.ListSelector)
+//var pipelineEventChannels = make(map[uint32]chan event.Event)
+//var conChannellk sync.Mutex
+//var pconnslk sync.Mutex
+//
+//func addPipeliningChannelMapping(hash uint32, ch chan event.Event) {
+//	conChannellk.Lock()
+//	pipelineEventChannels[hash] = ch
+//	conChannellk.Unlock()
+//}
+//
+//func getPipeliningChannelMapping(hash uint32) (chan event.Event, bool) {
+//	conChannellk.Lock()
+//	ch, exist := pipelineEventChannels[hash]
+//	conChannellk.Unlock()
+//	return ch, exist
+//}
+//
+//func removePipeliningChannelMapping(hash uint32) {
+//	conChannellk.Lock()
+//	delete(pipelineEventChannels, hash)
+//	conChannellk.Unlock()
+//}
+//
+//type pipeliningConn struct {
+//	conn     net.Conn
+//	dialfunc func(n, addr string) (net.Conn, error)
+//	addrfunc func() string
+//	clk      sync.Mutex
+//	wlk      sync.Mutex
+//	rlk      sync.Mutex
+//}
+//
+//func (pconn *pipeliningConn) getConn() {
+//	pconn.clk.Lock()
+//	if nil == pconn.conn {
+//		var err error
+//		pconn.conn, err = pconn.dialfunc("tcp", pconn.addrfunc())
+//		if nil != err {
+//			//try again
+//			pconn.conn, err = pconn.dialfunc("tcp", pconn.addrfunc())
+//		}
+//	}
+//	pconn.clk.Unlock()
+//}
+//
+//func (pconn *pipeliningConn) doReq(req *http.Request, hash uint32, ch chan event.Event) (ev event.Event, err error) {
+//	pconn.getConn()
+//	if nil == pconn.conn {
+//		return nil, err
+//	}
+//	pconn.wlk.Lock()
+//	err = req.Write(pconn.conn)
+//	pconn.wlk.Unlock()
+//	if nil != err {
+//		pconn.getConn()
+//		if nil != pconn.conn {
+//			pconn.wlk.Lock()
+//			err = req.Write(pconn.conn)
+//			pconn.wlk.Unlock()
+//		}
+//	}
+//	if nil != err {
+//		return nil, err
+//	}
+//	pipelineEventChannels[hash] = ch
+//	pconn.rlk.Lock()
+//	var resp *http.Response
+//	resp, err = http.ReadResponse(bufio.NewReader(pconn.conn), req)
+//	var buf *bytes.Buffer
+//	if nil == err {
+//		content := make([]byte, resp.ContentLength)
+//		n, _ := io.ReadFull(resp.Body, content)
+//		if int64(n) < resp.ContentLength {
+//			return nil, errors.New("No sufficient space in body.")
+//		}
+//		resp.Body.Close()
+//		buf = bytes.NewBuffer(content[0:resp.ContentLength])
+//	}
+//	pconn.rlk.Unlock()
+//	var tags event.EventHeaderTags
+//	if nil != buf {
+//		if !tags.Decode(buf) {
+//			return nil, errors.New("Failed to decode event tag")
+//		}
+//		err, ev = event.DecodeEvent(buf)
+//		if nil == err {
+//			ev = event.ExtractEvent(ev)
+//		}
+//	}
+//	if nil != ev && ev.GetHash() == hash {
+//		removePipeliningChannelMapping(ev.GetHash())
+//		return ev, nil
+//	} else {
+//		if nil != ev {
+//			if otherChannel, exist := getPipeliningChannelMapping(ev.GetHash()); exist {
+//				otherChannel <- ev
+//			}
+//		}
+//		select {
+//		case rev := <-ch:
+//			if nil == ev {
+//				return
+//			}
+//			if rev.GetHash() != hash {
+//				log.Printf("[ERROR]Unexpected response with hash:%u while request has hash:%u\n", rev.GetHash(), hash)
+//			}
+//			removePipeliningChannelMapping(hash)
+//			return rev, nil
+//		}
+//	}
+//	return
+//}
+//
+//func getPipeliningConn(appid string) *pipeliningConn {
+//	sslDial := func(n, addr string) (net.Conn, error) {
+//		conn, err := net.Dial(n, addr)
+//		if err != nil {
+//			return nil, err
+//		}
+//		tlcfg := &tls.Config{}
+//		tlcfg.InsecureSkipVerify = true
+//		return tls.Client(conn, tlcfg), nil
+//	}
+//	pconnslk.Lock()
+//	defer pconnslk.Unlock()
+//	if conn_selector, exist := pipeliningConns[appid]; !exist {
+//		conn_selector = new(util.ListSelector)
+//		host := appid + ".appspot.com"
+//		port := "80"
+//		dial := net.Dial
+//		addr := func() string {
+//			return net.JoinHostPort(host, port)
+//		}
+//		proxyInfo, exist := common.Cfg.GetProperty("LocalProxy", "Proxy")
+//		if exist {
+//			host, port = util.GetHostPort(proxyInfo)
+//			if strings.HasPrefix(proxyInfo, "https") {
+//				dial = sslDial
+//			}
+//			addr = func() string {
+//				return net.JoinHostPort(util.GetHostPort(proxyInfo))
+//			}
+//		} else {
+//			if mode, exist := common.Cfg.GetProperty("GAE", "ConnectionMode"); exist {
+//				port = "443"
+//				if strings.EqualFold(mode, MODE_HTTPS) {
+//					dial = sslDial
+//				}
+//			}
+//
+//		}
+//		for i := 0; i < 5; i++ {
+//			conn_selector.Add(&pipeliningConn{dialfunc: dial, addrfunc: addr})
+//		}
+//		pipeliningConns[appid] = conn_selector
+//		return conn_selector.Select().(*pipeliningConn)
+//	} else {
+//		return conn_selector.Select().(*pipeliningConn)
+//	}
+//	return nil
+//}
 
 type GAEAuth struct {
 	appid  string
@@ -66,17 +233,25 @@ func (auth *GAEAuth) parse(line string) error {
 	return nil
 }
 
+//type rangeChunk struct {
+//	start   int
+//	content []byte
+//}
+
 type GAEHttpConnection struct {
-	auth        GAEAuth
-	authToken   string
-	client      *http.Client
-	remote_conn net.Conn
-	manager     *GAE
-	proxyURL    *url.URL
-	rangeStart  int
+	auth              GAEAuth
+	authToken         string
+	client            *http.Client
+	remote_conn       net.Conn
+	manager           *GAE
+	proxyURL          *url.URL
+	rangeStart        int
+	rangeFetchChannel chan *rangeChunk
+	closed            bool
 }
 
 func (gae *GAEHttpConnection) Close() error {
+	gae.closed = true
 	return nil
 }
 
@@ -91,18 +266,28 @@ func (conn *GAEHttpConnection) initHttpClient() {
 	conn.client = new(http.Client)
 	tlcfg := &tls.Config{}
 	tlcfg.InsecureSkipVerify = true
-	var dial func(n, addr string) (net.Conn, error)
-	sslDial := func(n, addr string) (net.Conn, error) {
-		conn, err := net.Dial(n, addr)
+
+	dial := func(n, addr string) (net.Conn, error) {
+		conn, err := net.DialTimeout(n, addr, 2*time.Second)
 		if err != nil {
 			return nil, err
 		}
+		//conn.SetReadDeadline(time.Now().Add(time.Second * 30))
+		return conn, err
+	}
+
+	sslDial := func(n, addr string) (net.Conn, error) {
+		conn, err := net.DialTimeout(n, addr, 2*time.Second)
+		if err != nil {
+			return nil, err
+		}
+		//conn.SetReadDeadline(time.Now().Add(time.Second * 30))
 		return tls.Client(conn, tlcfg), nil
 	}
 	proxyInfo, exist := common.Cfg.GetProperty("LocalProxy", "Proxy")
 	if exist {
 		proxy := util.GetUrl(proxyInfo)
-		log.Printf("GAE use proxy:%s\n", proxy)
+		//log.Printf("GAE use proxy:%s\n", proxy)
 		if strings.HasPrefix(proxyInfo, "https") {
 			dial = sslDial
 		}
@@ -168,18 +353,22 @@ func (conn *GAEHttpConnection) Auth() error {
 
 func (gae *GAEHttpConnection) requestEvent(conn *SessionConnection, ev event.Event) (err error, res event.Event) {
 	gae.initHttpClient()
-	domain := gae.auth.appid + ".appspot.com"
-	if strings.Contains(gae.auth.appid, ".") {
-		domain = gae.auth.appid
+	auth := &gae.auth
+	//	if gae_cfg.PipeliningEnable && ev.GetType() == event.HTTP_REQUEST_EVENT_TYPE {
+	//		auth = gae.manager.auths.Select().(*GAEAuth)
+	//	}
+	domain := auth.appid + ".appspot.com"
+	if strings.Contains(auth.appid, ".") {
+		domain = auth.appid
 	}
-	addr := util.GetHost(domain)
+	addr, _ := util.GetHostMapping(domain)
 	scheme := MODE_HTTP
 	if strings.EqualFold(MODE_HTTPS, gae_cfg.ConnectionMode) {
 		scheme = MODE_HTTPS
 	}
 	var buf bytes.Buffer
 	var tags event.EventHeaderTags
-	tags.Token = gae.authToken
+	tags.Token = auth.token
 	tags.Encode(&buf)
 	if ev.GetType() == event.HTTP_REQUEST_EVENT_TYPE {
 		var compress event.CompressEvent
@@ -211,16 +400,16 @@ func (gae *GAEHttpConnection) requestEvent(conn *SessionConnection, ev event.Eve
 		req.Header.Set("User-Agent", gae_cfg.UA)
 	}
 	req.Close = false
-	//req.Header.Set("Connection", "close")
 	req.Header.Set("Connection", "keep-alive")
-	req.Header.Set("Content-Type", "application/octet-stream")
-	//log.Println(gae.auth)
-	if response, err := gae.client.Do(req); nil != err {
+	req.Header.Set("Content-Type", "image/jpeg")
+	var response *http.Response
+	response, err = gae.client.Do(req)
+	if nil != err {
 		log.Printf("Failed to request data from GAE:%s for:%s\n", domain, err.Error())
 		return err, nil
 	} else {
 		if response.StatusCode != 200 {
-			log.Printf("Invalid response:%d\n", response.StatusCode)
+			log.Printf("Session[%d]Invalid response:%d\n", ev.GetHash(), response.StatusCode)
 			return errors.New("Invalid response"), nil
 		} else {
 			//log.Printf("Response with content len:%d\n", response.ContentLength)
@@ -233,9 +422,6 @@ func (gae *GAEHttpConnection) requestEvent(conn *SessionConnection, ev event.Eve
 				return err, nil
 			}
 			response.Body.Close()
-			//			//trigger EOF to recycle idle conn in net.http
-			//			tmp := make([]byte, 1)
-			//			response.Body.Read(tmp)
 
 			buf := bytes.NewBuffer(content[0:response.ContentLength])
 			if !tags.Decode(buf) {
@@ -249,69 +435,166 @@ func (gae *GAEHttpConnection) requestEvent(conn *SessionConnection, ev event.Eve
 			buf = nil
 			return err, res
 		}
+		//		}
 	}
+
 	return nil, nil
 }
 
-func (gae *GAEHttpConnection) handleHttpRes(conn *SessionConnection, req *event.HTTPRequestEvent, ev *event.HTTPResponseEvent) error {
-	contentRange := ev.GetHeader("Content-Range")
-	if len(contentRange) > 0 {
-		httpres := ev.ToResponse()
-		httpres.Header.Del("Content-Range")
-		startpos, endpos, length := util.ParseContentRangeHeaderValue(contentRange)
-		httpres.ContentLength = int64(length - gae.rangeStart)
-		httpres.Write(conn.LocalRawConn)
-		for endpos < length-1 {
-			startpos = endpos + 1
-			endpos = endpos + int(gae_cfg.FetchLimitSize)
-			if endpos >= length-1 {
-				endpos = length - 1
-			}
-			req.SetHeader("Range", fmt.Sprintf("bytes=%d-%d", startpos, endpos))
-			err, rangeres := gae.requestEvent(nil, req)
-			//try again
-			if nil != err {
-				err, rangeres = gae.requestEvent(nil, req)
-			}
-			if nil != err {
-				return err
-			}
-			rangeHttpRes := rangeres.(*event.HTTPResponseEvent)
-			if rangeHttpRes.Status == 302 {
-				location := rangeHttpRes.GetHeader("Location")
-				xrange := rangeHttpRes.GetHeader("X-Range")
-				if len(location) > 0 && len(xrange) > 0 {
-					req.Url = location
-					req.SetHeader("Range", xrange)
-					err, rangeres = gae.requestEvent(nil, req)
-					if nil != err {
-						return err
-					}
+func (gae *GAEHttpConnection) rangeFetch(req *event.HTTPRequestEvent, index, startpos, limit int) {
+	clonereq := req.DeepClone()
+	for startpos < limit-1 && !gae.closed {
+		endpos := startpos + int(gae_cfg.FetchLimitSize) - 1
+		if endpos > limit {
+			endpos = limit
+		}
+		log.Printf("Session[%d]Fetch[%d] range chunk[%d:%d-%d]from %s", req.GetHash(), index, startpos, endpos, limit, clonereq.Url)
+		clonereq.SetHeader("Range", fmt.Sprintf("bytes=%d-%d", startpos, endpos))
+		err, rangeres := gae.requestEvent(nil, clonereq)
+		//try again
+		if nil != err {
+			err, rangeres = gae.requestEvent(nil, clonereq)
+		}
+		if nil != err {
+			log.Printf("Failed to fetch range chunk[%d:%d-%d] from %s for reason:%v", startpos, endpos, limit, clonereq.Url, err)
+			gae.Close()
+			break
+		}
+		rangeHttpRes, ok := rangeres.(*event.HTTPResponseEvent)
+		if !ok {
+			gae.Close()
+			break
+		}
+		if rangeHttpRes.Status == 302 {
+			location := rangeHttpRes.GetHeader("Location")
+			xrange := rangeHttpRes.GetHeader("X-Range")
+			if len(location) > 0 && len(xrange) > 0 {
+				clonereq.Url = location
+				clonereq.SetHeader("Range", xrange)
+				err, rangeres = gae.requestEvent(nil, clonereq)
+				if nil != err {
+					err, rangeres = gae.requestEvent(nil, clonereq)
+				}
+				if nil != err {
+					log.Printf("Failed to fetch range chunk[%s] from %s for reason:%v", xrange, clonereq.Url, err)
+					break
+				}
+				rangeHttpRes, ok = rangeres.(*event.HTTPResponseEvent)
+				if !ok {
+					gae.Close()
+					break
 				}
 			}
-			_, err = conn.LocalRawConn.Write(rangeres.(*event.HTTPResponseEvent).Content.Bytes())
-			rangeres.(*event.HTTPResponseEvent).Content.Reset()
-			rangeres = nil
-			if nil != err {
-				return err
+		}
+		chunk := &rangeChunk{}
+		chunk.start = startpos
+		chunk.content = rangeHttpRes.Content.Bytes()
+		gae.rangeFetchChannel <- chunk
+		startpos = startpos + int(gae_cfg.FetchLimitSize*gae_cfg.ConcurrentRangeFetcher)
+	}
+	//end
+	if !gae.closed {
+		log.Printf("Session[%d]Fetch[%d] close successfully", req.GetHash(), index)
+	} else {
+		log.Printf("Session[%d]Fetch[%d] close abnormally", req.GetHash(), index)
+	}
+	gae.rangeFetchChannel <- &rangeChunk{start: -1}
+}
+
+func (gae *GAEHttpConnection) handleHttpRes(conn *SessionConnection, req *event.HTTPRequestEvent, ev *event.HTTPResponseEvent, rangeHeader string) error {
+	httpres := ev.ToResponse()
+	contentRange := ev.GetHeader("Content-Range")
+	limit := 0
+	if len(contentRange) > 0 {
+		httpres.Header.Del("Content-Range")
+		_, endpos, length := util.ParseContentRangeHeaderValue(contentRange)
+		limit = length - 1
+		if httpres.StatusCode < 300 {
+			if len(rangeHeader) == 0 {
+				httpres.StatusCode = 200
+				httpres.Status = ""
+				httpres.ContentLength = int64(length - gae.rangeStart)
+			} else {
+				start, end := util.ParseRangeHeaderValue(rangeHeader)
+				if end == -1 {
+					httpres.ContentLength = int64(length - start)
+				} else {
+					httpres.ContentLength = int64(end - start + 1)
+					limit = end
+				}
+				httpres.Header.Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d\r\n", start, (int64(start)+httpres.ContentLength-1), length))
+			}
+		}
+
+		if httpres.StatusCode >= 300 {
+			httpres.Write(conn.LocalRawConn)
+			//conn.LocalRawConn.Close()
+			return nil
+		}
+		if endpos < limit {
+			if nil == gae.rangeFetchChannel {
+				gae.rangeFetchChannel = make(chan *rangeChunk, 10)
+			}
+			for i := 0; i < int(gae_cfg.ConcurrentRangeFetcher); i++ {
+				go gae.rangeFetch(req, i, endpos+1+i*int(gae_cfg.FetchLimitSize), limit)
+			}
+			//write response after launch goroutines
+			httpres.Write(conn.LocalRawConn)
+			responsedChunks := make(map[int]*rangeChunk)
+			stopedWorker := uint32(0)
+			expectedPos := endpos + 1
+			for {
+				select {
+				case chunk := <-gae.rangeFetchChannel:
+					if nil != chunk {
+						if chunk.start < 0 {
+							stopedWorker = stopedWorker + 1
+						} else {
+							responsedChunks[chunk.start] = chunk
+						}
+					}
+					for {
+						if chunk, exist := responsedChunks[expectedPos]; exist {
+							_, err := conn.LocalRawConn.Write(chunk.content)
+							delete(responsedChunks, expectedPos)
+							if nil != err {
+								log.Printf("????????????????????????????%v\n", err)
+								conn.LocalRawConn.Close()
+								gae.Close()
+								//return err
+							} else {
+								expectedPos = expectedPos + len(chunk.content)
+							}
+
+						} else {
+							break
+						}
+					}
+
+					if stopedWorker >= gae_cfg.ConcurrentRangeFetcher {
+						close(gae.rangeFetchChannel)
+						gae.rangeFetchChannel = nil
+						if len(responsedChunks) > 0 {
+							log.Printf("Session[%d]Rest %d unwrite chunks.\n", req.GetHash(), len(responsedChunks))
+						}
+						break
+					}
+				}
 			}
 		}
 		return nil
 	}
-
-	httpres := ev.ToResponse()
-	//log.Println(httpres.Header)
 	err := httpres.Write(conn.LocalRawConn)
-	httpres = nil
 	return err
 }
 
 func (gae *GAEHttpConnection) Request(conn *SessionConnection, ev event.Event) (err error, res event.Event) {
+	gae.closed = false
 	if ev.GetType() == event.HTTP_REQUEST_EVENT_TYPE {
 		httpreq := ev.(*event.HTTPRequestEvent)
 		if strings.EqualFold(httpreq.Method, "CONNECT") {
-			log.Printf("Request %s %s\n", httpreq.Method, httpreq.RawReq.RequestURI)
-			conn.LocalRawConn.Write([]byte("HTTP/1.1 200 OK\r\n\r\n"))
+			log.Printf("Session[%d]Request %s %s\n", httpreq.GetHash(), httpreq.Method, httpreq.RawReq.RequestURI)
+			conn.LocalRawConn.Write([]byte("HTTP/1.1 200 Connection established\r\n\r\n"))
 			tlscfg, err := common.TLSConfig(httpreq.GetHeader("Host"))
 			if nil != err {
 				return err, nil
@@ -345,16 +628,17 @@ func (gae *GAEHttpConnection) Request(conn *SessionConnection, ev event.Event) (
 				}
 			} else {
 				//inject range header
-				for _, host_pattern := range gae_cfg.InjectRange {
-					if strings.Contains(httpreq.RawReq.Host, host_pattern) {
-						httpreq.SetHeader("Range", "bytes=0-"+strconv.Itoa(int(gae_cfg.FetchLimitSize-1)))
-						break
-					}
+				if hostPatternMatched(gae_cfg.InjectRange, httpreq.RawReq.Host) {
+					httpreq.SetHeader("Range", "bytes=0-"+strconv.Itoa(int(gae_cfg.FetchLimitSize-1)))
 				}
 			}
-
-			log.Printf("Request %s %s%s\n", httpreq.Method, httpreq.RawReq.Host, httpreq.RawReq.RequestURI)
+			if strings.HasPrefix(httpreq.RawReq.RequestURI, "http://") {
+				log.Printf("Session[%d]Request %s %s\n", httpreq.GetHash(), httpreq.Method, httpreq.RawReq.RequestURI)
+			} else {
+				log.Printf("Session[%d]Request %s %s%s\n", httpreq.GetHash(), httpreq.Method, httpreq.RawReq.Host, httpreq.RawReq.RequestURI)
+			}
 			//httpreq.SetHeader("Connection", "Close")
+			httpreq.RemoveHeader("Proxy-Connection")
 			err, res = gae.requestEvent(conn, ev)
 			if nil != err {
 				return
@@ -362,7 +646,11 @@ func (gae *GAEHttpConnection) Request(conn *SessionConnection, ev event.Event) (
 			conn.State = STATE_RECV_HTTP
 			if nil != conn {
 				httpres := res.(*event.HTTPResponseEvent)
-				gae.handleHttpRes(conn, httpreq, httpres)
+				if httpres.Status == 403 {
+					log.Printf("ERROR:Session[%d]Request %s %s is forbidon\n", httpreq.GetHash(), httpreq.Method, httpreq.RawReq.Host)
+					log.Printf("ERROR:Session[%d]Refer : %s\n", httpreq.GetHash(), httpreq.RawReq.Referer())
+				}
+				gae.handleHttpRes(conn, httpreq, httpres, rangeHeader)
 				//if !httpres.IsKeepAlive(){
 				if conn.Type == HTTPS_TUNNEL {
 					conn.LocalRawConn.Close()
@@ -445,25 +733,30 @@ func initGAEConfig() {
 	if poosize, exist := common.Cfg.GetIntProperty("GAE", "ConnectionPoolSize"); exist {
 		gae_cfg.ConnectionPoolSize = uint32(poosize)
 	}
-	//	gae_cfg.ConcurrentRangeFetcher = 3
-	//	if fetcher, exist := common.Cfg.GetIntProperty("GAE", "ConcurrentRangeFetcher"); exist {
-	//		gae_cfg.ConcurrentRangeFetcher = uint32(fetcher)
-	//	}
+	gae_cfg.ConcurrentRangeFetcher = 5
+	if fetcher, exist := common.Cfg.GetIntProperty("GAE", "RangeConcurrentFetcher"); exist {
+		gae_cfg.ConcurrentRangeFetcher = uint32(fetcher)
+	}
 	gae_cfg.FetchLimitSize = 256000
-	if limit, exist := common.Cfg.GetIntProperty("GAE", "FetchLimitSize"); exist {
+	if limit, exist := common.Cfg.GetIntProperty("GAE", "RangeFetchLimitSize"); exist {
 		gae_cfg.FetchLimitSize = uint32(limit)
 	}
 	gae_cfg.RangeFetchRetryLimit = 1
 	if limit, exist := common.Cfg.GetIntProperty("GAE", "RangeFetchRetryLimit"); exist {
 		gae_cfg.RangeFetchRetryLimit = uint32(limit)
 	}
+	gae_cfg.InjectRange = []*regexp.Regexp{}
 	if ranges, exist := common.Cfg.GetProperty("GAE", "InjectRange"); exist {
-		gae_cfg.InjectRange = strings.Split(ranges, "|")
+		gae_cfg.InjectRange = initHostMatchRegex(ranges)
 	}
 	gae_cfg.MasterAppID = "snova-master"
 	if master, exist := common.Cfg.GetProperty("GAE", "MasterAppID"); exist {
 		gae_cfg.MasterAppID = master
 	}
+	//	gae_cfg.PipeliningEnable = true
+	//	if enable, exist := common.Cfg.GetBoolProperty("GAE", "PipeliningEnable"); exist {
+	//		gae_cfg.PipeliningEnable = enable
+	//	}
 }
 
 func (manager *GAE) fetchSharedAppIDs() (error, []string) {
@@ -488,6 +781,7 @@ func (manager *GAE) fetchSharedAppIDs() (error, []string) {
 
 func (manager *GAE) Init() error {
 	if enable, exist := common.Cfg.GetIntProperty("GAE", "Enable"); exist {
+		gae_enable = (enable != 0)
 		if enable == 0 {
 			return nil
 		}
@@ -532,6 +826,7 @@ func (manager *GAE) Init() error {
 		conn.manager = manager
 		if err := conn.Auth(); nil != err {
 			log.Printf("Failed to auth appid:%s\n", err.Error())
+			gae_enable = false
 			return err
 		}
 		auth.token = conn.authToken

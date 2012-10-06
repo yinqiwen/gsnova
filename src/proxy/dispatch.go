@@ -28,7 +28,8 @@ const (
 	GOOGLE_HTTPS_NAME = "GoogleHttps"
 	FORWARD_NAME      = "Forward"
 	//	AUTOHOST_NAME     = "AutoHost"
-	DIRECT_NAME = "Direct"
+	DIRECT_NAME  = "Direct"
+	DEFAULT_NAME = "Default"
 
 	MODE_HTTP    = "http"
 	MODE_HTTPS   = "httpS"
@@ -75,7 +76,7 @@ func (session *SessionConnection) tryProxy(proxies []RemoteConnectionManager, ev
 		if nil == err {
 			return nil
 		} else {
-			log.Printf("[WARN]Failed to request proxy event for reason:%v", err)
+			log.Printf("Session[%d][WARN]Failed to request proxy event for reason:%v", session.SessionID, err)
 		}
 	}
 	return errors.New("No proxy found")
@@ -83,8 +84,10 @@ func (session *SessionConnection) tryProxy(proxies []RemoteConnectionManager, ev
 
 func (session *SessionConnection) processHttpEvent(ev *event.HTTPRequestEvent) error {
 	ev.SetHash(session.SessionID)
-	proxies := SelectProxy(ev.RawReq)
-
+	proxies := SelectProxy(ev.RawReq, session.LocalRawConn, session.Type == HTTPS_TUNNEL)
+	if nil == proxies {
+		return nil
+	}
 	var err error
 	if nil == session.RemoteConn {
 		err = session.tryProxy(proxies, ev)
@@ -100,10 +103,13 @@ func (session *SessionConnection) processHttpEvent(ev *event.HTTPRequestEvent) e
 		if !matched {
 			session.RemoteConn.Close()
 			err = session.tryProxy(proxies, ev)
+		} else {
+			err, _ = session.RemoteConn.Request(session, ev)
 		}
 	}
 
 	if nil != err {
+		log.Printf("Session[%d]Prcess error:%v", session.SessionID, err)
 		session.LocalRawConn.Write([]byte("HTTP/1.1 500 Internal Server Error\r\n\r\n"))
 		session.LocalRawConn.Close()
 	}
@@ -119,6 +125,7 @@ func (session *SessionConnection) processHttpChunkEvent(ev *event.HTTPChunkEvent
 }
 
 func (session *SessionConnection) process() error {
+	//log.Printf("Enter process with stat:%d", session.State)
 	switch session.State {
 	case STATE_RECV_HTTP:
 		req, err := http.ReadRequest(session.LocalBufferConn)
@@ -135,9 +142,12 @@ func (session *SessionConnection) process() error {
 				return nil
 			}
 			if err != io.EOF {
-				log.Printf("Session[%d]Failed to read http request:%v %T\n", session.SessionID, err, err)
+				log.Printf("Session[%d]Failed to read http request:%v\n", session.SessionID, err)
 			}
 			session.LocalRawConn.Close()
+			if nil != session.RemoteConn {
+				session.RemoteConn.Close()
+			}
 			session.State = STATE_SESSION_CLOSE
 		}
 	case STATE_RECV_HTTP_CHUNK:
@@ -170,7 +180,9 @@ func HandleConn(sessionId uint32, conn net.Conn) {
 	bufreader := bufio.NewReader(conn)
 	b, err := bufreader.Peek(7)
 	if nil != err {
-		log.Printf("Failed to peek data:%s\n", err.Error())
+		if err != io.EOF {
+			log.Printf("Failed to peek data:%s\n", err.Error())
+		}
 		conn.Close()
 		return
 	}

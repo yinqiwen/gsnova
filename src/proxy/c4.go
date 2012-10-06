@@ -3,14 +3,14 @@ package proxy
 import (
 	"bytes"
 	"common"
-	"encoding/binary"
+	//"encoding/binary"
 	"errors"
 	"event"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
-	"misc/upnp"
+	//"misc/upnp"
 	"net"
 	"net/http"
 	"net/url"
@@ -30,6 +30,7 @@ const (
 	SESSION_DELETING                 uint32 = 7
 )
 
+var c4_enable bool
 var logined bool
 var userToken string
 var externIP string
@@ -37,7 +38,8 @@ var sessions map[uint32]*localProxySession = make(map[uint32]*localProxySession)
 
 //var bufMap map[string]*bytes.Buffer = make(map[string]*bytes.Buffer)
 var readChanMap map[string][]chan event.Event = make(map[string][]chan event.Event)
-var rsock_conns map[string][]net.Conn = make(map[string][]net.Conn)
+
+//var rsock_conns map[string][]net.Conn = make(map[string][]net.Conn)
 
 func getRequestChan(server string, ev event.Event) chan event.Event {
 	index := int(ev.GetHash()) % len(readChanMap[server])
@@ -84,169 +86,6 @@ func (sess *localProxySession) requestEvent(ev event.Event) {
 	//log.Printf("[%d]Block enter with chan len:%d\n", sess.id, len(evch))
 	getRequestChan(sess.server, ev) <- &encrypt
 	//log.Printf("[%d]Block exit\n", sess.id)
-}
-
-func init_rsock_conn(conn net.Conn, server string) {
-	_, exist := rsock_conns[server]
-	if !exist {
-		rsock_conns[server] = make([]net.Conn, 0)
-	}
-	conns := rsock_conns[server]
-	rsock_conns[server] = append(conns, conn)
-	go rsocket_write_loop(server, len(rsock_conns[server])-1)
-}
-
-func rsocket_write_loop(server string, index int) {
-	read := readChanMap[server][index]
-	for {
-		select {
-		case ev := <-read:
-			if nil == ev {
-				return //chan closed
-			}
-			conns, exist := rsock_conns[server]
-			if !exist {
-				//discard event
-				continue
-			}
-			conn := conns[int(ev.GetHash())%len(conns)]
-			var buf bytes.Buffer
-			event.EncodeEvent(&buf, ev)
-			length := uint32(buf.Len())
-			er := binary.Write(conn, binary.BigEndian, &length)
-			if nil != er {
-				log.Printf("write len error %v\n", er)
-			}
-			//log.Printf("Write Event length is %d\n", length)
-			_, err := conn.Write(buf.Bytes())
-			if nil != err {
-
-			}
-		}
-	}
-}
-
-func rsocket_read_loop(conn net.Conn) {
-	//defer conn.Close()
-	readEvent := func(buf *bytes.Buffer, length uint32) (error, event.Event, uint32) {
-		if length == 0 {
-			if buf.Len() > 4 {
-				err := binary.Read(buf, binary.BigEndian, &length)
-				if nil != err {
-					log.Printf("read len error %v\n", err)
-				}
-			} else {
-				return errors.New("Not sufficient space"), nil, 0
-			}
-		}
-		if buf.Len() < int(length) {
-			return errors.New("Not sufficient space"), nil, length
-		}
-		//log.Printf("Read Event length is %d\n", length)
-		err, ev := event.DecodeEvent(buf)
-		return err, ev, 0
-	}
-	log.Printf("Enter rsocket conn loop\n")
-	var rserver string
-	lastEvLength := uint32(0)
-	decodebuf := &(bytes.Buffer{})
-	tmpbuf := make([]byte, 8192)
-	for {
-		n, err := conn.Read(tmpbuf)
-		if nil != err {
-			break
-		}
-		//log.Printf("Read %d bytes\n", n)
-		decodebuf.Write(tmpbuf[0:n])
-		var ev event.Event
-		for decodebuf.Len() > 0 {
-			err, ev, lastEvLength = readEvent(decodebuf, lastEvLength)
-			if nil != err {
-				//log.Printf("Read event %v\n", err)
-				break
-			}
-			if ev.GetType() == event.EVENT_RSOCKET_ACCEPTED_TYPE {
-				accept := ev.(*event.RSocketAcceptedEvent)
-				rserver = accept.Server
-				log.Printf("Recv a rsocket conn from %s\n", rserver)
-				init_rsock_conn(conn, rserver)
-			} else {
-				processRecvEvent(ev, rserver)
-			}
-		}
-		if decodebuf.Len() == 0 {
-			decodebuf.Reset()
-		}
-	}
-	conns := rsock_conns[rserver]
-	for i, it := range conns {
-		if conn == it {
-			conns = append(conns[:i], conns[i+1:]...)
-			rsock_conns[rserver] = conns
-			break
-		}
-	}
-}
-
-func rsocket_server_loop() error {
-	addr := fmt.Sprintf("0.0.0.0:%d", c4_cfg.RSocketPort)
-	tcpaddr, err := net.ResolveTCPAddr("tcp", addr)
-	if nil != err {
-		return err
-	}
-	var lp *net.TCPListener
-	lp, err = net.ListenTCP("tcp", tcpaddr)
-	if nil != err {
-		log.Fatalf("Can NOT listen on address:%s\n", addr)
-		return err
-	}
-	go func() {
-		for {
-			conn, err := lp.Accept()
-			if nil == err {
-				go rsocket_read_loop(conn)
-			}
-		}
-	}()
-
-	return nil
-}
-
-func rsocket_hb_loop(remote string) {
-	hb := func() {
-		req := &http.Request{
-			Method: "POST",
-			URL:    &url.URL{Scheme: "http", Host: remote, Path: "/rsocket"},
-			Host:   remote,
-			Header: make(http.Header),
-		}
-		req.Header.Set("UserToken", userToken)
-		req.Header.Set("RServer", remote)
-		req.Header.Set("RServerAddress", fmt.Sprintf("%s:%d", externIP, c4_cfg.RSocketPort))
-		req.Header.Set("ConnectionPoolSize", fmt.Sprintf("%d", c4_cfg.ConnectionPoolSize))
-		//log.Printf("ConnectionPoolSize=%d\n",c4_cfg.ConnectionPoolSize)
-		req.Header.Set("Connection", "close")
-
-		if len(c4_cfg.UA) > 0 {
-			req.Header.Set("User-Agent", c4_cfg.UA)
-		}
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			log.Println(err.Error())
-			return
-		}
-		if resp.StatusCode != 200 {
-			log.Printf("Unexpected response %d %s\n", resp.StatusCode, resp.Status)
-		}
-	}
-	hb()
-	tick := time.NewTicker(time.Duration(c4_cfg.RSocketHeartBeatPeriod) * time.Second)
-	for {
-		select {
-		case <-tick.C:
-			hb()
-		}
-	}
 }
 
 func http_remote_loop(remote string, index int) {
@@ -323,8 +162,7 @@ func handleRecvBody(buf *bytes.Buffer, server string, index int) {
 			} else {
 				ev = event.ExtractEvent(ev)
 				if ev.GetHash() != 0 && ev.GetType() != event.EVENT_TCP_CONNECTION_TYPE {
-					chunk := ev.(*event.TCPChunkEvent)
-					log.Printf("No session:%d found chunk[%d] for %T\n", ev.GetHash(), chunk.Sequence, ev)
+					log.Printf("No session:%d found for %T\n", ev.GetHash(), ev)
 					closeEv := &event.SocketConnectionEvent{}
 					closeEv.Status = event.TCP_CONN_CLOSED
 					closeEv.SetHash(ev.GetHash())
@@ -457,7 +295,12 @@ func (c4 *C4HttpConnection) Request(conn *SessionConnection, ev event.Event) (er
 				proxyURL, _ := url.Parse(req.Url)
 				req.Url = proxyURL.RequestURI()
 			}
-			log.Printf("Session[%d]Request %s %s%s\n", ev.GetHash(), req.Method, req.RawReq.Host, req.Url)
+			if strings.HasPrefix(req.RawReq.RequestURI, "http://") || strings.EqualFold(req.RawReq.Method, "CONNECT") {
+				log.Printf("Session[%d]Request %s %s\n", req.GetHash(), req.Method, req.RawReq.RequestURI)
+			} else {
+				log.Printf("Session[%d]Request %s %s%s\n", req.GetHash(), req.Method, req.RawReq.Host, req.RawReq.RequestURI)
+			}
+			//log.Printf("Session[%d]Request %s %s\n", ev.GetHash(), req.Method, req.Url)
 			handler.requestEvent(req)
 			if conn.State == STATE_RECV_HTTP {
 				if req.RawReq.ContentLength > 0 {
@@ -496,9 +339,6 @@ func (c4 *C4HttpConnection) GetConnectionManager() RemoteConnectionManager {
 	return c4.manager
 }
 
-type C4RSocketConnection struct {
-}
-
 type C4 struct {
 	servers *util.ListSelector
 }
@@ -523,10 +363,6 @@ func initC4Config() {
 	if ua, exist := common.Cfg.GetProperty("C4", "UserAgent"); exist {
 		c4_cfg.UA = ua
 	}
-	//	gae_cfg.ConnectionMode = "HTTP"
-	//	if cm, exist := common.Cfg.GetProperty("GAE", "ConnectionMode"); exist {
-	//		gae_cfg.ConnectionMode = cm
-	//	}
 	c4_cfg.Compressor = event.COMPRESSOR_SNAPPY
 	if compress, exist := common.Cfg.GetProperty("C4", "Compressor"); exist {
 		if strings.EqualFold(compress, "None") {
@@ -550,17 +386,7 @@ func initC4Config() {
 	}
 
 	c4_cfg.ConnectionMode = MODE_HTTP
-	if mode, exist := common.Cfg.GetProperty("C4", "ConnectionMode"); exist {
-		c4_cfg.ConnectionMode = mode
-	}
-	c4_cfg.RSocketPort = 48101
-	if port, exist := common.Cfg.GetIntProperty("C4", "RSocketPort"); exist {
-		c4_cfg.RSocketPort = uint32(port)
-	}
-	c4_cfg.RSocketHeartBeatPeriod = 60
-	if hb, exist := common.Cfg.GetIntProperty("C4", "RSocketHeartBeatPeriod"); exist {
-		c4_cfg.RSocketHeartBeatPeriod = uint32(hb)
-	}
+
 	logined = false
 	ifs, _ := net.Interfaces()
 	userToken = ifs[0].HardwareAddr.String()
@@ -569,6 +395,7 @@ func initC4Config() {
 
 func (manager *C4) Init() error {
 	if enable, exist := common.Cfg.GetIntProperty("C4", "Enable"); exist {
+		c4_enable = (enable != 0)
 		if enable == 0 {
 			return nil
 		}
@@ -579,19 +406,19 @@ func (manager *C4) Init() error {
 	RegisteRemoteConnManager(manager)
 	//manager.auths = new(util.ListSelector)
 	manager.servers = &util.ListSelector{}
-	if strings.EqualFold(c4_cfg.ConnectionMode, MODE_RSOCKET) {
-		rsocket_server_loop()
-		if util.IsPrivateIP(util.GetLocalIP()) {
-			nat, err := upnp.Discover()
-			if nil == err {
-				nat.AddPortMapping("TCP", int(c4_cfg.RSocketPort), int(c4_cfg.RSocketPort), "gsnova-c4", 3000)
-				externIP, err = nat.GetExternalIPAddress()
-			}
-			if nil != err {
-				log.Println("Failed to init C4 in Rsocket mode:%v", err)
-			}
-		}
-	}
+	//	if strings.EqualFold(c4_cfg.ConnectionMode, MODE_RSOCKET) {
+	//		rsocket_server_loop()
+	//		if util.IsPrivateIP(util.GetLocalIP()) {
+	//			nat, err := upnp.Discover()
+	//			if nil == err {
+	//				nat.AddPortMapping("TCP", int(c4_cfg.RSocketPort), int(c4_cfg.RSocketPort), "gsnova-c4", 3000)
+	//				externIP, err = nat.GetExternalIPAddress()
+	//			}
+	//			if nil != err {
+	//				log.Println("Failed to init C4 in Rsocket mode:%v", err)
+	//			}
+	//		}
+	//	}
 
 	index := 0
 	for {
@@ -608,8 +435,6 @@ func (manager *C4) Init() error {
 			for i := 0; i < int(c4_cfg.ConnectionPoolSize); i++ {
 				go http_remote_loop(v, i)
 			}
-		} else {
-			go rsocket_hb_loop(v)
 		}
 		index = index + 1
 	}

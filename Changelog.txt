@@ -1,6 +1,37 @@
 GSnova Changelog
 ===================
+Changes in version 0.16.0(2012.10.06)
+-------------------------------------------
+** Features
+   * [Hosts]:Host IP redirect support
+   * [Hosts]Redirect configed hosts' http request to https
+   * [Hosts]Use TCP DNS protocol & trusted DNS servers (based on https://github.com/yinqiwen/godns)
+   * [Hosts]Remote HTTPS DNS service support for host forward (https://github.com/yinqiwen/httpdns)
+   * [Hosts]Host file service support(https://code.google.com/p/smarthosts/)
+   * [Hosts]Support direct concurrent range fetch.
+   * [SPAC]:Support chain proxy services for one rule
+   * [SPAC]:Auto generate PAC file from GFWList & User rules
+   * [SPAC]:Provide web access for GFWList PAC(http://127.0.0.1:48100/pac/gfwlist)
+   * [GAE]:GAE cache generated SSL cert in memory
+   * [GAE]:Port concurrent range fetch support from Snova(Java)
 
+** Improvement
+   * [C4]: Remove rsocket mode
+      
+** Task
+   * NA
+
+
+Changes in version 0.15.0(2012.08.18)
+-------------------------------------------
+** Features
+   * GAE support
+   * C4 support
+   * SPAC support(simpler than Java version)
+      
+** Task
+   * NA
+   
 
 Changes in version 0.15.0beta(2012.07.18)
 -------------------------------------------

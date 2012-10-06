@@ -32,17 +32,49 @@ func isEntry(k string) bool {
 	return exist
 }
 
-func GetHost(host string) string {
+func GetHostMapping(host string) (string, bool) {
 	h, exist := mapping[host]
 	if exist {
 		t := h.Select().(string)
 		if isEntry(t) {
-			return GetHost(t)
+			t, _ = GetHostMapping(t)
+			return t, true
 		} else {
-			return t
+			return t, true
 		}
 	}
-	return host
+	return host, false
+}
+
+//func GetHost(host string) string {
+//	h, exist := mapping[host]
+//	if exist {
+//		t := h.Select().(string)
+//		if isEntry(t) {
+//			return GetHost(t)
+//		} else {
+//			return t
+//		}
+//	}
+//	return host
+//}
+
+func GetHostPort(addr string) (string, string) {
+	//fmt.Printf("###%s\n", addr)
+	l, err := url.Parse(addr)
+	if nil != err {
+		return addr, "80"
+	}
+	//fmt.Printf("2###%s\n", addr)
+	v := strings.Split(l.Host, ":")
+	if len(v) == 2 {
+		return v[0], v[1]
+	}
+	h, _ := GetHostMapping(l.Host)
+	if strings.EqualFold(l.Scheme, "https") {
+		return h, "443"
+	}
+	return h, "80"
 }
 
 func GetUrl(addr string) string {
@@ -55,10 +87,11 @@ func GetUrl(addr string) string {
 	//fmt.Printf("2###%s\n", addr)
 	v := strings.Split(l.Host, ":")
 	if len(v) == 2 {
-		l.Host = GetHost(v[0]) + ":" + v[1]
+		tmp, _ := GetHostMapping(v[0])
+		l.Host = tmp + ":" + v[1]
 	} else {
 		//fmt.Printf("3###%s\n", l.Host)
-		l.Host = GetHost(l.Host)
+		l.Host, _ = GetHostMapping(l.Host)
 	}
 	return l.String()
 }

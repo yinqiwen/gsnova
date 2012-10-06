@@ -205,6 +205,22 @@ type HTTPRequestEvent struct {
 	RawReq *http.Request
 }
 
+func (req *HTTPRequestEvent) DeepClone() *HTTPRequestEvent {
+	ret := new(HTTPRequestEvent)
+	ret.Method = req.Method
+	ret.Url = req.Url
+	ret.RawReq = req.RawReq
+	ret.HTTPMessageEvent.Headers = make([]*util.NameValuePair, len(req.HTTPMessageEvent.Headers))
+	for i, v := range req.HTTPMessageEvent.Headers {
+		nv := new(util.NameValuePair)
+		nv.Name = v.Name
+		nv.Value = v.Value
+		ret.HTTPMessageEvent.Headers[i] = nv
+	}
+	ret.HTTPMessageEvent.Content.Write(req.HTTPMessageEvent.Content.Bytes())
+	return ret
+}
+
 func (req *HTTPRequestEvent) Encode(buffer *bytes.Buffer) {
 	EncodeStringValue(buffer, req.Url)
 	EncodeStringValue(buffer, req.Method)

@@ -1,0 +1,3 @@
+!User configed rules
+
+golang.org
