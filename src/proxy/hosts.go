@@ -236,6 +236,7 @@ func isTCPAddressBlocked(host, ip, port string) bool {
 
 func needRedirectHttpsHost(host string) bool {
 	return hostPatternMatched(forceHttpsHosts, host)
+
 }
 
 func needInjectCRLF(host string) bool {

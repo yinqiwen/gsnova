@@ -18,8 +18,11 @@ import (
 	"util"
 )
 
+var inject_crlf = []byte("\r\n")
+
 type ForwardConnection struct {
 	forward_conn         net.Conn
+	buf_forward_conn     *bufio.Reader
 	conn_url             *url.URL
 	proxyAddr            string
 	forwardChan          chan int
@@ -33,10 +36,6 @@ func (conn *ForwardConnection) Close() error {
 	if nil != conn.forward_conn {
 		conn.forward_conn.Close()
 	}
-	if nil != conn.forwardChan {
-		close(conn.forwardChan)
-		conn.forwardChan = nil
-	}
 	conn.closed = true
 	if nil != conn.range_fetch_conns {
 		for i, _ := range conn.range_fetch_conns {
@@ -44,7 +43,6 @@ func (conn *ForwardConnection) Close() error {
 				conn.range_fetch_conns[i].Close()
 			}
 		}
-		//conn.range_fetch_conns = nil
 	}
 	return nil
 }
@@ -65,15 +63,11 @@ func (conn *ForwardConnection) initForwardConn(proxyAddr string) error {
 	if !strings.Contains(proxyAddr, ":") {
 		proxyAddr = proxyAddr + ":80"
 	}
-	//	if strings.Contains(proxyAddr, "google.com") {
-	//		log.Printf("############connect %s\n", proxyAddr)
-	//	}
+
 	if nil != conn.forward_conn && conn.proxyAddr == proxyAddr {
 		return nil
 	}
-	//	if nil != conn.forward_conn {
-	//		log.Printf("#######Close unmatched address conn %s %s", conn.proxyAddr, proxyAddr)
-	//	}
+
 	conn.Close()
 	var err error
 	conn.conn_url, err = url.Parse(conn.manager.target)
@@ -112,6 +106,7 @@ func (conn *ForwardConnection) initForwardConn(proxyAddr string) error {
 	if nil == conn.forwardChan {
 		conn.forwardChan = make(chan int, 2)
 	}
+	conn.buf_forward_conn = bufio.NewReader(conn.forward_conn)
 	conn.closed = false
 	return nil
 }
@@ -148,8 +143,8 @@ func (conn *ForwardConnection) writeHttpRequest(req *http.Request) error {
 func (auto *ForwardConnection) rangeFetch(hash uint32, resp *http.Response, req *http.Request, originRange string, contentRange string, localConn net.Conn) error {
 	resp.Header.Del("Content-Range")
 	_, endpos, content_length := util.ParseContentRangeHeaderValue(contentRange)
-	//length := content_length
 	limit := content_length - 1
+	first_range_size := resp.ContentLength
 	if len(originRange) == 0 {
 		resp.StatusCode = 200
 		resp.Status = ""
@@ -166,11 +161,10 @@ func (auto *ForwardConnection) rangeFetch(hash uint32, resp *http.Response, req 
 			resp.ContentLength = int64(end - start + 1)
 			limit = end
 		}
-		//length = int(resp.ContentLength)
 		resp.Header.Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d\r\n", start, (int64(start)+resp.ContentLength-1), content_length))
 	}
-	resp.Header.Set("Connection", "keep-alive")
-	resp.Close = false
+	//resp.Header.Set("Connection", "keep-alive")
+	//resp.Close = false
 	save_body := resp.Body
 	var empty bytes.Buffer
 	resp.Body = ioutil.NopCloser(&empty)
@@ -186,17 +180,27 @@ func (auto *ForwardConnection) rangeFetch(hash uint32, resp *http.Response, req 
 		auto.range_fetch_conns = make([]net.Conn, hostRangeConcurrentFether)
 	}
 	log.Printf("Session[%d]Start %d range chunk %s from %s\n", hash, hostRangeConcurrentFether, contentRange, req.Host)
+
 	for i := 0; i < int(hostRangeConcurrentFether); i++ {
 		go auto.rangeFetchWorker(req, hash, i, endpos+1+i*int(hostRangeFetchLimitSize), limit, rangeFetchChannel)
 	}
 	if nil != save_body {
-		io.Copy(localConn, save_body)
+		n, err := io.Copy(localConn, save_body)
+		if first_range_size > 0 && (n != first_range_size || nil != err) {
+			log.Printf("Session[%d]Failed to read first range chunk with readed %d bytes for reason:%v\n", hash, n, err)
+			auto.Close()
+		} else {
+			save_body.Close()
+			if common.DebugEnable {
+				log.Printf("Session[%d]Success to read first range chunk with readed %d bytes.\n", hash, n)
+			}
+		}
 	}
 
 	responsedChunks := make(map[int]*rangeChunk)
 	stopedWorker := uint32(0)
 	expectedPos := endpos + 1
-	for {
+	for !auto.closed {
 		select {
 		case chunk := <-rangeFetchChannel:
 			if nil != chunk {
@@ -219,18 +223,19 @@ func (auto *ForwardConnection) rangeFetch(hash uint32, resp *http.Response, req 
 					expectedPos = expectedPos + len(chunk.content)
 				}
 			} else {
-				//log.Printf("Session[%d]Expected %d\n", hash, expectedPos)
+				if common.DebugEnable {
+					log.Printf("Session[%d]Expected %d\n", hash, expectedPos)
+				}
 				break
 			}
 		}
 		if stopedWorker >= hostRangeConcurrentFether {
 			if len(responsedChunks) > 0 {
-				log.Printf("Session[%d]Rest %d unwrite chunks.\n", hash, len(responsedChunks))
+				log.Printf("Session[%d]Rest %d unwrite chunks while expectedPos=%d \n", hash, len(responsedChunks), expectedPos)
 			}
 			break
 		}
 	}
-	//localConn.Close()
 	return nil
 }
 
@@ -238,9 +243,8 @@ func (auto *ForwardConnection) rangeFetchWorker(req *http.Request, hash uint32, 
 	var buf bytes.Buffer
 	req.Write(&buf)
 	clonereq, _ := http.ReadRequest(bufio.NewReader(&buf))
-	//log.Printf("Session[%d]Fetch[%d] started with %d-%d to %s", hash, index, startpos, limit, req.Host)
-	clonereq.Header.Set("Connection", "keep-alive")
-	clonereq.Close = false
+	//clonereq.Header.Set("Connection", "keep-alive")
+	//clonereq.Close = false
 	rawaddr, _ := lookupReachableAddress(net.JoinHostPort(req.Host, "80"))
 	if auto.range_fetch_raw_addr != rawaddr {
 		if common.DebugEnable {
@@ -253,8 +257,12 @@ func (auto *ForwardConnection) rangeFetchWorker(req *http.Request, hash uint32, 
 		}
 	}
 	var err error
+	var buf_reader *bufio.Reader
 	getConn := func() (net.Conn, error) {
 		if nil != auto.range_fetch_conns[index] {
+			if nil == buf_reader {
+				buf_reader = bufio.NewReader(auto.range_fetch_conns[index])
+			}
 			return auto.range_fetch_conns[index], nil
 		}
 		if common.DebugEnable {
@@ -265,10 +273,18 @@ func (auto *ForwardConnection) rangeFetchWorker(req *http.Request, hash uint32, 
 			conn, err = createDirectForwardConn(net.JoinHostPort(req.Host, "80"))
 		}
 		auto.range_fetch_conns[index] = conn
+		if nil != conn {
+			buf_reader = bufio.NewReader(conn)
+		}
 		return conn, err
 	}
 	retry_count := 0
-	retry_limit := 1
+	retry_limit := 2
+	retry_cb := func() {
+		retry_count = retry_count + 1
+		auto.range_fetch_conns[index].Close()
+		auto.range_fetch_conns[index] = nil
+	}
 	for startpos < limit-1 && !auto.closed && retry_count <= retry_limit {
 		endpos := startpos + int(hostRangeFetchLimitSize) - 1
 		if endpos > limit {
@@ -281,43 +297,46 @@ func (auto *ForwardConnection) rangeFetchWorker(req *http.Request, hash uint32, 
 		}
 		clonereq.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", startpos, endpos))
 		if needInjectCRLF(clonereq.Host) {
-			auto.range_fetch_conns[index].Write([]byte("\r\n"))
+			auto.range_fetch_conns[index].Write(inject_crlf)
 		}
 
 		err = clonereq.Write(auto.range_fetch_conns[index])
 		if nil != err {
-			log.Printf("Session[%d]Failed to fetch range chunk[%d:%d-%d]  for reason:%v %v", hash, startpos, endpos, limit, err)
-			retry_count = retry_count + 1
-			auto.range_fetch_conns[index].Close()
-			auto.range_fetch_conns[index] = nil
+			log.Printf("Session[%d]Failed to fetch range chunk[%d:%d-%d]  for reason:%v", hash, startpos, endpos, limit, err)
+			retry_cb()
 			continue
 		}
-		resp, err := http.ReadResponse(bufio.NewReaderSize(auto.range_fetch_conns[index], 512*1024), clonereq)
+
+		resp, err := http.ReadResponse(buf_reader, clonereq)
 		if nil != resp && resp.StatusCode == 302 {
 			log.Printf("Session[%d] redirect to %s", hash, resp.Header.Get("Location"))
 			clonereq.URL, _ = url.Parse(resp.Header.Get("Location"))
-			auto.range_fetch_conns[index].Close()
-			auto.range_fetch_conns[index] = nil
+			retry_cb()
+			retry_count = retry_count - 1
 			continue
 		}
 		//try again
 		if nil != err || resp.StatusCode > 206 {
+			if nil != resp {
+				tmp := make([]byte, 4096)
+				if n, _ := io.ReadFull(resp.Body, tmp); n > 0 {
+					log.Printf("######Error content:%s\n", string(tmp[0:n]))
+				}
+			}
 			log.Printf("Session[%d]Failed to fetch range chunk[%d:%d-%d]  for reason:%v %v", hash, startpos, endpos, limit, err, resp)
-			retry_count = retry_count + 1
-			auto.range_fetch_conns[index].Close()
-			auto.range_fetch_conns[index] = nil
+			retry_cb()
 			continue
 		}
 		chunk := &rangeChunk{}
 		chunk.start = startpos
 		chunk.content = make([]byte, resp.ContentLength)
+		//auto.range_fetch_conns[index].SetReadDeadline(time.Now().Add(time.Second * 30))
 		if n, er := io.ReadFull(resp.Body, chunk.content); nil != er || n != int(endpos-startpos+1) {
-			log.Printf("[ERROR]Read rrror response %v with %d bytes for reason:%v\n", resp, n, er)
-			retry_count = retry_count + 1
-			auto.range_fetch_conns[index].Close()
-			auto.range_fetch_conns[index] = nil
+			log.Printf("[ERROR]Session[%d]Read rrror response %v with %d bytes for reason:%v\n", hash, resp, n, er)
+			retry_cb()
 			continue
 		}
+		resp.Body.Close()
 		ch <- chunk
 		log.Printf("Session[%d]Fetch[%d] fetched %d bytes chunk[%d:%d-%d]from %s.", hash, index, resp.ContentLength, startpos, endpos, limit, clonereq.Host)
 		startpos = startpos + int(hostRangeFetchLimitSize*hostRangeConcurrentFether)
@@ -334,9 +353,6 @@ func (auto *ForwardConnection) Request(conn *SessionConnection, ev event.Event) 
 	f := func(local, remote net.Conn) {
 		n, err := io.Copy(remote, local)
 		if nil != err {
-			//			if err != io.EOF {
-			//				log.Printf("Failed to copy for reason:%s\n", err.Error())
-			//			}
 			local.Close()
 			remote.Close()
 		}
@@ -372,16 +388,12 @@ func (auto *ForwardConnection) Request(conn *SessionConnection, ev event.Event) 
 			}
 			if !auto.manager.overProxy && needInjectCRLF(req.RawReq.Host) {
 				log.Printf("Session[%d]Inject CRLF for %s", ev.GetHash(), req.RawReq.Host)
-				auto.forward_conn.Write([]byte("\r\n"))
+				auto.forward_conn.Write(inject_crlf)
 			}
 			rangeInjdected := false
 			rangeHeader := req.RawReq.Header.Get("Range")
 			req.RawReq.Header.Del("Proxy-Connection")
-			//			ua := req.RawReq.Header.Get("User-Agent")
 			norange_inject := false
-			//			if strings.Contains(ua, "iPhone") {
-			//				norange_inject = true
-			//			}
 			if !norange_inject && !auto.manager.overProxy && hostNeedInjectRange(req.RawReq.Host) {
 				log.Printf("Session[%d]Inject Range for %s", ev.GetHash(), req.RawReq.Host)
 				if len(rangeHeader) == 0 {
@@ -409,8 +421,9 @@ func (auto *ForwardConnection) Request(conn *SessionConnection, ev event.Event) 
 				req.RawReq.Write(&tmp)
 				log.Printf("Session[%d]Send request \n%s\n", ev.GetHash(), tmp.String())
 			}
-			resp, err := http.ReadResponse(bufio.NewReader(auto.forward_conn), req.RawReq)
+			resp, err := http.ReadResponse(auto.buf_forward_conn, req.RawReq)
 			if err != nil {
+				log.Printf("Session[%d]Recv response with error %v\n", ev.GetHash(), err)
 				return err, nil
 			}
 			responsed := false
@@ -431,7 +444,6 @@ func (auto *ForwardConnection) Request(conn *SessionConnection, ev event.Event) 
 				log.Printf("Session[%d]Recv response \n%s\n", ev.GetHash(), tmp.String())
 			}
 			if nil != err || resp.Close || req.RawReq.Close {
-
 				conn.LocalRawConn.Close()
 				auto.Close()
 				conn.State = STATE_SESSION_CLOSE
@@ -439,7 +451,6 @@ func (auto *ForwardConnection) Request(conn *SessionConnection, ev event.Event) 
 				conn.State = STATE_RECV_HTTP
 			}
 		}
-
 	default:
 	}
 	return nil, nil

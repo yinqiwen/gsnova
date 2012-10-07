@@ -125,7 +125,14 @@ func (session *SessionConnection) processHttpChunkEvent(ev *event.HTTPChunkEvent
 }
 
 func (session *SessionConnection) process() error {
-	//log.Printf("Enter process with stat:%d", session.State)
+	close_session := func() {
+		session.LocalRawConn.Close()
+		if nil != session.RemoteConn {
+			session.RemoteConn.Close()
+		}
+		session.State = STATE_SESSION_CLOSE
+	}
+
 	switch session.State {
 	case STATE_RECV_HTTP:
 		req, err := http.ReadRequest(session.LocalBufferConn)
@@ -144,11 +151,7 @@ func (session *SessionConnection) process() error {
 			if err != io.EOF {
 				log.Printf("Session[%d]Failed to read http request:%v\n", session.SessionID, err)
 			}
-			session.LocalRawConn.Close()
-			if nil != session.RemoteConn {
-				session.RemoteConn.Close()
-			}
-			session.State = STATE_SESSION_CLOSE
+			close_session()
 		}
 	case STATE_RECV_HTTP_CHUNK:
 		buf := make([]byte, 8192)
@@ -167,8 +170,7 @@ func (session *SessionConnection) process() error {
 			if err != io.EOF {
 				log.Printf("Session[%d]Failed to read http chunk:%v %T\n", session.SessionID, err, err)
 			}
-			session.LocalRawConn.Close()
-			session.State = STATE_SESSION_CLOSE
+			close_session()
 		}
 	case STATE_RECV_TCP:
 

@@ -3,15 +3,44 @@ package proxy
 import (
 	"bytes"
 	"common"
+	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
+	"runtime"
 	"strings"
 )
 
 func dummyReq(method string) *http.Request {
 	return &http.Request{Method: method}
+}
+
+func statHandler(req *http.Request) *http.Response {
+	res := &http.Response{Status: "200 OK",
+		StatusCode: 200,
+		Proto:      "HTTP/1.1",
+		ProtoMajor: 1,
+		ProtoMinor: 1,
+		Request:    dummyReq("GET"),
+		Header: http.Header{
+			"Connection":   {"close"},
+			"Content-Type": {"text/plain"},
+		},
+		Close:         true,
+		ContentLength: -1}
+	var stat runtime.MemStats
+	runtime.ReadMemStats(&stat)
+	var buf bytes.Buffer
+	buf.WriteString(fmt.Sprintf("HostPortBlockVerifyResultSize: %d\n", len(blockVerifyResult)))
+	buf.WriteString(fmt.Sprintf("HostMappingSize: %d\n", len(hostMapping)))
+	buf.WriteString(fmt.Sprintf("ReachableDNSResultSize: %d\n", len(reachableDNSResult)))
+	if content, err := json.MarshalIndent(&stat, "", " "); nil == err {
+		buf.Write(content)
+	}
+	res.Body = ioutil.NopCloser(&buf)
+	return res
 }
 
 func indexHandler(req *http.Request) *http.Response {
@@ -69,6 +98,8 @@ func handleSelfHttpRequest(req *http.Request, conn net.Conn) {
 	switch path {
 	case "/pac/gfwlist":
 		res = pacHandler(req)
+	case "/stat":
+		res = statHandler(req)
 	case "/":
 		res = indexHandler(req)
 	}

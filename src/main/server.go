@@ -4,7 +4,7 @@ import (
 	"log"
 	"net"
 	"proxy"
-	//"runtime"
+//	"runtime"
 	"sync/atomic"
 )
 
@@ -26,11 +26,12 @@ func handleServer(lp *net.TCPListener) {
 		if nil != err {
 			continue
 		}
-		//var stat runtime.MemStats
-		//runtime.ReadMemStats(&stat)
-		//if stat.Alloc >= 10*1024*1024 {
-		//log.Println(stat.EnableGC)
-		//}
+//		var stat runtime.MemStats
+//		runtime.ReadMemStats(&stat)
+//		if stat.Alloc >= 20*1024*1024 {
+//		    log.Printf("Start GC\n")
+//			go runtime.GC()
+//		}
 		go handleConn(conn)
 	}
 }

@@ -572,8 +572,8 @@ func (gae *GAEHttpConnection) handleHttpRes(conn *SessionConnection, req *event.
 					}
 
 					if stopedWorker >= gae_cfg.ConcurrentRangeFetcher {
-						close(gae.rangeFetchChannel)
-						gae.rangeFetchChannel = nil
+						//close(gae.rangeFetchChannel)
+						//gae.rangeFetchChannel = nil
 						if len(responsedChunks) > 0 {
 							log.Printf("Session[%d]Rest %d unwrite chunks.\n", req.GetHash(), len(responsedChunks))
 						}

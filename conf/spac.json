@@ -1,11 +1,11 @@
 [
   {
-    "Host" : ["*.ytimg.com*", "plus.google.com", "sites.google.com","*.googleusercontent.com*", "*.gstatic.com", "*.googleapis.com*"],
+    "Host" : ["*.ytimg.com*", "plus.google.com", "sites.google.com","*.googleusercontent.com*", "*.gstatic.com", "*.googleapis.com*", "*.googlecode.com", "dl.google.com"],
     "Proxy":["GoogleHttps", "Direct", "Default"]
   },
   {
-    "Host" : ["*.doubleclick.net*", "*.google-analytics.com*", "*golang.org"],
-    "Proxy":["GoogleHttps", "Direct"]
+    "Host" : ["golang.org", "*.doubleclick.net*", "*.google-analytics.com*", "uploads.code.google.com", "groups.google.com", "apis.google.com", "www.blogger.com"],
+    "Proxy":["GoogleHttps", "Direct", "Default"]
   },
   {
     "Host" : ["*.appspot.com*"],

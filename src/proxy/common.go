@@ -41,6 +41,7 @@ func initHostMatchRegex(pattern string) []*regexp.Regexp {
 func hostPatternMatched(patterns []*regexp.Regexp, host string) bool {
 	for _, regex := range patterns {
 		if regex.MatchString(host) {
+		    //log.Printf("#######Pattern is %s for host %s\n", regex.String(), host)
 			return true
 		}
 	}

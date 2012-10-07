@@ -200,7 +200,7 @@ func deleteSessionEntry(id uint32) {
 	handler, ok := sessions[id]
 	if ok {
 		handler.closed = true
-		close(handler.writeBackChan)
+		//close(handler.writeBackChan)
 		handler.localConn.LocalRawConn.Close()
 		delete(sessions, id)
 	}

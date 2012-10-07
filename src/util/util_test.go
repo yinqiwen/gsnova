@@ -9,12 +9,12 @@ import (
 
 func TestNet(t *testing.T) {
 
-	v := IPv42Int("10.10.10.10")
+	v := IPv42Int("1.0.4.0")
 	ip := Long2IPv4(v)
-	if ip != "10.10.10.10" {
-		fmt.Printf("%s  %d\n", ip, v)
+	if ip != "1.0.4.0" {
 		t.Error("Failed to conv ip to int:")
 	}
+	fmt.Printf("%s  %d\n", ip, v)
 	t.Error("####")
 }
 
