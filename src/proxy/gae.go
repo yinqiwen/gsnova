@@ -40,169 +40,8 @@ type GAEConfig struct {
 
 var gae_cfg *GAEConfig
 var gae_enable bool
+var gae_use_shared_appid bool
 
-//var pipeliningConns = make(map[string]*util.ListSelector)
-//var pipelineEventChannels = make(map[uint32]chan event.Event)
-//var conChannellk sync.Mutex
-//var pconnslk sync.Mutex
-//
-//func addPipeliningChannelMapping(hash uint32, ch chan event.Event) {
-//	conChannellk.Lock()
-//	pipelineEventChannels[hash] = ch
-//	conChannellk.Unlock()
-//}
-//
-//func getPipeliningChannelMapping(hash uint32) (chan event.Event, bool) {
-//	conChannellk.Lock()
-//	ch, exist := pipelineEventChannels[hash]
-//	conChannellk.Unlock()
-//	return ch, exist
-//}
-//
-//func removePipeliningChannelMapping(hash uint32) {
-//	conChannellk.Lock()
-//	delete(pipelineEventChannels, hash)
-//	conChannellk.Unlock()
-//}
-//
-//type pipeliningConn struct {
-//	conn     net.Conn
-//	dialfunc func(n, addr string) (net.Conn, error)
-//	addrfunc func() string
-//	clk      sync.Mutex
-//	wlk      sync.Mutex
-//	rlk      sync.Mutex
-//}
-//
-//func (pconn *pipeliningConn) getConn() {
-//	pconn.clk.Lock()
-//	if nil == pconn.conn {
-//		var err error
-//		pconn.conn, err = pconn.dialfunc("tcp", pconn.addrfunc())
-//		if nil != err {
-//			//try again
-//			pconn.conn, err = pconn.dialfunc("tcp", pconn.addrfunc())
-//		}
-//	}
-//	pconn.clk.Unlock()
-//}
-//
-//func (pconn *pipeliningConn) doReq(req *http.Request, hash uint32, ch chan event.Event) (ev event.Event, err error) {
-//	pconn.getConn()
-//	if nil == pconn.conn {
-//		return nil, err
-//	}
-//	pconn.wlk.Lock()
-//	err = req.Write(pconn.conn)
-//	pconn.wlk.Unlock()
-//	if nil != err {
-//		pconn.getConn()
-//		if nil != pconn.conn {
-//			pconn.wlk.Lock()
-//			err = req.Write(pconn.conn)
-//			pconn.wlk.Unlock()
-//		}
-//	}
-//	if nil != err {
-//		return nil, err
-//	}
-//	pipelineEventChannels[hash] = ch
-//	pconn.rlk.Lock()
-//	var resp *http.Response
-//	resp, err = http.ReadResponse(bufio.NewReader(pconn.conn), req)
-//	var buf *bytes.Buffer
-//	if nil == err {
-//		content := make([]byte, resp.ContentLength)
-//		n, _ := io.ReadFull(resp.Body, content)
-//		if int64(n) < resp.ContentLength {
-//			return nil, errors.New("No sufficient space in body.")
-//		}
-//		resp.Body.Close()
-//		buf = bytes.NewBuffer(content[0:resp.ContentLength])
-//	}
-//	pconn.rlk.Unlock()
-//	var tags event.EventHeaderTags
-//	if nil != buf {
-//		if !tags.Decode(buf) {
-//			return nil, errors.New("Failed to decode event tag")
-//		}
-//		err, ev = event.DecodeEvent(buf)
-//		if nil == err {
-//			ev = event.ExtractEvent(ev)
-//		}
-//	}
-//	if nil != ev && ev.GetHash() == hash {
-//		removePipeliningChannelMapping(ev.GetHash())
-//		return ev, nil
-//	} else {
-//		if nil != ev {
-//			if otherChannel, exist := getPipeliningChannelMapping(ev.GetHash()); exist {
-//				otherChannel <- ev
-//			}
-//		}
-//		select {
-//		case rev := <-ch:
-//			if nil == ev {
-//				return
-//			}
-//			if rev.GetHash() != hash {
-//				log.Printf("[ERROR]Unexpected response with hash:%u while request has hash:%u\n", rev.GetHash(), hash)
-//			}
-//			removePipeliningChannelMapping(hash)
-//			return rev, nil
-//		}
-//	}
-//	return
-//}
-//
-//func getPipeliningConn(appid string) *pipeliningConn {
-//	sslDial := func(n, addr string) (net.Conn, error) {
-//		conn, err := net.Dial(n, addr)
-//		if err != nil {
-//			return nil, err
-//		}
-//		tlcfg := &tls.Config{}
-//		tlcfg.InsecureSkipVerify = true
-//		return tls.Client(conn, tlcfg), nil
-//	}
-//	pconnslk.Lock()
-//	defer pconnslk.Unlock()
-//	if conn_selector, exist := pipeliningConns[appid]; !exist {
-//		conn_selector = new(util.ListSelector)
-//		host := appid + ".appspot.com"
-//		port := "80"
-//		dial := net.Dial
-//		addr := func() string {
-//			return net.JoinHostPort(host, port)
-//		}
-//		proxyInfo, exist := common.Cfg.GetProperty("LocalProxy", "Proxy")
-//		if exist {
-//			host, port = util.GetHostPort(proxyInfo)
-//			if strings.HasPrefix(proxyInfo, "https") {
-//				dial = sslDial
-//			}
-//			addr = func() string {
-//				return net.JoinHostPort(util.GetHostPort(proxyInfo))
-//			}
-//		} else {
-//			if mode, exist := common.Cfg.GetProperty("GAE", "ConnectionMode"); exist {
-//				port = "443"
-//				if strings.EqualFold(mode, MODE_HTTPS) {
-//					dial = sslDial
-//				}
-//			}
-//
-//		}
-//		for i := 0; i < 5; i++ {
-//			conn_selector.Add(&pipeliningConn{dialfunc: dial, addrfunc: addr})
-//		}
-//		pipeliningConns[appid] = conn_selector
-//		return conn_selector.Select().(*pipeliningConn)
-//	} else {
-//		return conn_selector.Select().(*pipeliningConn)
-//	}
-//	return nil
-//}
 
 type GAEAuth struct {
 	appid  string
@@ -233,10 +72,6 @@ func (auth *GAEAuth) parse(line string) error {
 	return nil
 }
 
-//type rangeChunk struct {
-//	start   int
-//	content []byte
-//}
 
 type GAEHttpConnection struct {
 	auth              GAEAuth
@@ -272,7 +107,6 @@ func (conn *GAEHttpConnection) initHttpClient() {
 		if err != nil {
 			return nil, err
 		}
-		//conn.SetReadDeadline(time.Now().Add(time.Second * 30))
 		return conn, err
 	}
 
@@ -281,13 +115,11 @@ func (conn *GAEHttpConnection) initHttpClient() {
 		if err != nil {
 			return nil, err
 		}
-		//conn.SetReadDeadline(time.Now().Add(time.Second * 30))
 		return tls.Client(conn, tlcfg), nil
 	}
 	proxyInfo, exist := common.Cfg.GetProperty("LocalProxy", "Proxy")
 	if exist {
 		proxy := util.GetUrl(proxyInfo)
-		//log.Printf("GAE use proxy:%s\n", proxy)
 		if strings.HasPrefix(proxyInfo, "https") {
 			dial = sslDial
 		}
@@ -354,9 +186,7 @@ func (conn *GAEHttpConnection) Auth() error {
 func (gae *GAEHttpConnection) requestEvent(conn *SessionConnection, ev event.Event) (err error, res event.Event) {
 	gae.initHttpClient()
 	auth := &gae.auth
-	//	if gae_cfg.PipeliningEnable && ev.GetType() == event.HTTP_REQUEST_EVENT_TYPE {
-	//		auth = gae.manager.auths.Select().(*GAEAuth)
-	//	}
+
 	domain := auth.appid + ".appspot.com"
 	if strings.Contains(auth.appid, ".") {
 		domain = auth.appid
@@ -431,11 +261,8 @@ func (gae *GAEHttpConnection) requestEvent(conn *SessionConnection, ev event.Eve
 			if nil == err {
 				res = event.ExtractEvent(res)
 			}
-			buf.Reset()
-			buf = nil
 			return err, res
 		}
-		//		}
 	}
 
 	return nil, nil
@@ -528,7 +355,6 @@ func (gae *GAEHttpConnection) handleHttpRes(conn *SessionConnection, req *event.
 
 		if httpres.StatusCode >= 300 {
 			httpres.Write(conn.LocalRawConn)
-			//conn.LocalRawConn.Close()
 			return nil
 		}
 		if endpos < limit {
@@ -572,8 +398,6 @@ func (gae *GAEHttpConnection) handleHttpRes(conn *SessionConnection, req *event.
 					}
 
 					if stopedWorker >= gae_cfg.ConcurrentRangeFetcher {
-						//close(gae.rangeFetchChannel)
-						//gae.rangeFetchChannel = nil
 						if len(responsedChunks) > 0 {
 							log.Printf("Session[%d]Rest %d unwrite chunks.\n", req.GetHash(), len(responsedChunks))
 						}
@@ -662,9 +486,6 @@ func (gae *GAEHttpConnection) Request(conn *SessionConnection, ev event.Event) (
 		}
 	}
 	return gae.requestEvent(conn, ev)
-	//	err, res := gae.requestEvent(conn, ev)
-	//	if nil != err {
-	//	}
 }
 
 type GAE struct {
@@ -753,10 +574,6 @@ func initGAEConfig() {
 	if master, exist := common.Cfg.GetProperty("GAE", "MasterAppID"); exist {
 		gae_cfg.MasterAppID = master
 	}
-	//	gae_cfg.PipeliningEnable = true
-	//	if enable, exist := common.Cfg.GetBoolProperty("GAE", "PipeliningEnable"); exist {
-	//		gae_cfg.PipeliningEnable = enable
-	//	}
 }
 
 func (manager *GAE) fetchSharedAppIDs() (error, []string) {
@@ -805,13 +622,14 @@ func (manager *GAE) Init() error {
 		index = index + 1
 	}
 	//no appid found, fetch shared from master
+	gae_use_shared_appid = false
 	if index == 0 {
+	    gae_use_shared_appid = true
 		err, appids := manager.fetchSharedAppIDs()
 		if nil != err {
 			return err
 		}
 		for _, appid := range appids {
-			//log.Printf("Fetched appid:%s\n", appid)
 			var auth GAEAuth
 			auth.appid = appid
 			auth.user = ANONYMOUSE
@@ -831,7 +649,6 @@ func (manager *GAE) Init() error {
 		}
 		auth.token = conn.authToken
 		conn.auth.token = conn.authToken
-		//manager.auths.Add(&auth)
 		manager.RecycleRemoteConnection(conn)
 	}
 	return nil

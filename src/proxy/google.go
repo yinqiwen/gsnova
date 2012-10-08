@@ -54,10 +54,6 @@ func (conn *GoogleConnection) Close() error {
 		conn.https_client.Close()
 		conn.https_client = nil
 	}
-	//	if nil != conn.forwardChan {
-	//		close(conn.forwardChan)
-	//		conn.forwardChan = nil
-	//	}
 	return nil
 }
 
@@ -228,10 +224,8 @@ func (google *GoogleConnection) Request(conn *SessionConnection, ev event.Event)
 	f := func(local, remote net.Conn) {
 		io.Copy(remote, local)
 		google.forwardChan <- 1
-		if nil != err {
-			local.Close()
-			remote.Close()
-		}
+		local.Close()
+		remote.Close()
 	}
 	switch ev.GetType() {
 	case event.HTTP_REQUEST_EVENT_TYPE:
@@ -263,8 +257,6 @@ func (google *GoogleConnection) Request(conn *SessionConnection, ev event.Event)
 			}
 			if nil == google.http_client {
 				log.Printf("Failed to connect google http site.\n")
-				//conn.LocalRawConn.Write([]byte("HTTP/1.1 500 Internal Server Error\r\n\r\n"))
-				//conn.LocalRawConn.Close()
 				return errors.New("No google proxy reachable."), nil
 			}
 			if strings.HasPrefix(req.RawReq.RequestURI, "http://") {
