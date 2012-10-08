@@ -13,6 +13,39 @@ import (
 	"strings"
 )
 
+//type selfResponseWriter struct {
+//	header http.Header
+//	conn   net.Conn
+//	wroteHeader bool
+//}
+//
+//func (w *selfResponseWriter) Header() http.Header {
+//	if nil == w.header {
+//		w.header = make(http.Header)
+//	}
+//	return w.header
+//}
+//func (w *selfResponseWriter) Write([]byte) (int, error) {
+//    
+//}
+//
+//func (w *selfResponseWriter) WriteHeader(int) {
+//}
+//
+//func InitSelfWebServer() {
+//	http.DefaultServeMux.HandleFunc("/", statHandler)
+//	http.DefaultServeMux.HandleFunc("/stat", statHandler)
+//	http.DefaultServeMux.HandleFunc("/gfwlist/pac", gfwlistPACHandler)
+//}
+//
+//func statHandler(w http.ResponseWriter, req *http.Request) {
+//	// http.
+//}
+//
+//func gfwlistPACHandler(w ResponseWriter, req *Request) {
+//	http.ServeFile(w, r, common.Home+"/snova-gfwlist.pac")
+//}
+
 func dummyReq(method string) *http.Request {
 	return &http.Request{Method: method}
 }

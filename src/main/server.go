@@ -4,7 +4,6 @@ import (
 	"log"
 	"net"
 	"proxy"
-//	"runtime"
 	"sync/atomic"
 )
 
@@ -16,7 +15,6 @@ var seed uint32 = 0
 
 func handleConn(conn *net.TCPConn) {
 	sessionID := atomic.AddUint32(&seed, 1)
-	//log.Printf("Session:%d created\n", sessionID)
 	proxy.HandleConn(sessionID, conn)
 }
 
@@ -26,12 +24,6 @@ func handleServer(lp *net.TCPListener) {
 		if nil != err {
 			continue
 		}
-//		var stat runtime.MemStats
-//		runtime.ReadMemStats(&stat)
-//		if stat.Alloc >= 20*1024*1024 {
-//		    log.Printf("Start GC\n")
-//			go runtime.GC()
-//		}
 		go handleConn(conn)
 	}
 }

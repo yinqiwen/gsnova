@@ -134,6 +134,8 @@ func (conn *GoogleConnection) initHttpClient(proxyAddr string) {
 		conn.http_client, err = net.DialTimeout("tcp", target, connTimeoutSecs)
 		if nil != err {
 			log.Printf("Failed to dial address:%s for reason:%s\n", proxyURL.Host, err.Error())
+		    conn.Close()
+		    return
 		}
 		addr, _ := util.GetHostMapping(GOOGLE_HTTPS)
 		req := &http.Request{
@@ -165,10 +167,12 @@ func (conn *GoogleConnection) initHttpClient(proxyAddr string) {
 			addr, _ := util.GetHostMapping(googleHttpHost)
 			conn.http_client, err = net.DialTimeout("tcp", net.JoinHostPort(addr, "80"), connTimeoutSecs)
 			if nil != err {
+			    conn.Close()
 				addr, _ = util.GetHostMapping(googleHttpHost)
 				conn.http_client, err = net.DialTimeout("tcp", net.JoinHostPort(addr, "80"), connTimeoutSecs)
 			}
 			if nil != err {
+			    conn.Close()
 				log.Printf("Failed to dial address:%s for reason:%s\n", addr, err.Error())
 				return
 			}
@@ -176,11 +180,13 @@ func (conn *GoogleConnection) initHttpClient(proxyAddr string) {
 			addr, _ := util.GetHostMapping(googleHttpsHost)
 			conn.http_client, err = net.DialTimeout("tcp", net.JoinHostPort(addr, "443"), connTimeoutSecs)
 			if nil != err {
+			    conn.Close()
 				addr, _ = util.GetHostMapping(googleHttpsHost)
 				conn.http_client, err = net.DialTimeout("tcp", net.JoinHostPort(addr, "443"), connTimeoutSecs)
 			}
 			if nil != err {
 				log.Printf("Failed to dial address:%s for reason:%s\n", addr, err.Error())
+				conn.Close()
 				return
 			}
 			tlcfg := &tls.Config{InsecureSkipVerify: true}

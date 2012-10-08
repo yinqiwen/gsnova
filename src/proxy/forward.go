@@ -99,6 +99,7 @@ func (conn *ForwardConnection) initForwardConn(proxyAddr string) error {
 	}
 	if nil != err {
 		log.Printf("Failed to dial address:%s for reason:%s\n", addr, err.Error())
+		conn.Close()
 		return err
 	} else {
 		conn.proxyAddr = proxyAddr
