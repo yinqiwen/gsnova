@@ -5,12 +5,12 @@ import (
 	"common"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
-	"log"
+	"html/template"
+	//"log"
 	"net"
 	"net/http"
 	"runtime"
-	"strings"
+	//	"strings"
 	"util"
 )
 
@@ -18,6 +18,8 @@ var lp *util.DelegateConnListener
 
 func InitSelfWebServer() {
 	lp = util.NewDelegateConnListener()
+	http.Handle("/css/", http.FileServer(http.Dir(common.Home+"/css")))
+	http.Handle("/js/", http.FileServer(http.Dir(common.Home+"/js")))
 	http.HandleFunc("/pac/gfwlist", func(w http.ResponseWriter, r *http.Request) {
 		r.URL.Path = "/snova-gfwlist.pac"
 		w.Header().Set("Content-Type", "application/x-ns-proxy-autoconfig")
@@ -26,9 +28,9 @@ func InitSelfWebServer() {
 	})
 	http.HandleFunc("/stat", statHandler)
 	http.HandleFunc("/", indexHandler)
-	http.Handle("/*", http.NotFoundHandler())
 	go http.Serve(lp, nil)
 }
+
 
 func indexHandler(w http.ResponseWriter, req *http.Request) {
 	if req.URL.Path != "/" {
@@ -36,16 +38,15 @@ func indexHandler(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	hf := common.Home + "/web/html/index.html"
-	if content, err := ioutil.ReadFile(hf); nil == err {
-		strcontent := string(content)
-		strcontent = strings.Replace(strcontent, "${Version}", common.Version, -1)
-		strcontent = strings.Replace(strcontent, "${ProxyPort}", common.ProxyPort, -1)
-		w.Header().Set("Content-Type", "text/html")
-		w.Write([]byte(strcontent))
+	if t, err := template.ParseFiles(hf); nil == err {
+		type PageContent struct {
+			Version   string
+			ProxyPort string
+		}
+		t.Execute(w, &PageContent{common.Version, common.ProxyPort})
 	}
 }
 
-//
 func statHandler(w http.ResponseWriter, req *http.Request) {
 	var stat runtime.MemStats
 	runtime.ReadMemStats(&stat)
@@ -61,6 +62,5 @@ func statHandler(w http.ResponseWriter, req *http.Request) {
 }
 
 func handleSelfHttpRequest(req *http.Request, conn net.Conn) {
-	log.Printf("Path is %s\n", req.URL.Path)
 	lp.Delegate(conn, req)
 }

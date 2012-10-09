@@ -325,7 +325,7 @@ func SelectProxy(req *http.Request, conn net.Conn, isHttpsConn bool) []RemoteCon
 	if util.IsPrivateIP(host) {
 		need_select_proxy = false
 		proxyNames = []string{DIRECT_NAME}
-		if host == "127.0.0.1" || host == util.GetLocalIP() {
+		if host == "127.0.0.1" || host == util.GetLocalIP() || strings.EqualFold(host, "localhost") {
 			if port == common.ProxyPort {
 				handleSelfHttpRequest(req, conn)
 				return nil

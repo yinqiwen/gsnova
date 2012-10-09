@@ -29,9 +29,15 @@ func IPv42Int(ip string) (int64, error) {
 }
 
 func IsPrivateIP(ip string) bool {
+	if strings.EqualFold(ip, "localhost") {
+		return true
+	}
 	value, err := IPv42Int(ip)
 	if nil != err {
 		return false
+	}
+	if strings.HasPrefix(ip, "127.0") {
+		return true
 	}
 	if (value >= 0x0A000000 && value <= 0x0AFFFFFF) || (value >= 0xAC100000 && value <= 0xAC1FFFFF) || (value >= 0xC0A80000 && value <= 0xC0A8FFFF) {
 		return true

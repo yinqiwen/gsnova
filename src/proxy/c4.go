@@ -34,10 +34,7 @@ var userToken string
 var externIP string
 var sessions map[uint32]*localProxySession = make(map[uint32]*localProxySession)
 
-//var bufMap map[string]*bytes.Buffer = make(map[string]*bytes.Buffer)
 var readChanMap map[string][]chan event.Event = make(map[string][]chan event.Event)
-
-//var rsock_conns map[string][]net.Conn = make(map[string][]net.Conn)
 
 func getRequestChan(server string, ev event.Event) chan event.Event {
 	index := int(ev.GetHash()) % len(readChanMap[server])
@@ -402,21 +399,7 @@ func (manager *C4) Init() error {
 	log.Println("Init C4.")
 	initC4Config()
 	RegisteRemoteConnManager(manager)
-	//manager.auths = new(util.ListSelector)
 	manager.servers = &util.ListSelector{}
-	//	if strings.EqualFold(c4_cfg.ConnectionMode, MODE_RSOCKET) {
-	//		rsocket_server_loop()
-	//		if util.IsPrivateIP(util.GetLocalIP()) {
-	//			nat, err := upnp.Discover()
-	//			if nil == err {
-	//				nat.AddPortMapping("TCP", int(c4_cfg.RSocketPort), int(c4_cfg.RSocketPort), "gsnova-c4", 3000)
-	//				externIP, err = nat.GetExternalIPAddress()
-	//			}
-	//			if nil != err {
-	//				log.Println("Failed to init C4 in Rsocket mode:%v", err)
-	//			}
-	//		}
-	//	}
 
 	index := 0
 	for {
@@ -436,7 +419,6 @@ func (manager *C4) Init() error {
 		}
 		index = index + 1
 	}
-	//no appid found, fetch shared from master
 	if index == 0 {
 		return errors.New("No configed C4 server.")
 	}
