@@ -37,6 +37,7 @@ func matchRegexs(str string, rules []*regexp.Regexp) bool {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -161,11 +162,6 @@ func generatePAC(url, date, content string) string {
 		if strings.HasPrefix(str, "/") && strings.HasSuffix(str, "/") {
 			jsRegexp = str[1 : len(str)-1]
 		} else {
-			//			debug := false
-			//			if strings.Contains(str, "17e.org") {
-			//				debug = true
-			//			}
-
 			if tmp, err := regexp.Compile("\\*+"); err == nil {
 				jsRegexp = tmp.ReplaceAllString(str, "*")
 			}
@@ -185,9 +181,6 @@ func generatePAC(url, date, content string) string {
 			if tmp, err := regexp.Compile("^\\\\\\|\\\\\\|"); err == nil {
 				jsRegexp = util.RegexpReplace(jsRegexp, "^[\\w\\-]+:\\/+(?!\\/)(?:[^\\/]+\\.)?", tmp, 1)
 			}
-			//			if debug {
-			//				log.Printf("1-- %s\n", jsRegexp)
-			//			}
 			if tmp, err := regexp.Compile("^\\\\\\|"); err == nil {
 				jsRegexp = util.RegexpReplace(jsRegexp, "^", tmp, 1)
 			}
@@ -230,10 +223,9 @@ func generatePACFromGFWList(url string) {
 			_, port, _ := net.SplitHostPort(addr)
 			resp, err = util.HttpGet(url, "http://"+net.JoinHostPort("127.0.0.1", port))
 		}
-		resp, err = http.DefaultClient.Get(url)
 	}
 	if err != nil || resp.StatusCode != 200 {
-		log.Printf("Failed to fetch AutoProxy2PAC from %s for reason:%v  %v\n", url, err)
+		log.Printf("Failed to fetch AutoProxy2PAC from %s for reason:%v\n", url, err)
 	} else {
 		body, err := ioutil.ReadAll(resp.Body)
 		if nil == err {
@@ -247,18 +239,20 @@ func generatePACFromGFWList(url string) {
 }
 
 func PostInitSpac() {
+	auto_inject_crlf := true
+	if nil != common.LocalProxy && !strings.HasPrefix(common.LocalProxy.Host, "Google") {
+		auto_inject_crlf = false
+	}
 	switch spac.defaultRule {
-	case GAE_NAME:
-		if !gae_enable {
+	case GAE_NAME, C4_NAME:
+		if !gae_enable && !c4_enable {
 			spac.defaultRule = DIRECT_NAME
-			injectCRLFPatterns = initHostMatchRegex("*")
-		}
-	case C4_NAME:
-		if !c4_enable {
-			spac.defaultRule = DIRECT_NAME
-			injectCRLFPatterns = initHostMatchRegex("*")
+			if auto_inject_crlf {
+				injectCRLFPatterns = initHostMatchRegex("*")
+			}
 		}
 	}
+
 }
 
 func InitSpac() {
@@ -297,6 +291,27 @@ func InitSpac() {
 	}
 }
 
+func selectProxyByRequest(req *http.Request, host, port string, isHttpsConn bool, proxyNames []string) []string {
+	for _, r := range spac.rules {
+		if r.match(req) {
+			return r.Proxy
+		}
+	}
+
+	if !isHttpsConn && needInjectCRLF(req.Host) {
+		return []string{DIRECT_NAME, spac.defaultRule}
+	}
+
+	if hostsEnable != HOSTS_DISABLE {
+		if _, exist := lookupReachableMappingHost(req, net.JoinHostPort(host, port)); exist {
+			return []string{"Direct", spac.defaultRule}
+		} else {
+			//log.Printf("[WARN]No available IP for %s\n", host)
+		}
+	}
+	return proxyNames
+}
+
 func SelectProxy(req *http.Request, conn net.Conn, isHttpsConn bool) []RemoteConnectionManager {
 	host := req.Host
 	port := "80"
@@ -306,38 +321,25 @@ func SelectProxy(req *http.Request, conn net.Conn, isHttpsConn bool) []RemoteCon
 	}
 	proxyNames := []string{spac.defaultRule}
 	proxyManagers := make([]RemoteConnectionManager, 0)
-	if (host == "127.0.0.1" || host == util.GetLocalIP()) && port == common.ProxyPort {
-		handleSelfHttpRequest(req, conn)
-		return nil
+	need_select_proxy := true
+	if util.IsPrivateIP(host) {
+		need_select_proxy = false
+		proxyNames = []string{DIRECT_NAME}
+		if host == "127.0.0.1" || host == util.GetLocalIP() {
+			if port == common.ProxyPort {
+				handleSelfHttpRequest(req, conn)
+				return nil
+			}
+		}
 	}
 
 	if !isHttpsConn && needRedirectHttpsHost(req.Host) {
 		redirectHttps(conn, req)
 		return nil
 	}
-
-	matched := false
-	for _, r := range spac.rules {
-		if r.match(req) {
-			proxyNames = r.Proxy
-			matched = true
-			break
-		}
+	if need_select_proxy {
+		proxyNames = selectProxyByRequest(req, host, port, isHttpsConn, proxyNames)
 	}
-
-	if !isHttpsConn && !matched && needInjectCRLF(req.Host) {
-		proxyNames = []string{"Direct", spac.defaultRule}
-		matched = true
-	}
-
-	if !matched && hostsEnable != HOSTS_DISABLE {
-		if _, exist := lookupReachableMappingHost(req, net.JoinHostPort(host, port)); exist {
-			proxyNames = []string{"Direct", spac.defaultRule}
-		} else {
-			//log.Printf("[WARN]No available IP for %s\n", host)
-		}
-	}
-	//log.Printf("Matchd %s with host %s\n", proxyNames[0], req.Host)
 	for _, proxyName := range proxyNames {
 		if strings.EqualFold(proxyName, DEFAULT_NAME) {
 			proxyName = spac.defaultRule

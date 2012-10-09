@@ -172,7 +172,6 @@ func (conn *GAEHttpConnection) Auth() error {
 		log.Println(err)
 		return err
 	}
-
 	if authres, ok := res.(*event.AuthResponseEvent); !ok {
 		log.Printf("Type is  %d\n", res.GetType())
 		return errors.New("Invalid auth response.")

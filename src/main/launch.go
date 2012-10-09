@@ -31,6 +31,7 @@ func main() {
 	proxy.InitSpac()
 	proxy.InitGoogle()
 	proxy.InitHosts()
+	proxy.InitSelfWebServer()
 	var gae proxy.GAE
 	var c4 proxy.C4
 	err = gae.Init()

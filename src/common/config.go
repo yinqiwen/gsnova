@@ -3,6 +3,7 @@ package common
 import (
 	"log"
 	"net"
+	"net/url"
 	"util"
 )
 
@@ -19,6 +20,9 @@ func InitConfig() error {
 		if len(port) > 0 {
 			ProxyPort = port
 		}
+	}
+	if addr, exist := Cfg.GetProperty("LocalProxy", "Proxy"); exist {
+		LocalProxy, _ = url.Parse(addr)
 	}
 	if enable, exist := Cfg.GetIntProperty("Debug", "Enable"); exist {
 		DebugEnable = (enable != 0)

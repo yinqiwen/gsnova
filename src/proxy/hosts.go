@@ -2,11 +2,8 @@ package proxy
 
 import (
 	"bufio"
-	//"math/rand"
-	//"bytes"
 	"common"
 	"encoding/json"
-	//"fmt"
 	"github.com/yinqiwen/godns"
 	"io"
 	"io/ioutil"
@@ -240,6 +237,7 @@ func needRedirectHttpsHost(host string) bool {
 }
 
 func needInjectCRLF(host string) bool {
+    //log.Printf("##Host:%s, pattern size=%d\n", host, len(injectCRLFPatterns))
 	return hostPatternMatched(injectCRLFPatterns, host)
 }
 
@@ -263,9 +261,9 @@ func trustedDNSQuery(host string, port string) ([]string, bool) {
 	//Query DNS over TCP
 	if useTCPDns {
 		options := &godns.LookupOptions{
-			DNSServers: trustedDNS, Net: "tcp"}
+			DNSServers: trustedDNS,
+			Net:        "tcp"}
 		if ips, err := godns.LookupIP(host, options); nil == err {
-			//		if ips, err := util.DnsTCPLookup(trustedDNS, host, true); nil == err {
 			result := []string{}
 			for _, ip := range ips {
 				if nil != ip.To4() && !isTCPAddressBlocked(host, ip.String(), port) {

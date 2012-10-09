@@ -11,58 +11,42 @@ import (
 	"net/http"
 	"runtime"
 	"strings"
+	"util"
 )
 
-//type selfResponseWriter struct {
-//	header http.Header
-//	conn   net.Conn
-//	wroteHeader bool
-//}
-//
-//func (w *selfResponseWriter) Header() http.Header {
-//	if nil == w.header {
-//		w.header = make(http.Header)
-//	}
-//	return w.header
-//}
-//func (w *selfResponseWriter) Write([]byte) (int, error) {
-//    
-//}
-//
-//func (w *selfResponseWriter) WriteHeader(int) {
-//}
-//
-//func InitSelfWebServer() {
-//	http.DefaultServeMux.HandleFunc("/", statHandler)
-//	http.DefaultServeMux.HandleFunc("/stat", statHandler)
-//	http.DefaultServeMux.HandleFunc("/gfwlist/pac", gfwlistPACHandler)
-//}
-//
-//func statHandler(w http.ResponseWriter, req *http.Request) {
-//	// http.
-//}
-//
-//func gfwlistPACHandler(w ResponseWriter, req *Request) {
-//	http.ServeFile(w, r, common.Home+"/snova-gfwlist.pac")
-//}
+var lp *util.DelegateConnListener
 
-func dummyReq(method string) *http.Request {
-	return &http.Request{Method: method}
+func InitSelfWebServer() {
+	lp = util.NewDelegateConnListener()
+	http.HandleFunc("/pac/gfwlist", func(w http.ResponseWriter, r *http.Request) {
+		r.URL.Path = "/snova-gfwlist.pac"
+		w.Header().Set("Content-Type", "application/x-ns-proxy-autoconfig")
+		w.Header().Set("Content-Disposition", "attachment;filename=snova-gfwlist.pac")
+		http.FileServer(http.Dir(common.Home)).ServeHTTP(w, r)
+	})
+	http.HandleFunc("/stat", statHandler)
+	http.HandleFunc("/", indexHandler)
+	http.Handle("/*", http.NotFoundHandler())
+	go http.Serve(lp, nil)
 }
 
-func statHandler(req *http.Request) *http.Response {
-	res := &http.Response{Status: "200 OK",
-		StatusCode: 200,
-		Proto:      "HTTP/1.1",
-		ProtoMajor: 1,
-		ProtoMinor: 1,
-		Request:    dummyReq("GET"),
-		Header: http.Header{
-			"Connection":   {"close"},
-			"Content-Type": {"text/plain"},
-		},
-		Close:         true,
-		ContentLength: -1}
+func indexHandler(w http.ResponseWriter, req *http.Request) {
+	if req.URL.Path != "/" {
+		http.NotFoundHandler().ServeHTTP(w, req)
+		return
+	}
+	hf := common.Home + "/web/html/index.html"
+	if content, err := ioutil.ReadFile(hf); nil == err {
+		strcontent := string(content)
+		strcontent = strings.Replace(strcontent, "${Version}", common.Version, -1)
+		strcontent = strings.Replace(strcontent, "${ProxyPort}", common.ProxyPort, -1)
+		w.Header().Set("Content-Type", "text/html")
+		w.Write([]byte(strcontent))
+	}
+}
+
+//
+func statHandler(w http.ResponseWriter, req *http.Request) {
 	var stat runtime.MemStats
 	runtime.ReadMemStats(&stat)
 	var buf bytes.Buffer
@@ -72,72 +56,11 @@ func statHandler(req *http.Request) *http.Response {
 	if content, err := json.MarshalIndent(&stat, "", " "); nil == err {
 		buf.Write(content)
 	}
-	res.Body = ioutil.NopCloser(&buf)
-	return res
-}
-
-func indexHandler(req *http.Request) *http.Response {
-	res := &http.Response{Status: "200 OK",
-		StatusCode: 200,
-		Proto:      "HTTP/1.1",
-		ProtoMajor: 1,
-		ProtoMinor: 1,
-		Request:    dummyReq("GET"),
-		Header: http.Header{
-			"Connection":   {"close"},
-			"Content-Type": {"text/html"},
-		},
-		Close:         true,
-		ContentLength: -1}
-	hf := common.Home + "/web/html/index.html"
-	if content, err := ioutil.ReadFile(hf); nil == err {
-		strcontent := string(content)
-		strcontent = strings.Replace(strcontent, "${Version}", common.Version, -1)
-		strcontent = strings.Replace(strcontent, "${ProxyPort}", common.ProxyPort, -1)
-		var buf bytes.Buffer
-		buf.WriteString(strcontent)
-		res.Body = ioutil.NopCloser(&buf)
-	}
-	return res
-}
-
-func pacHandler(req *http.Request) *http.Response {
-	res := &http.Response{Status: "200 OK",
-		StatusCode: 200,
-		Proto:      "HTTP/1.1",
-		ProtoMajor: 1,
-		ProtoMinor: 1,
-		Request:    dummyReq("GET"),
-		Header: http.Header{
-			"Connection":          {"close"},
-			"Content-Type":        {"application/x-ns-proxy-autoconfig"},
-			"Content-Disposition": {"attachment;filename=snova-gfwlist.pac"},
-		},
-		Close:         true,
-		ContentLength: -1}
-	hf := common.Home + "/snova-gfwlist.pac"
-	if content, err := ioutil.ReadFile(hf); nil == err {
-		var buf bytes.Buffer
-		buf.Write(content)
-		res.Body = ioutil.NopCloser(&buf)
-	}
-	return res
+	w.Header().Set("Content-Type", "text/plain")
+	w.Write(buf.Bytes())
 }
 
 func handleSelfHttpRequest(req *http.Request, conn net.Conn) {
-	path := req.URL.Path
-	log.Printf("Path is %s\n", path)
-	var res *http.Response
-	switch path {
-	case "/pac/gfwlist":
-		res = pacHandler(req)
-	case "/stat":
-		res = statHandler(req)
-	case "/":
-		res = indexHandler(req)
-	}
-	if nil != res {
-		res.Write(conn)
-	}
-	conn.Close()
+	log.Printf("Path is %s\n", req.URL.Path)
+	lp.Delegate(conn, req)
 }
