@@ -27,9 +27,9 @@ const (
 	GOOGLE_HTTP_NAME  = "GoogleHttp"
 	GOOGLE_HTTPS_NAME = "GoogleHttps"
 	FORWARD_NAME      = "Forward"
-	//	AUTOHOST_NAME     = "AutoHost"
-	DIRECT_NAME  = "Direct"
-	DEFAULT_NAME = "Default"
+	SSH_NAME          = "SSH"
+	DIRECT_NAME       = "Direct"
+	DEFAULT_NAME      = "Default"
 
 	MODE_HTTP    = "http"
 	MODE_HTTPS   = "httpS"
