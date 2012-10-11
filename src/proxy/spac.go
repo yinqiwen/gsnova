@@ -239,20 +239,6 @@ func generatePACFromGFWList(url string) {
 }
 
 func PostInitSpac() {
-	auto_inject_crlf := true
-	if nil != common.LocalProxy && !strings.HasPrefix(common.LocalProxy.Host, "Google") {
-		auto_inject_crlf = false
-	}
-	switch spac.defaultRule {
-	case GAE_NAME, C4_NAME:
-		if !gae_enable && !c4_enable {
-			spac.defaultRule = DIRECT_NAME
-			if auto_inject_crlf {
-				injectCRLFPatterns = initHostMatchRegex("*")
-			}
-		}
-	}
-
 }
 
 func InitSpac() {
@@ -345,7 +331,7 @@ func SelectProxy(req *http.Request, conn net.Conn, isHttpsConn bool) []RemoteCon
 			proxyName = spac.defaultRule
 		}
 		switch proxyName {
-		case GAE_NAME, C4_NAME:
+		case GAE_NAME, C4_NAME, SSH_NAME:
 			if v, ok := registedRemoteConnManager[proxyName]; ok {
 				proxyManagers = append(proxyManagers, v)
 			} else {

@@ -1,6 +1,7 @@
 package util
 
 import (
+	"bufio"
 	"crypto/tls"
 	"errors"
 	"io"
@@ -22,6 +23,37 @@ func HttpGet(urlstr string, proxy string) (*http.Response, error) {
 	}
 	client := &http.Client{Transport: tr}
 	return client.Get(urlstr)
+}
+
+func HttpTunnelDial(network, addr string, tunnel_url *url.URL) (c net.Conn, err error) {
+	if nil == tunnel_url {
+		return net.Dial(network, addr)
+	}
+	c, err = net.Dial("tcp", tunnel_url.Host)
+	if nil != err {
+		return
+	}
+	reader := bufio.NewReader(c)
+	req := &http.Request{
+		Method: "CONNECT",
+		URL:    &url.URL{Host: addr},
+		Host:   addr,
+		Header: make(http.Header),
+	}
+	err = req.Write(c)
+	if nil != err {
+		return
+	}
+	var res *http.Response
+	res, err = http.ReadResponse(reader, req)
+	if nil != err {
+		return
+	}
+	if res.StatusCode >= 300 {
+		c.Close()
+		return nil, errors.New(res.Status)
+	}
+	return
 }
 
 type DelegateConnListener struct {

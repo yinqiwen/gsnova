@@ -31,22 +31,27 @@ func main() {
 	proxy.InitSpac()
 	proxy.InitGoogle()
 	proxy.InitHosts()
-	proxy.InitSelfWebServer()
+
 	var gae proxy.GAE
 	var c4 proxy.C4
 	err = gae.Init()
-	
 	if nil != err {
-		fmt.Printf("[ERROR]Failed to init GAE:%s\n", err.Error())
+		log.Printf("[WARN]Failed to init GAE:%s\n", err.Error())
 		//return
+	} else {
+		//init fake cert if GAE inited success
+		common.LoadRootCA()
 	}
 	err = c4.Init()
 	if nil != err {
-		fmt.Printf("[ERROR]Failed to init C4:%s\n", err.Error())
+		log.Printf("[WARN]Failed to init C4:%s\n", err.Error())
 		//return
 	}
+
+	proxy.InitSSH()
+	proxy.InitSelfWebServer()
 	proxy.PostInitSpac()
-	common.LoadRootCA()
+
 	log.Println("=============Start GSnova " + common.Version + "=============")
 	addr, exist := common.Cfg.GetProperty("LocalServer", "Listen")
 	if !exist {

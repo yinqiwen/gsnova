@@ -1,5 +1,20 @@
 GSnova Changelog
 ===================
+Changes in version 0.17.0(2012.10.xx)
+-------------------------------------------
+** Features
+   * [SSH]: Add support for SSH tunnel
+   * [SSH]: Support more than 1 ssh server
+   * [SSH]: Support remote DNS over ssh tunnel 
+   * [SSH]: Support user/pass auth and user/privatekey auth
+   * [SPAC]:Support self defined proxy address(Default 127.0.0.1:48100)
+
+** Improvement
+   * Improve performance, now memory footprint is only about 18MB or less in windows.
+      
+** Task
+   * NA
+
 Changes in version 0.16.0(2012.10.06)
 -------------------------------------------
 ** Features

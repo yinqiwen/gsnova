@@ -599,7 +599,7 @@ func (manager *GAE) Init() error {
 	if enable, exist := common.Cfg.GetIntProperty("GAE", "Enable"); exist {
 		gae_enable = (enable != 0)
 		if enable == 0 {
-			return nil
+			return errors.New("GAE not inited since [GAE] Enable=0")
 		}
 	}
 	log.Println("Init GAE.")
