@@ -1,10 +1,37 @@
 package util
 
 import (
+	"crypto/dsa"
+	"math/big"
+	"misc/myasn1"
 	"regexp"
 	"strconv"
 	"strings"
 )
+
+type dsaPrivateKey struct {
+	Version       int
+	P, Q, G, Y, X *big.Int
+}
+
+func DecodeDSAPrivateKEy(der []byte) (key *dsa.PrivateKey, err error) {
+	var priv dsaPrivateKey
+	rest, err := myasn1.Unmarshal(der, &priv)
+	if len(rest) > 0 {
+		err = myasn1.SyntaxError{Msg: "trailing data"}
+		return
+	}
+	if err != nil {
+		return
+	}
+	key = new(dsa.PrivateKey)
+	key.P = priv.P
+	key.Q = priv.Q
+	key.G = priv.G
+	key.Y = priv.Y
+	key.X = priv.X
+	return
+}
 
 func RegexpReplace(str, replace string, regex *regexp.Regexp, count int) string {
 	if 0 == count {

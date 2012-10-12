@@ -1,6 +1,6 @@
 [
   {
-    "Host" : ["*.ytimg.com*", "plus.google.com", "sites.google.com","*.googleusercontent.com*", "*.gstatic.com", "*.googleapis.com*", "*.googlecode.com", "dl.google.com"],
+    "Host" : ["*.ytimg.com*", "encrypted.google.com", "plus.google.com", "sites.google.com","*.googleusercontent.com*", "*.gstatic.com", "*.googleapis.com*", "*.googlecode.com", "dl.google.com"],
     "Proxy":["GoogleHttps", "Direct", "Default"]
   },
   {
@@ -8,7 +8,11 @@
     "Proxy":["GoogleHttps", "Direct", "Default"]
   },
   {
-    "Host" : ["*.appspot.com*"],
+    "Host" : ["(*.)?drive.google.com"],
+    "Proxy":["GoogleHttps", "Direct", "Default"]
+  },
+  {
+    "Host" : ["*.appspot.com"],
     "Proxy":["Google","Default"]
   },
   {

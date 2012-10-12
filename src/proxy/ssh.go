@@ -64,16 +64,16 @@ func (conn *SSHConnection) initProxyConn(proxy_addr string, isHttps bool) error 
 		var ips []net.IP
 		host, port, err = net.SplitHostPort(proxy_addr)
 		port_int, _ := strconv.Atoi(port)
-		if nil == err && len(ips) > 0 {
+		if nil == err {
 			ips, err = conn.ssh_conn.RemoteResolve(host)
-			if nil == err {
+			if nil == err && len(ips) > 0 {
 				raddr = &net.TCPAddr{
 					IP:   ips[0],
 					Port: port_int,
 				}
 			}
-			if len(ips) == 0 {
-				err = errors.New(fmt.Sprintf("No DNS records found for %s %v", host, err))
+			if len(ips) == 0 && nil == err {
+				err = errors.New(fmt.Sprintf("No DNS records found for %s", host))
 			}
 		}
 	}
@@ -245,6 +245,11 @@ func (k *keychain) Sign(i int, rand io.Reader, data []byte) (sig []byte, err err
 	switch key := k.keys[i].(type) {
 	case *rsa.PrivateKey:
 		return rsa.SignPKCS1v15(rand, key, hashFunc, digest)
+	case *dsa.PrivateKey:
+		r, s, err := dsa.Sign(rand, key, digest)
+		if nil == err {
+			return append(r.Bytes(), s.Bytes()...), nil
+		}
 	}
 	return nil, errors.New("ssh: unknown key type")
 }
@@ -302,9 +307,23 @@ func InitSSH() error {
 								log.Printf("Invalid pem content for path:%s.\n", identify)
 								continue
 							}
-							rsakey, _ := x509.ParsePKCS1PrivateKey(block.Bytes)
 							clientKeychain := new(keychain)
-							clientKeychain.keys = append(clientKeychain.keys, rsakey)
+							if strings.Contains(block.Type, "RSA") {
+								rsakey, err := x509.ParsePKCS1PrivateKey(block.Bytes)
+								if err != nil {
+									log.Printf("Invalid RSA private key for %v.\n", err)
+									continue
+								}
+								clientKeychain.keys = append(clientKeychain.keys, rsakey)
+							} else {
+								dsakey, err := util.DecodeDSAPrivateKEy(block.Bytes)
+								if err != nil {
+									log.Printf("Invalid DSA private key for %v.\n", err)
+									continue
+								}
+								clientKeychain.keys = append(clientKeychain.keys, dsakey)
+							}
+
 							ssh_conn.ClientConfig = &ssh.ClientConfig{
 								User: u.User.Username(),
 								Auth: []ssh.ClientAuth{
@@ -322,6 +341,7 @@ func InitSSH() error {
 			}
 			if _, err := ssh_conn.GetClientConn(true); nil == err {
 				manager.selector.Add(&ssh_conn)
+				log.Printf("SSH server %s connected.\n", ssh_conn.Server)
 			} else {
 				log.Printf("Invalid SSH server url:%s to connect for reason:%v\n", v, err)
 			}
