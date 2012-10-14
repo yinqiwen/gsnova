@@ -109,7 +109,7 @@ func (session *SessionConnection) processHttpEvent(ev *event.HTTPRequestEvent) e
 	}
 
 	if nil != err {
-		log.Printf("Session[%d]Prcess error:%v", session.SessionID, err)
+		log.Printf("Session[%d]Process error:%v", session.SessionID, err)
 		session.LocalRawConn.Write([]byte("HTTP/1.1 500 Internal Server Error\r\n\r\n"))
 		session.LocalRawConn.Close()
 	}
@@ -189,7 +189,6 @@ func HandleConn(sessionId uint32, conn net.Conn) {
 		return
 	}
 	session := newSessionConnection(sessionId, conn, bufreader)
-	//log.Printf("First str:%s\n", string(b))
 	if strings.EqualFold(string(b), "Connect") {
 		session.Type = HTTPS_TUNNEL
 	} else if b[0] == byte(4) || b[0] == byte(5) {

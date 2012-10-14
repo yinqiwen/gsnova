@@ -216,7 +216,7 @@ func processRecvEvent(ev event.Event, server string) error {
 		//		log.Printf("Status %d\n", cev.Status)
 		if cev.Status == event.TCP_CONN_CLOSED {
 			if cev.Addr == handler.remote_addr {
-				log.Printf("[%d]Close session.\n", ev.GetHash())
+				log.Printf("[%d]Close session for %s\n", ev.GetHash(), cev.Addr)
 				deleteSessionEntry(ev.GetHash())
 			}
 		}

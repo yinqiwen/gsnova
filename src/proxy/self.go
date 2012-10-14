@@ -6,11 +6,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
-	//"log"
 	"net"
 	"net/http"
 	"runtime"
-	//	"strings"
 	"util"
 )
 

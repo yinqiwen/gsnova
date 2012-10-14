@@ -22,6 +22,8 @@ type JsonRule struct {
 	Host         []string
 	URL          []string
 	Proxy        []string
+	Filter       []string
+	Protocol     string
 	Attr         map[string]string
 	method_regex []*regexp.Regexp
 	host_regex   []*regexp.Regexp
@@ -74,8 +76,30 @@ func (r *JsonRule) init() (err error) {
 	return
 }
 
+func (r *JsonRule) matchProtocol(req *http.Request) bool {
+	if len(r.Protocol) > 0 {
+		protocol := "http"
+		if strings.EqualFold(req.Method, "Connect") {
+			protocol = "https"
+		}
+		return strings.EqualFold(r.Protocol, protocol)
+	}
+	return true
+}
+
+func (r *JsonRule) matchFilters(req *http.Request) bool {
+	matched := len(r.Filter) > 0
+	for _, filter := range r.Filter {
+		matched = matched && invokeFilter(filter, req)
+		if !matched {
+			return false
+		}
+	}
+	return matched
+}
+
 func (r *JsonRule) match(req *http.Request) bool {
-	return matchRegexs(req.Method, r.method_regex) && matchRegexs(req.Host, r.host_regex) && matchRegexs(req.RequestURI, r.url_regex)
+	return r.matchFilters(req) && r.matchProtocol(req) && matchRegexs(req.Method, r.method_regex) && matchRegexs(req.Host, r.host_regex) && matchRegexs(req.RequestURI, r.url_regex)
 }
 
 type SpacConfig struct {
@@ -275,6 +299,7 @@ func InitSpac() {
 	if nil != e {
 		log.Printf("Failed to init SPAC for reason:%v", e)
 	}
+	init_spac_func()
 }
 
 func selectProxyByRequest(req *http.Request, host, port string, isHttpsConn bool, proxyNames []string) []string {

@@ -30,6 +30,8 @@ type ForwardConnection struct {
 	closed               bool
 	range_fetch_conns    []net.Conn
 	range_fetch_raw_addr string
+	range_expected_pos   int
+	range_fetch_error    error
 }
 
 func (conn *ForwardConnection) Close() error {
@@ -164,8 +166,6 @@ func (auto *ForwardConnection) rangeFetch(hash uint32, resp *http.Response, req 
 		}
 		resp.Header.Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d\r\n", start, (int64(start)+resp.ContentLength-1), content_length))
 	}
-	//resp.Header.Set("Connection", "keep-alive")
-	//resp.Close = false
 	save_body := resp.Body
 	var empty bytes.Buffer
 	resp.Body = ioutil.NopCloser(&empty)
@@ -181,7 +181,7 @@ func (auto *ForwardConnection) rangeFetch(hash uint32, resp *http.Response, req 
 		auto.range_fetch_conns = make([]net.Conn, hostRangeConcurrentFether)
 	}
 	log.Printf("Session[%d]Start %d range chunk %s from %s\n", hash, hostRangeConcurrentFether, contentRange, req.Host)
-
+	auto.range_fetch_error = nil
 	for i := 0; i < int(hostRangeConcurrentFether); i++ {
 		go auto.rangeFetchWorker(req, hash, i, endpos+1+i*int(hostRangeFetchLimitSize), limit, rangeFetchChannel)
 	}
@@ -200,7 +200,7 @@ func (auto *ForwardConnection) rangeFetch(hash uint32, resp *http.Response, req 
 
 	responsedChunks := make(map[int]*rangeChunk)
 	stopedWorker := uint32(0)
-	expectedPos := endpos + 1
+	auto.range_expected_pos = endpos + 1
 	for !auto.closed {
 		select {
 		case chunk := <-rangeFetchChannel:
@@ -213,26 +213,26 @@ func (auto *ForwardConnection) rangeFetch(hash uint32, resp *http.Response, req 
 			}
 		}
 		for {
-			if chunk, exist := responsedChunks[expectedPos]; exist {
+			if chunk, exist := responsedChunks[auto.range_expected_pos]; exist {
 				_, err := localConn.Write(chunk.content)
-				delete(responsedChunks, expectedPos)
+				delete(responsedChunks, auto.range_expected_pos)
 				if nil != err {
 					log.Printf("????????????????????????????%v\n", err)
 					auto.Close()
 					//return err
 				} else {
-					expectedPos = expectedPos + len(chunk.content)
+					auto.range_expected_pos = auto.range_expected_pos + len(chunk.content)
 				}
 			} else {
 				if common.DebugEnable {
-					log.Printf("Session[%d]Expected %d\n", hash, expectedPos)
+					log.Printf("Session[%d]Expected %d\n", hash, auto.range_expected_pos)
 				}
 				break
 			}
 		}
 		if stopedWorker >= hostRangeConcurrentFether {
 			if len(responsedChunks) > 0 {
-				log.Printf("Session[%d]Rest %d unwrite chunks while expectedPos=%d \n", hash, len(responsedChunks), expectedPos)
+				log.Printf("Session[%d]Rest %d unwrite chunks while expectedPos=%d \n", hash, len(responsedChunks), auto.range_expected_pos)
 			}
 			break
 		}
@@ -244,8 +244,6 @@ func (auto *ForwardConnection) rangeFetchWorker(req *http.Request, hash uint32, 
 	var buf bytes.Buffer
 	req.Write(&buf)
 	clonereq, _ := http.ReadRequest(bufio.NewReader(&buf))
-	//clonereq.Header.Set("Connection", "keep-alive")
-	//clonereq.Close = false
 	rawaddr, _ := lookupReachableAddress(net.JoinHostPort(req.Host, "80"))
 	if auto.range_fetch_raw_addr != rawaddr {
 		if common.DebugEnable {
@@ -281,12 +279,27 @@ func (auto *ForwardConnection) rangeFetchWorker(req *http.Request, hash uint32, 
 	}
 	retry_count := 0
 	retry_limit := 2
+	close_func := func() {
+		if nil != auto.range_fetch_conns[index] {
+			auto.range_fetch_conns[index].Close()
+			auto.range_fetch_conns[index] = nil
+		}
+	}
 	retry_cb := func() {
 		retry_count = retry_count + 1
-		auto.range_fetch_conns[index].Close()
-		auto.range_fetch_conns[index] = nil
+		close_func()
 	}
 	for startpos < limit-1 && !auto.closed && retry_count <= retry_limit {
+		if auto.range_fetch_error != nil {
+			break
+		}
+		close_func()
+		if startpos-auto.range_expected_pos >= 1024*1024 {
+			time.Sleep(500 * time.Millisecond)
+			close_func()
+			continue
+		}
+
 		endpos := startpos + int(hostRangeFetchLimitSize) - 1
 		if endpos > limit {
 			endpos = limit
@@ -331,7 +344,7 @@ func (auto *ForwardConnection) rangeFetchWorker(req *http.Request, hash uint32, 
 		chunk := &rangeChunk{}
 		chunk.start = startpos
 		chunk.content = make([]byte, resp.ContentLength)
-		//auto.range_fetch_conns[index].SetReadDeadline(time.Now().Add(time.Second * 30))
+		log.Printf("Session[%d]Fetch[%d] start fetch %d bytes chunk[%d:%d-%d]from %s.", hash, index, resp.ContentLength, startpos, endpos, limit, clonereq.Host)
 		if n, er := io.ReadFull(resp.Body, chunk.content); nil != er || n != int(endpos-startpos+1) {
 			log.Printf("[ERROR]Session[%d]Read rrror response %v with %d bytes for reason:%v\n", hash, resp, n, er)
 			retry_cb()
@@ -344,6 +357,7 @@ func (auto *ForwardConnection) rangeFetchWorker(req *http.Request, hash uint32, 
 	}
 	if nil != err {
 		log.Printf("Session[%d]Fetch[%d] failed for %v", hash, index, err)
+		auto.range_fetch_error = err
 	}
 	//end
 	ch <- &rangeChunk{start: -1}

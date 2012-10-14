@@ -48,7 +48,7 @@ func main() {
 		//return
 	}
 
-	proxy.InitSSH()
+	go proxy.InitSSH()
 	proxy.InitSelfWebServer()
 	proxy.PostInitSpac()
 

@@ -42,7 +42,6 @@ var gae_cfg *GAEConfig
 var gae_enable bool
 var gae_use_shared_appid bool
 
-
 type GAEAuth struct {
 	appid  string
 	user   string
@@ -72,17 +71,17 @@ func (auth *GAEAuth) parse(line string) error {
 	return nil
 }
 
-
 type GAEHttpConnection struct {
-	auth              GAEAuth
-	authToken         string
-	client            *http.Client
-	remote_conn       net.Conn
-	manager           *GAE
-	proxyURL          *url.URL
-	rangeStart        int
-	rangeFetchChannel chan *rangeChunk
-	closed            bool
+	auth               GAEAuth
+	authToken          string
+	client             *http.Client
+	remote_conn        net.Conn
+	manager            *GAE
+	proxyURL           *url.URL
+	rangeStart         int
+	rangeFetchChannel  chan *rangeChunk
+	range_expected_pos int
+	closed             bool
 }
 
 func (gae *GAEHttpConnection) Close() error {
@@ -270,6 +269,10 @@ func (gae *GAEHttpConnection) requestEvent(conn *SessionConnection, ev event.Eve
 func (gae *GAEHttpConnection) rangeFetch(req *event.HTTPRequestEvent, index, startpos, limit int) {
 	clonereq := req.DeepClone()
 	for startpos < limit-1 && !gae.closed {
+		if startpos-gae.range_expected_pos >= 1024*1024 {
+			time.Sleep(500 * time.Millisecond)
+			continue
+		}
 		endpos := startpos + int(gae_cfg.FetchLimitSize) - 1
 		if endpos > limit {
 			endpos = limit
@@ -367,7 +370,7 @@ func (gae *GAEHttpConnection) handleHttpRes(conn *SessionConnection, req *event.
 			httpres.Write(conn.LocalRawConn)
 			responsedChunks := make(map[int]*rangeChunk)
 			stopedWorker := uint32(0)
-			expectedPos := endpos + 1
+			gae.range_expected_pos = endpos + 1
 			for {
 				select {
 				case chunk := <-gae.rangeFetchChannel:
@@ -379,16 +382,16 @@ func (gae *GAEHttpConnection) handleHttpRes(conn *SessionConnection, req *event.
 						}
 					}
 					for {
-						if chunk, exist := responsedChunks[expectedPos]; exist {
+						if chunk, exist := responsedChunks[gae.range_expected_pos]; exist {
 							_, err := conn.LocalRawConn.Write(chunk.content)
-							delete(responsedChunks, expectedPos)
+							delete(responsedChunks, gae.range_expected_pos)
 							if nil != err {
 								log.Printf("????????????????????????????%v\n", err)
 								conn.LocalRawConn.Close()
 								gae.Close()
 								//return err
 							} else {
-								expectedPos = expectedPos + len(chunk.content)
+								gae.range_expected_pos = gae.range_expected_pos + len(chunk.content)
 							}
 
 						} else {
@@ -623,7 +626,7 @@ func (manager *GAE) Init() error {
 	//no appid found, fetch shared from master
 	gae_use_shared_appid = false
 	if index == 0 {
-	    gae_use_shared_appid = true
+		gae_use_shared_appid = true
 		err, appids := manager.fetchSharedAppIDs()
 		if nil != err {
 			return err

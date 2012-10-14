@@ -30,7 +30,7 @@ type DNSResult struct {
 	Date time.Time
 }
 
-//var useGlobalProxy bool
+var ipRepo string
 var repoUrls []string
 var hostMapping = make(map[string]string)
 var reachableDNSResult = make(map[string]DNSResult)
@@ -52,6 +52,10 @@ var blockVerifyTimeout = 5
 var hostRangeFetchLimitSize = uint32(256000)
 var hostInjectRangePatterns = []*regexp.Regexp{}
 var hostRangeConcurrentFether = uint32(5)
+
+func loadIPRepoFile() {
+
+}
 
 func loadDiskHostFile() {
 	files, err := ioutil.ReadDir(common.Home + "hosts/")
@@ -237,7 +241,7 @@ func needRedirectHttpsHost(host string) bool {
 }
 
 func needInjectCRLF(host string) bool {
-    //log.Printf("##Host:%s, pattern size=%d\n", host, len(injectCRLFPatterns))
+	//log.Printf("##Host:%s, pattern size=%d\n", host, len(injectCRLFPatterns))
 	return hostPatternMatched(injectCRLFPatterns, host)
 }
 

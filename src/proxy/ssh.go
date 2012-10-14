@@ -295,7 +295,6 @@ func InitSSH() error {
 							ssh.ClientAuthPassword(password(pass)),
 						},
 					}
-
 				} else {
 					if identify := u.Query().Get("i"); len(identify) > 0 {
 						if content, err := ioutil.ReadFile(identify); nil != err {
