@@ -86,6 +86,7 @@ func (session *SessionConnection) processHttpEvent(ev *event.HTTPRequestEvent) e
 	ev.SetHash(session.SessionID)
 	proxies := SelectProxy(ev.RawReq, session.LocalRawConn, session.Type == HTTPS_TUNNEL)
 	if nil == proxies {
+		session.State = STATE_SESSION_CLOSE
 		return nil
 	}
 	var err error

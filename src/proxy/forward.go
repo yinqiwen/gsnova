@@ -460,6 +460,7 @@ func (auto *ForwardConnection) Request(conn *SessionConnection, ev event.Event) 
 				conn.State = STATE_SESSION_CLOSE
 			} else {
 				conn.State = STATE_RECV_HTTP
+				auto.Close()
 			}
 		}
 	default:

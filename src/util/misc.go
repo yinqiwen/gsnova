@@ -93,15 +93,14 @@ func GetURLString(req *http.Request, with_method bool) string {
 	if nil == req {
 		return ""
 	}
-	u := *(req.URL)
-	if len(u.Scheme) == 0 {
-		u.Scheme = "https:"
-		u.Opaque = "//"
+	str := req.URL.String()
+	if len(req.URL.Scheme) == 0 {
+		str = fmt.Sprintf("https://%s", req.Host) 
 	}
 	if with_method {
-		return fmt.Sprintf("%s %s", req.Method, u)
+		return fmt.Sprintf("%s %s", req.Method, str)
 	}
-	return u.String()
+	return str
 }
 
 func ParseContentRangeHeaderValue(value string) (startPos, endPos, length int) {
@@ -116,4 +115,16 @@ func ParseContentRangeHeaderValue(value string) (startPos, endPos, length int) {
 		endPos, _ = strconv.Atoi(vs[1])
 	}
 	return
+}
+
+func WildcardMatch(text string, pattern string) bool {
+	cards := strings.Split(pattern, "*")
+	for _, str := range cards {
+		idx := strings.Index(text, str)
+		if idx == -1 {
+			return false
+		}
+		text = strings.TrimLeft(text, str)
+	}
+	return true
 }

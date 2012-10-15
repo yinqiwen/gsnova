@@ -11,6 +11,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"regexp"
 	"strings"
 	"text/template"
@@ -129,6 +130,18 @@ function FindProxyForURL(url, host) {
 	return {{.DefaultVar}};
 }`
 
+func load_gfwlist_rule() {
+	var buffer bytes.Buffer
+	if content, err := ioutil.ReadFile(common.Home + "spac/snova-gfwlist.txt"); nil == err {
+		buffer.Write(content)
+	}
+	buffer.WriteString("\n")
+	if content, err := ioutil.ReadFile(common.Home + "spac/user-gfwlist.txt"); nil == err {
+		buffer.Write(content)
+	}
+	init_gfwlist_func(buffer.String())
+}
+
 func generatePAC(url, date, content string) string {
 	// Prepare some data to insert into the template.
 	type PACContent struct {
@@ -150,12 +163,10 @@ func generatePAC(url, date, content string) string {
 	pac.DefaultString = "DIRECT"
 	jscode := []string{}
 
-	if usercontent, err := ioutil.ReadFile(common.Home + "/user-gfwlist.txt"); nil == err {
+	if usercontent, err := ioutil.ReadFile(common.Home + "spac/user-gfwlist.txt"); nil == err {
 		content = content + "\n" + string(usercontent)
 	}
-	
-	init_gfwlist_func(content)
-	
+
 	reader := bufio.NewReader(strings.NewReader(content))
 	i := 0
 	for {
@@ -240,6 +251,7 @@ func generatePAC(url, date, content string) string {
 
 func generatePACFromGFWList(url string) {
 	log.Printf("Generate PAC from  gfwlist %s\n", url)
+	load_gfwlist_rule()
 	resp, err := util.HttpGet(url, "")
 	if err != nil {
 		if addr, exist := common.Cfg.GetProperty("LocalServer", "Listen"); exist {
@@ -253,14 +265,13 @@ func generatePACFromGFWList(url string) {
 		body, err := ioutil.ReadAll(resp.Body)
 		if nil == err {
 			last_mod_date := resp.Header.Get("last-modified")
-			hf := common.Home + "/snova-gfwlist.pac"
+			hf := common.Home + "spac/snova-gfwlist.pac"
 			content, _ := base64.StdEncoding.DecodeString(string(body))
-			if common.DebugEnable {
-				ioutil.WriteFile(common.Home+"/snova-gfwlist.txt", content, 0666)
-			}
+			ioutil.WriteFile(common.Home+"spac/snova-gfwlist.txt", content, 0666)
 			file_content := generatePAC(url, last_mod_date, string(content))
 			ioutil.WriteFile(hf, []byte(file_content), 0666)
 		}
+		load_gfwlist_rule()
 	}
 }
 
@@ -269,6 +280,7 @@ func PostInitSpac() {
 
 func InitSpac() {
 	spac = &SpacConfig{}
+	os.Mkdir(common.Home+"spac/", 0755)
 	spac.defaultRule, _ = common.Cfg.GetProperty("SPAC", "Default")
 	if len(spac.defaultRule) == 0 {
 		spac.defaultRule = GAE_NAME
@@ -289,9 +301,9 @@ func InitSpac() {
 
 	script, exist := common.Cfg.GetProperty("SPAC", "Script")
 	if !exist {
-		script = "spac.json"
+		script = "spac/spac.json"
 	}
-	file, e := ioutil.ReadFile(common.Home + script)
+	file, e := ioutil.ReadFile(common.Home + "spac/" + script)
 	if e == nil {
 		e = json.Unmarshal(file, &spac.rules)
 		for _, json_rule := range spac.rules {

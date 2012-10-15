@@ -55,6 +55,9 @@ func (h *IPRangeHolder) FindCountry(ip string) string {
 	}
 	index := sort.Search(len(h.ranges), compare)
 	if index > 0 {
+		if h.ranges[index].Start > uint64(v) || h.ranges[index].End < uint64(v) {
+			return ""
+		}
 		return h.ranges[index].Country
 	}
 	return ""
@@ -100,15 +103,15 @@ func Parse(name string, file_name string) (*IPRangeHolder, error) {
 					start, _ := strconv.ParseUint(strings.Trim(sp[2], "\""), 10, 32)
 					end, _ := strconv.ParseUint(strings.Trim(sp[3], "\""), 10, 32)
 					country := strings.Trim(sp[4], "\"")
-					//fmt.S
-					tmp := &IPRange{start, end, country}
-					holder.ranges = append(holder.ranges, tmp)
-					//log.Printf("%s, %s, %s\n", sp[0], sp[1], country)
+					if strings.EqualFold(country, "CN") {
+						tmp := &IPRange{start, end, country}
+						holder.ranges = append(holder.ranges, tmp)
+					}
 				}
 			}
 		}
 		rc.Close()
 		holder.sort()
 	}
-	return nil, nil
+	return holder, nil
 }

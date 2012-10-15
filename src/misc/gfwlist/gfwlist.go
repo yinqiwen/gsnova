@@ -15,39 +15,52 @@ type gfwListRule interface {
 	match(req *http.Request) bool
 }
 
-type hostUrlRegexRule struct {
+type hostUrlWildcardRule struct {
 	only_http bool
-	host_reg  *regexp.Regexp
-	url_reg   *regexp.Regexp
+	host_rule string
+	url_rule  string
 }
 
-func (r *hostUrlRegexRule) init(rule string) (err error) {
+func (r *hostUrlWildcardRule) init(rule string) (err error) {
 	if !strings.Contains(rule, "/") {
-		r.host_reg, err = util.PrepareRegexp(rule)
+		r.host_rule = rule
 		return
 	}
 	rules := strings.SplitN(rule, "/", 2)
-	r.host_reg, err = util.PrepareRegexp(rules[0])
+	r.host_rule = rules[0]
 	if nil != err {
 		return
 	}
 	if len(rules) == 2 && len(rules[1]) > 0 {
-		r.url_reg, err = util.PrepareRegexp(rules[1])
+		r.url_rule = rules[1]
 	}
 	return
 }
 
-func (r *hostUrlRegexRule) match(req *http.Request) bool {
+func (r *hostUrlWildcardRule) match(req *http.Request) bool {
 	if r.only_http && strings.EqualFold(req.Method, "Connect") {
 		return false
 	}
-	if ret := r.host_reg.MatchString(req.Host); !ret {
+	if ret := util.WildcardMatch(req.Host, r.host_rule); !ret {
 		return false
 	}
-	if nil != r.url_reg {
-		return r.url_reg.MatchString(req.URL.RequestURI())
+	if len(r.url_rule) > 0 {
+		return util.WildcardMatch(req.URL.RequestURI(), r.url_rule)
 	}
 	return true
+}
+
+type urlWildcardRule struct {
+	url_rule  string
+}
+
+func (r *urlWildcardRule) init(rule string) (err error) {
+	r.url_rule = rule
+	return
+}
+
+func (r *urlWildcardRule) match(req *http.Request) bool {
+	return util.WildcardMatch(util.GetURLString(req, false), r.url_rule)
 }
 
 type urlRegexRule struct {
@@ -65,7 +78,11 @@ func (r *urlRegexRule) init(rule string) (err error) {
 }
 
 func (r *urlRegexRule) match(req *http.Request) bool {
-	return r.url_reg.MatchString(util.GetURLString(req, false))
+	ret := r.url_reg.MatchString(util.GetURLString(req, false))
+	//	if ret{
+	//	   log.Printf("url is %s, rule is %s\n", util.GetURLString(req, false), r.url_reg.String())
+	//	}
+	return ret
 }
 
 type GFWList struct {
@@ -74,17 +91,18 @@ type GFWList struct {
 }
 
 func (gfw *GFWList) IsBlockedByGFW(req *http.Request) bool {
-   for _, rule := range gfw.white_list{
-      if rule.match(req){
-         return false
-      }
-   }
-   for _, rule := range gfw.black_list{
-      if rule.match(req){
-         return true
-      }
-   }
-   return false
+	for _, rule := range gfw.white_list {
+		if rule.match(req) {
+			return false
+		}
+	}
+	for _, rule := range gfw.black_list {
+		if rule.match(req) {
+			//log.Printf("matched for :%s for %v\n", req.URL.String(), rule)
+			return true
+		}
+	}
+	return false
 }
 
 func Parse(rules string) (*GFWList, error) {
@@ -102,7 +120,7 @@ func Parse(rules string) (*GFWList, error) {
 			continue
 		}
 		if strings.HasPrefix(str, "@@||") {
-			rule := new(hostUrlRegexRule)
+			rule := new(hostUrlWildcardRule)
 			err := rule.init(str[4:])
 			if nil != err {
 				log.Printf("Failed to init exclude rule:%s for %v\n", str[4:], err)
@@ -110,7 +128,7 @@ func Parse(rules string) (*GFWList, error) {
 			}
 			gfw.white_list = append(gfw.white_list, rule)
 		} else if strings.HasPrefix(str, "||") {
-			rule := new(hostUrlRegexRule)
+			rule := new(hostUrlWildcardRule)
 			err := rule.init(str[2:])
 			if nil != err {
 				log.Printf("Failed to init host url rule:%s for %v\n", str[2:], err)
@@ -118,7 +136,7 @@ func Parse(rules string) (*GFWList, error) {
 			}
 			gfw.black_list = append(gfw.black_list, rule)
 		} else if strings.HasPrefix(str, "|http") {
-			rule := new(urlRegexRule)
+			rule := new(urlWildcardRule)
 			err := rule.init(str[1:])
 			if nil != err {
 				log.Printf("Failed to init url rule:%s for %v\n", str[1:], err)
@@ -130,12 +148,12 @@ func Parse(rules string) (*GFWList, error) {
 			rule.is_raw_regex = true
 			err := rule.init(str[1 : len(str)-1])
 			if nil != err {
-				log.Printf("Failed to init url rule:%s for %v\n", str[1 : len(str)-1], err)
+				log.Printf("Failed to init url rule:%s for %v\n", str[1:len(str)-1], err)
 				continue
 			}
 			gfw.black_list = append(gfw.black_list, rule)
 		} else {
-			rule := new(hostUrlRegexRule)
+			rule := new(hostUrlWildcardRule)
 			rule.only_http = true
 			err := rule.init(str)
 			if nil != err {

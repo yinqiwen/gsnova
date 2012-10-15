@@ -6,6 +6,8 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	//"common"
+//	"log"
 )
 
 var gfwList *gfwlist.GFWList
@@ -53,7 +55,11 @@ func isHostInCN(req *http.Request) bool {
 	if nil != err || len(ips) == 0 {
 		return false
 	}
-	return strings.EqualFold(ipfunc.FindCountry(ips[0]), "CN")
+	ret := strings.EqualFold(ipfunc.FindCountry(ips[0]), "CN")
+	//	if ret {
+	//	   log.Printf("Find country for host:%s is CN\n", host)
+	//	}
+	return ret
 }
 
 func isBlockedByGFW(req *http.Request) bool {
