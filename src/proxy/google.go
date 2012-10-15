@@ -242,7 +242,7 @@ func (google *GoogleConnection) Request(conn *SessionConnection, ev event.Event)
 			if nil == google.https_client {
 				google.initHttpsClient()
 			}
-			log.Printf("Session[%d]Request %s %s\n", req.GetHash(), req.Method, req.RawReq.RequestURI)
+			log.Printf("Session[%d]Request %s\n", req.GetHash(), util.GetURLString(req.RawReq,true))
 			if nil != google.https_client {
 				conn.LocalRawConn.Write([]byte("HTTP/1.1 200 Connection established\r\n\r\n"))
 			} else {
@@ -265,11 +265,7 @@ func (google *GoogleConnection) Request(conn *SessionConnection, ev event.Event)
 				log.Printf("Failed to connect google http site.\n")
 				return errors.New("No google proxy reachable."), nil
 			}
-			if strings.HasPrefix(req.RawReq.RequestURI, "http://") {
-				log.Printf("Session[%d]Request %s %s\n", req.GetHash(), req.Method, req.RawReq.RequestURI)
-			} else {
-				log.Printf("Session[%d]Request %s %s%s\n", req.GetHash(), req.Method, req.RawReq.Host, req.RawReq.RequestURI)
-			}
+			log.Printf("Session[%d]Request %s\n", req.GetHash(), util.GetURLString(req.RawReq,true))
 			err := google.writeHttpRequest(req.RawReq)
 			if nil != err {
 				return err, nil

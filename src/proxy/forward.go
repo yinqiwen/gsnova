@@ -387,7 +387,7 @@ func (auto *ForwardConnection) Request(conn *SessionConnection, ev event.Event) 
 			return err, nil
 		}
 		if conn.Type == HTTPS_TUNNEL {
-			log.Printf("Session[%d]Request URL:%s %s\n", ev.GetHash(), req.RawReq.Method, req.RawReq.RequestURI)
+			log.Printf("Session[%d]Request %s\n", req.GetHash(), util.GetURLString(req.RawReq, true))
 			conn.LocalRawConn.Write([]byte("HTTP/1.1 200 Connection established\r\n\r\n"))
 			go f(conn.LocalRawConn, auto.forward_conn)
 			go f(auto.forward_conn, conn.LocalRawConn)
@@ -396,11 +396,7 @@ func (auto *ForwardConnection) Request(conn *SessionConnection, ev event.Event) 
 			auto.Close()
 			conn.State = STATE_SESSION_CLOSE
 		} else {
-			if strings.HasPrefix(req.RawReq.RequestURI, "http://") {
-				log.Printf("Session[%d]Request URL:%s %s\n", ev.GetHash(), req.RawReq.Method, req.RawReq.RequestURI)
-			} else {
-				log.Printf("Session[%d]Request URL:%s %s%s\n", ev.GetHash(), req.RawReq.Method, req.RawReq.Host, req.RawReq.RequestURI)
-			}
+			log.Printf("Session[%d]Request %s\n", req.GetHash(), util.GetURLString(req.RawReq, true))
 			if !auto.manager.overProxy && needInjectCRLF(req.RawReq.Host) {
 				log.Printf("Session[%d]Inject CRLF for %s", ev.GetHash(), req.RawReq.Host)
 				auto.forward_conn.Write(inject_crlf)

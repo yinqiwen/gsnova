@@ -2,8 +2,10 @@ package util
 
 import (
 	"crypto/dsa"
+	"fmt"
 	"math/big"
 	"misc/myasn1"
+	"net/http"
 	"regexp"
 	"strconv"
 	"strings"
@@ -77,6 +79,29 @@ func ParseRangeHeaderValue(value string) (startPos, endPos int) {
 	startPos, _ = strconv.Atoi(vs[0])
 	endPos, _ = strconv.Atoi(vs[1])
 	return
+}
+
+func PrepareRegexp(rule string) (*regexp.Regexp, error) {
+	rule = strings.TrimSpace(rule)
+	rule = strings.Replace(rule, ".", "\\.", -1)
+	rule = strings.Replace(rule, "?", "\\?", -1)
+	rule = strings.Replace(rule, "*", ".*", -1)
+	return regexp.Compile(rule)
+}
+
+func GetURLString(req *http.Request, with_method bool) string {
+	if nil == req {
+		return ""
+	}
+	u := *(req.URL)
+	if len(u.Scheme) == 0 {
+		u.Scheme = "https:"
+		u.Opaque = "//"
+	}
+	if with_method {
+		return fmt.Sprintf("%s %s", req.Method, u)
+	}
+	return u.String()
 }
 
 func ParseContentRangeHeaderValue(value string) (startPos, endPos, length int) {

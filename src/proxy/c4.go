@@ -126,7 +126,7 @@ func http_remote_loop(remote string, index int) {
 				log.Printf("Unexpected response %s for %s\n", resp.Status, remote)
 				continue
 			}
-			buf.Reset()
+			
 			// write http response response to conn
 			//io.Copy(conn, resp.Body)
 			if resp.ContentLength > 0 {
@@ -134,10 +134,12 @@ func http_remote_loop(remote string, index int) {
 				n, err := io.ReadFull(resp.Body, content)
 				if int64(n) != resp.ContentLength || nil != err {
 					log.Printf("Failed to read data from body %d or %v", n, err)
+					continue
 				} else {
 					go handleRecvBody(bytes.NewBuffer(content), remote, index)
 				}
 			}
+			buf.Reset()
 			resp.Body.Close()
 		case b := <-read:
 			event.EncodeEvent(buf, b)
@@ -290,11 +292,7 @@ func (c4 *C4HttpConnection) Request(conn *SessionConnection, ev event.Event) (er
 				proxyURL, _ := url.Parse(req.Url)
 				req.Url = proxyURL.RequestURI()
 			}
-			if strings.HasPrefix(req.RawReq.RequestURI, "http://") || strings.EqualFold(req.RawReq.Method, "CONNECT") {
-				log.Printf("Session[%d]Request %s %s\n", req.GetHash(), req.Method, req.RawReq.RequestURI)
-			} else {
-				log.Printf("Session[%d]Request %s %s%s\n", req.GetHash(), req.Method, req.RawReq.Host, req.RawReq.RequestURI)
-			}
+			log.Printf("Session[%d]Request %s\n", req.GetHash(), util.GetURLString(req.RawReq, true))
 			//log.Printf("Session[%d]Request %s %s\n", ev.GetHash(), req.Method, req.Url)
 			handler.requestEvent(req)
 			if conn.State == STATE_RECV_HTTP {

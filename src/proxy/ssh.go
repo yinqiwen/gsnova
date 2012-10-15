@@ -101,7 +101,7 @@ func (conn *SSHConnection) Request(sess *SessionConnection, ev event.Event) (err
 			return err, nil
 		}
 		if sess.Type == HTTPS_TUNNEL {
-			log.Printf("Session[%d]Request %s %s\n", req.GetHash(), req.Method, req.RawReq.RequestURI)
+			log.Printf("Session[%d]Request %s\n", req.GetHash(), util.GetURLString(req.RawReq, true))
 			sess.LocalRawConn.Write([]byte("HTTP/1.1 200 Connection established\r\n\r\n"))
 			ch := make(chan int)
 			go f(sess.LocalRawConn, conn.proxy_conn, ch)
@@ -111,11 +111,7 @@ func (conn *SSHConnection) Request(sess *SessionConnection, ev event.Event) (err
 			conn.Close()
 			sess.State = STATE_SESSION_CLOSE
 		} else {
-			if strings.HasPrefix(req.RawReq.RequestURI, "http://") {
-				log.Printf("Session[%d]Request %s %s\n", req.GetHash(), req.Method, req.RawReq.RequestURI)
-			} else {
-				log.Printf("Session[%d]Request %s %s%s\n", req.GetHash(), req.Method, req.RawReq.Host, req.RawReq.RequestURI)
-			}
+			log.Printf("Session[%d]Request %s\n", req.GetHash(), util.GetURLString(req.RawReq, true))
 			err := req.RawReq.Write(conn.proxy_conn)
 			if nil != err {
 				return err, nil

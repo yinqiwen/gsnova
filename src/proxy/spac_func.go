@@ -1,11 +1,15 @@
 package proxy
 
 import (
+	"misc/gfwlist"
+	"misc/iprange"
 	"net"
 	"net/http"
 	"strings"
 )
 
+var gfwList *gfwlist.GFWList
+var ipfunc *iprange.IPRangeHolder
 var func_table = make(map[string]func(*http.Request) bool)
 
 func init_spac_func() {
@@ -13,21 +17,48 @@ func init_spac_func() {
 	func_table["IsBlockedByGFW"] = isBlockedByGFW
 }
 
+func init_gfwlist_func(rule string) {
+	gfwList, _ = gfwlist.Parse(rule)
+}
+
+func init_iprange_func(file string) {
+	ipfunc, _ = iprange.Parse(file, "worldip.en.txt")
+}
+
 func invokeFilter(name string, req *http.Request) bool {
+	not := false
+	if strings.HasPrefix(name, "!") {
+		name = name[1:]
+		not = true
+	}
 	if filter, exist := func_table[name]; exist {
-		return filter(name)
+		if not {
+			return !filter(req)
+		}
+		return filter(req)
 	}
 	return false
 }
 
 func isHostInCN(req *http.Request) bool {
+	if nil == ipfunc {
+		return true
+	}
 	host := req.Host
 	if strings.Contains(host, ":") {
 		host, _, _ = net.SplitHostPort(host)
 	}
-	return false
+	//consider use trusted DNS
+	ips, err := net.LookupHost(host)
+	if nil != err || len(ips) == 0 {
+		return false
+	}
+	return strings.EqualFold(ipfunc.FindCountry(ips[0]), "CN")
 }
 
 func isBlockedByGFW(req *http.Request) bool {
-	return false
+	if gfwList == nil {
+		return true
+	}
+	return gfwList.IsBlockedByGFW(req)
 }

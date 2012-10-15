@@ -20,7 +20,11 @@
     "Proxy":["Direct"]
   },
   {
-    "Method":["https"],
+    "Filter" : ["!IsBlockedByGFW"],
+    "Proxy":["Direct"]
+  },
+  {
+    "Protocol":["https"],
     "Host" : ["Target https domain patterns for socks5 proxy"],
     "Proxy":["socks://127.0.0.1:7070"]
   },

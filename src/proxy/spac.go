@@ -46,11 +46,7 @@ func matchRegexs(str string, rules []*regexp.Regexp) bool {
 func initRegexSlice(rules []string) ([]*regexp.Regexp, error) {
 	regexs := make([]*regexp.Regexp, 0)
 	for _, originrule := range rules {
-		rule := strings.TrimSpace(originrule)
-		rule = strings.Replace(rule, ".", "\\.", -1)
-		rule = strings.Replace(rule, "*", ".*", -1)
-
-		reg, err := regexp.Compile(rule)
+		reg, err := util.PrepareRegexp(originrule)
 		if nil != err {
 			log.Printf("Invalid pattern:%s for reason:%v\n", originrule, err)
 			return nil, err
@@ -88,7 +84,7 @@ func (r *JsonRule) matchProtocol(req *http.Request) bool {
 }
 
 func (r *JsonRule) matchFilters(req *http.Request) bool {
-	matched := len(r.Filter) > 0
+	matched := true
 	for _, filter := range r.Filter {
 		matched = matched && invokeFilter(filter, req)
 		if !matched {
@@ -157,6 +153,9 @@ func generatePAC(url, date, content string) string {
 	if usercontent, err := ioutil.ReadFile(common.Home + "/user-gfwlist.txt"); nil == err {
 		content = content + "\n" + string(usercontent)
 	}
+	
+	init_gfwlist_func(content)
+	
 	reader := bufio.NewReader(strings.NewReader(content))
 	i := 0
 	for {
@@ -256,6 +255,9 @@ func generatePACFromGFWList(url string) {
 			last_mod_date := resp.Header.Get("last-modified")
 			hf := common.Home + "/snova-gfwlist.pac"
 			content, _ := base64.StdEncoding.DecodeString(string(body))
+			if common.DebugEnable {
+				ioutil.WriteFile(common.Home+"/snova-gfwlist.txt", content, 0666)
+			}
 			file_content := generatePAC(url, last_mod_date, string(content))
 			ioutil.WriteFile(hf, []byte(file_content), 0666)
 		}

@@ -30,7 +30,6 @@ type DNSResult struct {
 	Date time.Time
 }
 
-var ipRepo string
 var repoUrls []string
 var hostMapping = make(map[string]string)
 var reachableDNSResult = make(map[string]DNSResult)
@@ -53,8 +52,37 @@ var hostRangeFetchLimitSize = uint32(256000)
 var hostInjectRangePatterns = []*regexp.Regexp{}
 var hostRangeConcurrentFether = uint32(5)
 
-func loadIPRepoFile() {
+func loadIPRangeFile(ipRepo string) {
+	if len(ipRepo) == 0 {
+		return
+	}
+	hf := common.Home + "hosts/" + "iprange.zip"
 
+	_, err := os.Stat(hf)
+	if nil != err {
+		resp, err := util.HttpGet(ipRepo, "")
+		if err != nil {
+			if addr, exist := common.Cfg.GetProperty("LocalServer", "Listen"); exist {
+				_, port, _ := net.SplitHostPort(addr)
+				resp, err = util.HttpGet(ipRepo, "http://"+net.JoinHostPort("127.0.0.1", port))
+			}
+		}
+		if err != nil || resp.StatusCode != 200 {
+			log.Printf("Failed to fetch ip range file from %s for reason:%v\n", ipRepo, err)
+			return
+		} else {
+			body, err := ioutil.ReadAll(resp.Body)
+			if nil == err {
+				err = ioutil.WriteFile(hf, body, 0755)
+			}
+			if nil != err {
+				log.Printf("Failed to manipulate ip range file for reason:%v\n", err)
+				return
+			}
+		}
+		log.Printf("Fetch ip range file success.\n")
+	}
+	init_iprange_func(hf)
 }
 
 func loadDiskHostFile() {
@@ -100,7 +128,6 @@ func loadDiskHostFile() {
 
 func loadHostFile() {
 	hostMapping = make(map[string]string)
-	os.Mkdir(common.Home+"hosts/", 0755)
 	loadDiskHostFile()
 	for index, urlstr := range repoUrls {
 		resp, err := util.HttpGet(urlstr, "")
@@ -266,7 +293,8 @@ func trustedDNSQuery(host string, port string) ([]string, bool) {
 	if useTCPDns {
 		options := &godns.LookupOptions{
 			DNSServers: trustedDNS,
-			Net:        "tcp"}
+			Net:        "tcp",
+			Cache:      true}
 		if ips, err := godns.LookupIP(host, options); nil == err {
 			result := []string{}
 			for _, ip := range ips {
@@ -319,7 +347,7 @@ func InitHosts() error {
 		}
 	}
 	log.Println("Init AutoHost.")
-
+	os.Mkdir(common.Home+"hosts/", 0755)
 	if dnsserver, exist := common.Cfg.GetProperty("Hosts", "TrustedDNS"); exist {
 		trustedDNS = strings.Split(dnsserver, "|")
 	}
@@ -359,6 +387,9 @@ func InitHosts() error {
 
 	if url, exist := common.Cfg.GetProperty("Hosts", "HttpDNS"); exist {
 		httpDNS = strings.TrimSpace(url)
+	}
+	if url, exist := common.Cfg.GetProperty("Hosts", "IPRangeRepo"); exist {
+		go loadIPRangeFile(strings.TrimSpace(url))
 	}
 	if len(httpDNS) > 0 || len(trustedDNS) > 0 {
 		if enable, exist := common.Cfg.GetBoolProperty("Hosts", "PersistDNSCache"); exist {

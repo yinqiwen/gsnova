@@ -419,7 +419,7 @@ func (gae *GAEHttpConnection) Request(conn *SessionConnection, ev event.Event) (
 	if ev.GetType() == event.HTTP_REQUEST_EVENT_TYPE {
 		httpreq := ev.(*event.HTTPRequestEvent)
 		if strings.EqualFold(httpreq.Method, "CONNECT") {
-			log.Printf("Session[%d]Request %s %s\n", httpreq.GetHash(), httpreq.Method, httpreq.RawReq.RequestURI)
+			log.Printf("Session[%d]Request %s\n", httpreq.GetHash(), util.GetURLString(httpreq.RawReq, true))
 			conn.LocalRawConn.Write([]byte("HTTP/1.1 200 Connection established\r\n\r\n"))
 			tlscfg, err := common.TLSConfig(httpreq.GetHeader("Host"))
 			if nil != err {
@@ -458,11 +458,7 @@ func (gae *GAEHttpConnection) Request(conn *SessionConnection, ev event.Event) (
 					httpreq.SetHeader("Range", "bytes=0-"+strconv.Itoa(int(gae_cfg.FetchLimitSize-1)))
 				}
 			}
-			if strings.HasPrefix(httpreq.RawReq.RequestURI, "http://") {
-				log.Printf("Session[%d]Request %s %s\n", httpreq.GetHash(), httpreq.Method, httpreq.RawReq.RequestURI)
-			} else {
-				log.Printf("Session[%d]Request %s %s%s\n", httpreq.GetHash(), httpreq.Method, httpreq.RawReq.Host, httpreq.RawReq.RequestURI)
-			}
+			log.Printf("Session[%d]Request %s\n", httpreq.GetHash(), util.GetURLString(httpreq.RawReq, true))
 			//httpreq.SetHeader("Connection", "Close")
 			httpreq.RemoveHeader("Proxy-Connection")
 			err, res = gae.requestEvent(conn, ev)
