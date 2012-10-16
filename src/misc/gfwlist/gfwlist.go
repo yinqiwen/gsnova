@@ -72,7 +72,7 @@ func (r *urlRegexRule) init(rule string) (err error) {
 	if r.is_raw_regex {
 		r.url_reg, err = regexp.Compile(rule)
 	} else {
-		r.url_reg, err = util.PrepareRegexp(rule)
+		r.url_reg, err = util.PrepareRegexp(rule, false)
 	}
 	return
 }

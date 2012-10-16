@@ -81,10 +81,12 @@ func ParseRangeHeaderValue(value string) (startPos, endPos int) {
 	return
 }
 
-func PrepareRegexp(rule string) (*regexp.Regexp, error) {
+func PrepareRegexp(rule string, only_star bool) (*regexp.Regexp, error) {
 	rule = strings.TrimSpace(rule)
 	rule = strings.Replace(rule, ".", "\\.", -1)
-	rule = strings.Replace(rule, "?", "\\?", -1)
+	if !only_star {
+		rule = strings.Replace(rule, "?", "\\?", -1)
+	}
 	rule = strings.Replace(rule, "*", ".*", -1)
 	return regexp.Compile(rule)
 }
@@ -95,7 +97,7 @@ func GetURLString(req *http.Request, with_method bool) string {
 	}
 	str := req.URL.String()
 	if len(req.URL.Scheme) == 0 {
-		str = fmt.Sprintf("https://%s", req.Host) 
+		str = fmt.Sprintf("https://%s", req.Host)
 	}
 	if with_method {
 		return fmt.Sprintf("%s %s", req.Method, str)

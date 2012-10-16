@@ -81,7 +81,7 @@ func matchRegexs(str string, rules []*regexp.Regexp) bool {
 func initRegexSlice(rules []string) ([]*regexp.Regexp, error) {
 	regexs := make([]*regexp.Regexp, 0)
 	for _, originrule := range rules {
-		reg, err := util.PrepareRegexp(originrule)
+		reg, err := util.PrepareRegexp(originrule, true)
 		if nil != err {
 			log.Printf("Invalid pattern:%s for reason:%v\n", originrule, err)
 			return nil, err

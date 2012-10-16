@@ -8,8 +8,8 @@
     "Proxy":["GoogleHttps", "Direct", "Default"]
   },
   {
-    "Host" : ["(*.)?drive.google.com", "talkgadget.google.com"],
-    "Proxy":["GoogleHttps", "Direct", "Default"]
+    "Host" : ["(*.)?drive.google.com", "talkgadget.google.com", "plusone.google.com"],
+    "Proxy":["GoogleHttps", "Direct"]
   },
   {
     "Host" : ["*.appspot.com"],

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"util"
 )
 
 func redirectHttps(conn net.Conn, req *http.Request) {
@@ -24,13 +25,9 @@ func initHostMatchRegex(pattern string) []*regexp.Regexp {
 	regexs := []*regexp.Regexp{}
 	ps := strings.Split(strings.TrimSpace(pattern), "|")
 	for _, p := range ps {
-		originrule := p
-		p = strings.TrimSpace(p)
-		p = strings.Replace(p, ".", "\\.", -1)
-		p = strings.Replace(p, "*", ".*", -1)
-		reg, err := regexp.Compile(p)
+		reg, err := util.PrepareRegexp(p, true)
 		if nil != err {
-			log.Printf("[ERROR]Invalid pattern:%s for reason:%v\n", originrule, err)
+			log.Printf("[ERROR]Invalid pattern:%s for reason:%v\n", p, err)
 		} else {
 			regexs = append(regexs, reg)
 		}
