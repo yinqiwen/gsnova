@@ -2,7 +2,7 @@ package proxy
 
 import (
 	"bufio"
-	"common"
+	//"common"
 	"errors"
 	"event"
 	"io"
@@ -10,7 +10,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
-	"time"
+	//"time"
 )
 
 const (
@@ -139,7 +139,7 @@ func (session *SessionConnection) process() error {
 
 	switch session.State {
 	case STATE_RECV_HTTP:
-		session.LocalRawConn.SetReadDeadline(time.Now().Add(common.KeepAliveTimeout * time.Second))
+		//session.LocalRawConn.SetReadDeadline(time.Now().Add(common.KeepAliveTimeout * time.Second))
 		req, err := http.ReadRequest(session.LocalBufferConn)
 		if nil == err {
 			var rev event.HTTPRequestEvent

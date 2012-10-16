@@ -121,6 +121,9 @@ func (conn *SSHConnection) Request(sess *SessionConnection, ev event.Event) (err
 				return err, nil
 			}
 			err = resp.Write(sess.LocalRawConn)
+			if nil == err {
+				err = resp.Body.Close()
+			}
 			if nil != err || !util.IsResponseKeepAlive(resp) || !util.IsRequestKeepAlive(req.RawReq) {
 				sess.LocalRawConn.Close()
 				conn.Close()

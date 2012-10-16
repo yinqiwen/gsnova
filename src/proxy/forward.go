@@ -455,7 +455,9 @@ func (auto *ForwardConnection) Request(conn *SessionConnection, ev event.Event) 
 			if !responsed {
 				err = resp.Write(conn.LocalRawConn)
 			}
-			resp.Body.Close()
+			if nil == err {
+				err = resp.Body.Close()
+			}
 			if common.DebugEnable {
 				var tmp bytes.Buffer
 				resp.Write(&tmp)
@@ -466,8 +468,9 @@ func (auto *ForwardConnection) Request(conn *SessionConnection, ev event.Event) 
 				auto.Close()
 				conn.State = STATE_SESSION_CLOSE
 			} else {
+				//conn.LocalRawConn.Close()
 				conn.State = STATE_RECV_HTTP
-				//auto.Close()
+				//conn.State = STATE_SESSION_CLOSE
 			}
 		}
 	default:

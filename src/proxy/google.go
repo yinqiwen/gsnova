@@ -275,6 +275,9 @@ func (google *GoogleConnection) Request(conn *SessionConnection, ev event.Event)
 				return err, nil
 			}
 			err = resp.Write(conn.LocalRawConn)
+			if nil == err {
+				err = resp.Body.Close()
+			}
 			if nil != err || !util.IsResponseKeepAlive(resp) || !util.IsRequestKeepAlive(req.RawReq) {
 				conn.LocalRawConn.Close()
 				google.Close()
@@ -282,7 +285,6 @@ func (google *GoogleConnection) Request(conn *SessionConnection, ev event.Event)
 			} else {
 				conn.State = STATE_RECV_HTTP
 			}
-
 		}
 	default:
 	}
