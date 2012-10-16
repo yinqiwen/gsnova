@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"bufio"
+	"common"
 	"errors"
 	"event"
 	"io"
@@ -9,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"time"
 )
 
 const (
@@ -29,6 +31,7 @@ const (
 	FORWARD_NAME      = "Forward"
 	SSH_NAME          = "SSH"
 	DIRECT_NAME       = "Direct"
+	CRLF_DIRECT_NAME  = "CRLFDirect"
 	DEFAULT_NAME      = "Default"
 
 	MODE_HTTP    = "http"
@@ -136,6 +139,7 @@ func (session *SessionConnection) process() error {
 
 	switch session.State {
 	case STATE_RECV_HTTP:
+		session.LocalRawConn.SetReadDeadline(time.Now().Add(common.KeepAliveTimeout * time.Second))
 		req, err := http.ReadRequest(session.LocalBufferConn)
 		if nil == err {
 			var rev event.HTTPRequestEvent
@@ -145,11 +149,10 @@ func (session *SessionConnection) process() error {
 		}
 		if nil != err {
 			operr, ok := err.(*net.OpError)
-			if ok && (operr.Timeout() || operr.Temporary()) {
-				log.Printf("Timeout to read\n")
-				return nil
+			if err != io.EOF || (ok && (operr.Timeout() || operr.Temporary())) {
+				err = nil
 			}
-			if err != io.EOF {
+			if err != nil {
 				log.Printf("Session[%d]Failed to read http request:%v\n", session.SessionID, err)
 			}
 			close_session()

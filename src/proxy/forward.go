@@ -37,6 +37,7 @@ type ForwardConnection struct {
 func (conn *ForwardConnection) Close() error {
 	if nil != conn.forward_conn {
 		conn.forward_conn.Close()
+		conn.forward_conn = nil
 	}
 	conn.closed = true
 	if nil != conn.range_fetch_conns {
@@ -310,7 +311,7 @@ func (auto *ForwardConnection) rangeFetchWorker(req *http.Request, hash uint32, 
 			break
 		}
 		clonereq.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", startpos, endpos))
-		if needInjectCRLF(clonereq.Host) {
+		if auto.manager.inject_crlf {
 			auto.range_fetch_conns[index].Write(inject_crlf)
 		}
 
@@ -382,13 +383,17 @@ func (auto *ForwardConnection) Request(conn *SessionConnection, ev event.Event) 
 			addr = net.JoinHostPort(addr, "443")
 		}
 		err = auto.initForwardConn(addr)
-		if nil == auto.forward_conn {
-			log.Printf("Failed to connect forward proxy.\n")
+		if nil != err {
+			log.Printf("Failed to connect forward proxy .\n")
 			return err, nil
 		}
 		if conn.Type == HTTPS_TUNNEL {
 			log.Printf("Session[%d]Request %s\n", req.GetHash(), util.GetURLString(req.RawReq, true))
-			conn.LocalRawConn.Write([]byte("HTTP/1.1 200 Connection established\r\n\r\n"))
+			if !auto.manager.overProxy || strings.HasPrefix(auto.conn_url.Scheme, "socks") {
+				conn.LocalRawConn.Write([]byte("HTTP/1.1 200 Connection established\r\n\r\n"))
+			} else {
+				auto.writeHttpRequest(req.RawReq)
+			}
 			go f(conn.LocalRawConn, auto.forward_conn)
 			go f(auto.forward_conn, conn.LocalRawConn)
 			<-auto.forwardChan
@@ -397,7 +402,7 @@ func (auto *ForwardConnection) Request(conn *SessionConnection, ev event.Event) 
 			conn.State = STATE_SESSION_CLOSE
 		} else {
 			log.Printf("Session[%d]Request %s\n", req.GetHash(), util.GetURLString(req.RawReq, true))
-			if !auto.manager.overProxy && needInjectCRLF(req.RawReq.Host) {
+			if auto.manager.inject_crlf {
 				log.Printf("Session[%d]Inject CRLF for %s", ev.GetHash(), req.RawReq.Host)
 				auto.forward_conn.Write(inject_crlf)
 			}
@@ -454,7 +459,7 @@ func (auto *ForwardConnection) Request(conn *SessionConnection, ev event.Event) 
 				resp.Write(&tmp)
 				log.Printf("Session[%d]Recv response \n%s\n", ev.GetHash(), tmp.String())
 			}
-			if nil != err || resp.Close || req.RawReq.Close {
+			if nil != err || !util.IsResponseKeepAlive(resp) || !util.IsRequestKeepAlive(req.RawReq) {
 				conn.LocalRawConn.Close()
 				auto.Close()
 				conn.State = STATE_SESSION_CLOSE
@@ -469,8 +474,9 @@ func (auto *ForwardConnection) Request(conn *SessionConnection, ev event.Event) 
 }
 
 type Forward struct {
-	target    string
-	overProxy bool
+	target      string
+	overProxy   bool
+	inject_crlf bool
 }
 
 func (manager *Forward) GetName() string {

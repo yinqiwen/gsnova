@@ -330,7 +330,7 @@ func (gae *GAEHttpConnection) rangeFetch(req *event.HTTPRequestEvent, index, sta
 	gae.rangeFetchChannel <- &rangeChunk{start: -1}
 }
 
-func (gae *GAEHttpConnection) handleHttpRes(conn *SessionConnection, req *event.HTTPRequestEvent, ev *event.HTTPResponseEvent, rangeHeader string) error {
+func (gae *GAEHttpConnection) handleHttpRes(conn *SessionConnection, req *event.HTTPRequestEvent, ev *event.HTTPResponseEvent, rangeHeader string) (*http.Response, error) {
 	httpres := ev.ToResponse()
 	contentRange := ev.GetHeader("Content-Range")
 	limit := 0
@@ -357,7 +357,7 @@ func (gae *GAEHttpConnection) handleHttpRes(conn *SessionConnection, req *event.
 
 		if httpres.StatusCode >= 300 {
 			httpres.Write(conn.LocalRawConn)
-			return nil
+			return httpres, nil
 		}
 		if endpos < limit {
 			if nil == gae.rangeFetchChannel {
@@ -408,10 +408,11 @@ func (gae *GAEHttpConnection) handleHttpRes(conn *SessionConnection, req *event.
 				}
 			}
 		}
-		return nil
+		return httpres, nil
 	}
 	err := httpres.Write(conn.LocalRawConn)
-	return err
+
+	return httpres, err
 }
 
 func (gae *GAEHttpConnection) Request(conn *SessionConnection, ev event.Event) (err error, res event.Event) {
@@ -466,21 +467,19 @@ func (gae *GAEHttpConnection) Request(conn *SessionConnection, ev event.Event) (
 				return
 			}
 			conn.State = STATE_RECV_HTTP
-			if nil != conn {
-				httpres := res.(*event.HTTPResponseEvent)
-				if httpres.Status == 403 {
-					log.Printf("ERROR:Session[%d]Request %s %s is forbidon\n", httpreq.GetHash(), httpreq.Method, httpreq.RawReq.Host)
-					log.Printf("ERROR:Session[%d]Refer : %s\n", httpreq.GetHash(), httpreq.RawReq.Referer())
-				}
-				gae.handleHttpRes(conn, httpreq, httpres, rangeHeader)
-				//if !httpres.IsKeepAlive(){
-				if conn.Type == HTTPS_TUNNEL {
-					conn.LocalRawConn.Close()
-					conn.State = STATE_SESSION_CLOSE
-				}
-				//gae.manager.RecycleRemoteConnection(gae)
+			httpresev := res.(*event.HTTPResponseEvent)
+			if httpresev.Status == 403 {
+				log.Printf("ERROR:Session[%d]Request %s %s is forbidon\n", httpreq.GetHash(), httpreq.Method, httpreq.RawReq.Host)
+				log.Printf("ERROR:Session[%d]Refer : %s\n", httpreq.GetHash(), httpreq.RawReq.Referer())
 			}
-			return nil, nil
+			httpres, err := gae.handleHttpRes(conn, httpreq, httpresev, rangeHeader)
+			//if !httpres.IsKeepAlive(){
+			if conn.Type == HTTPS_TUNNEL || !util.IsResponseKeepAlive(httpres) || !util.IsRequestKeepAlive(httpreq.RawReq) {
+				conn.LocalRawConn.Close()
+				conn.State = STATE_SESSION_CLOSE
+			}
+
+			return err, nil
 		}
 	}
 	return gae.requestEvent(conn, ev)

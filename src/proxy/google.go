@@ -275,7 +275,7 @@ func (google *GoogleConnection) Request(conn *SessionConnection, ev event.Event)
 				return err, nil
 			}
 			err = resp.Write(conn.LocalRawConn)
-			if nil != err || resp.Close || req.RawReq.Close {
+			if nil != err || !util.IsResponseKeepAlive(resp) || !util.IsRequestKeepAlive(req.RawReq) {
 				conn.LocalRawConn.Close()
 				google.Close()
 				conn.State = STATE_SESSION_CLOSE

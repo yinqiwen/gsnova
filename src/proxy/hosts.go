@@ -42,7 +42,6 @@ var persistDNSCache = true
 var hostsEnable int
 var trustedDNS = []string{}
 var useHttpDNS = []*regexp.Regexp{}
-var injectCRLFPatterns = []*regexp.Regexp{}
 var forceHttpsHosts = []*regexp.Regexp{}
 var exceptHosts = []*regexp.Regexp{}
 var httpDNS string
@@ -267,11 +266,6 @@ func needRedirectHttpsHost(host string) bool {
 
 }
 
-func needInjectCRLF(host string) bool {
-	//log.Printf("##Host:%s, pattern size=%d\n", host, len(injectCRLFPatterns))
-	return hostPatternMatched(injectCRLFPatterns, host)
-}
-
 func hostNeedInjectRange(host string) bool {
 	return hostPatternMatched(hostInjectRangePatterns, host)
 }
@@ -357,10 +351,6 @@ func InitHosts() error {
 	if timeout, exist := common.Cfg.GetIntProperty("Hosts", "BlockVerifyTimeout"); exist {
 		blockVerifyTimeout = int(timeout)
 	}
-	if pattern, exist := common.Cfg.GetProperty("Hosts", "InjectCRLF"); exist {
-		injectCRLFPatterns = initHostMatchRegex(pattern)
-	}
-
 	if limit, exist := common.Cfg.GetIntProperty("Hosts", "RangeFetchLimitSize"); exist {
 		hostRangeFetchLimitSize = uint32(limit)
 	}

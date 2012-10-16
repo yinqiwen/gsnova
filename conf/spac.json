@@ -1,14 +1,14 @@
 [
   {
-    "Host" : ["*.ytimg.com*", "encrypted.google.com", "plus.google.com", "sites.google.com","*.googleusercontent.com*", "*.gstatic.com", "*.googleapis.com*", "*.googlecode.com", "dl.google.com"],
+    "Host" : ["*.ytimg.com*", "mail.google.com", "plus.google.com", "sites.google.com","*.googleusercontent.com*", "*.gstatic.com", "*.googleapis.com*", "*.googlecode.com", "dl.google.com"],
     "Proxy":["GoogleHttps", "Direct", "Default"]
   },
   {
-    "Host" : ["golang.org", "*.doubleclick.net*", "*.google-analytics.com*", "uploads.code.google.com", "groups.google.com", "apis.google.com", "www.blogger.com"],
+    "Host" : ["golang.org","*.blogspot.*","*.doubleclick.net*", "*.google-analytics.com*", "uploads.code.google.com", "groups.google.com", "apis.google.com", "www.blogger.com", "clients*.google.com"],
     "Proxy":["GoogleHttps", "Direct", "Default"]
   },
   {
-    "Host" : ["(*.)?drive.google.com"],
+    "Host" : ["(*.)?drive.google.com", "talkgadget.google.com"],
     "Proxy":["GoogleHttps", "Direct", "Default"]
   },
   {
@@ -16,7 +16,11 @@
     "Proxy":["Google","Default"]
   },
   {
-    "Host" : ["*.qq.com*", "*.baidu.com", "*.sina.com.*", "*.163.com*", "*.sohu.com*", "*.qzone.com", "*.tudou.com", "*.youku.com"],
+    "Host" : ["*.youtube.com", "*.ytimg.com"],
+    "Proxy":["CRLFDirect", "Default"]
+  },
+  {
+    "Host" : ["*.qq.com", "*.baidu.com", "*.sina.com.*", "*.163.com", "*.sohu.com", "*.qzone.com", "*.tudou.com", "*.youku.com"],
     "Proxy":["Direct"]
   },
   {

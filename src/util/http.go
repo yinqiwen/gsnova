@@ -8,7 +8,33 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strings"
 )
+
+func isKeepAlive(header http.Header, protoMajor, protoMinor int) bool {
+	c := header.Get("Connection")
+	if strings.EqualFold(c, "close") {
+		return false
+	}
+	if protoMinor == 1 {
+		return true
+	}
+	return strings.EqualFold(c, "keep-alive")
+}
+
+func IsRequestKeepAlive(req *http.Request) bool {
+	if nil == req {
+		return false
+	}
+	return isKeepAlive(req.Header, req.ProtoMajor, req.ProtoMinor)
+}
+
+func IsResponseKeepAlive(res *http.Response) bool {
+	if nil == res {
+		return false
+	}
+	return isKeepAlive(res.Header, res.ProtoMajor, res.ProtoMinor)
+}
 
 func HttpGet(urlstr string, proxy string) (*http.Response, error) {
 	if len(proxy) == 0 {

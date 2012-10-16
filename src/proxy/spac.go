@@ -15,8 +15,11 @@ import (
 	"regexp"
 	"strings"
 	"text/template"
+	"time"
 	"util"
 )
+
+var spac_script_path string
 
 type JsonRule struct {
 	Method       []string
@@ -29,6 +32,37 @@ type JsonRule struct {
 	method_regex []*regexp.Regexp
 	host_regex   []*regexp.Regexp
 	url_regex    []*regexp.Regexp
+}
+
+func loadSpacScript() error {
+	file, e := ioutil.ReadFile(spac_script_path)
+	if e == nil {
+		e = json.Unmarshal(file, &spac.rules)
+		for _, json_rule := range spac.rules {
+			e = json_rule.init()
+		}
+	}
+	if nil != e {
+		log.Printf("Failed to init SPAC for reason:%v", e)
+	}
+	return e
+}
+
+func reloadSpacScript() {
+	tick := time.NewTicker(5 * time.Second)
+	var mod_time time.Time
+	for {
+		select {
+		case <-tick.C:
+			f, err := os.Stat(spac_script_path)
+			if nil == err {
+				if !mod_time.IsZero() && mod_time.Before(f.ModTime()) {
+					loadSpacScript()
+				}
+				mod_time = f.ModTime()
+			}
+		}
+	}
 }
 
 func matchRegexs(str string, rules []*regexp.Regexp) bool {
@@ -262,12 +296,20 @@ func generatePACFromGFWList(url string) {
 	if err != nil || resp.StatusCode != 200 {
 		log.Printf("Failed to fetch AutoProxy2PAC from %s for reason:%v\n", url, err)
 	} else {
+		last_mod_date := resp.Header.Get("last-modified")
+		t, err := time.Parse(time.RFC1123, last_mod_date)
+		if nil == err && t.Before(time.Now()) {
+			resp.Body.Close()
+			return
+		}
+		if nil != err {
+			log.Printf("Failed to translate time from last-modified:%s for reason:%v\n", last_mod_date, err)
+		}
 		body, err := ioutil.ReadAll(resp.Body)
 		if nil == err {
-			last_mod_date := resp.Header.Get("last-modified")
-			hf := common.Home + "spac/snova-gfwlist.pac"
 			content, _ := base64.StdEncoding.DecodeString(string(body))
 			ioutil.WriteFile(common.Home+"spac/snova-gfwlist.txt", content, 0666)
+			hf := common.Home + "spac/snova-gfwlist.pac"
 			file_content := generatePAC(url, last_mod_date, string(content))
 			ioutil.WriteFile(hf, []byte(file_content), 0666)
 		}
@@ -303,16 +345,9 @@ func InitSpac() {
 	if !exist {
 		script = "spac/spac.json"
 	}
-	file, e := ioutil.ReadFile(common.Home + "spac/" + script)
-	if e == nil {
-		e = json.Unmarshal(file, &spac.rules)
-		for _, json_rule := range spac.rules {
-			e = json_rule.init()
-		}
-	}
-	if nil != e {
-		log.Printf("Failed to init SPAC for reason:%v", e)
-	}
+	spac_script_path = common.Home + "spac/" + script
+	loadSpacScript()
+	go reloadSpacScript()
 	init_spac_func()
 }
 
@@ -323,9 +358,9 @@ func selectProxyByRequest(req *http.Request, host, port string, isHttpsConn bool
 		}
 	}
 
-	if !isHttpsConn && needInjectCRLF(req.Host) {
-		return []string{DIRECT_NAME, spac.defaultRule}
-	}
+//	if !isHttpsConn && needInjectCRLF(req.Host) {
+//		return []string{DIRECT_NAME, spac.defaultRule}
+//	}
 
 	if hostsEnable != HOSTS_DISABLE {
 		if _, exist := lookupReachableMappingHost(req, net.JoinHostPort(host, port)); exist {
@@ -374,7 +409,7 @@ func SelectProxy(req *http.Request, conn net.Conn, isHttpsConn bool) []RemoteCon
 			if v, ok := registedRemoteConnManager[proxyName]; ok {
 				proxyManagers = append(proxyManagers, v)
 			} else {
-				log.Printf("No proxy:%s defined\n", proxyName)
+				log.Printf("No proxy:%s defined for %s\n", proxyName, host)
 			}
 		case GOOGLE_NAME, GOOGLE_HTTP_NAME:
 			if google_enable {
@@ -384,8 +419,9 @@ func SelectProxy(req *http.Request, conn net.Conn, isHttpsConn bool) []RemoteCon
 			if google_enable {
 				proxyManagers = append(proxyManagers, httpsGoogleManager)
 			}
-		case DIRECT_NAME:
+		case DIRECT_NAME, CRLF_DIRECT_NAME:
 			forward := &Forward{overProxy: false}
+			forward.inject_crlf = (CRLF_DIRECT_NAME == proxyName)
 			forward.target = req.Host
 			if !strings.Contains(forward.target, ":") {
 				forward.target = forward.target + ":80"
