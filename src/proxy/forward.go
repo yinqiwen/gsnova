@@ -62,7 +62,7 @@ func createDirectForwardConn(hostport string) (net.Conn, error) {
 	return conn, err
 }
 
-func (conn *ForwardConnection) initForwardConn(proxyAddr string) error {
+func (conn *ForwardConnection) initForwardConn(proxyAddr string, isHttps bool) error {
 	if !strings.Contains(proxyAddr, ":") {
 		proxyAddr = proxyAddr + ":80"
 	}
@@ -80,7 +80,9 @@ func (conn *ForwardConnection) initForwardConn(proxyAddr string) error {
 
 	addr := conn.conn_url.Host
 	if !conn.manager.overProxy {
-		addr, _ = lookupReachableAddress(addr)
+		if isHttps || conn.manager.inject_crlf {
+			addr, _ = lookupReachableAddress(addr)
+		}
 	}
 
 	isSocks := strings.HasPrefix(strings.ToLower(conn.conn_url.Scheme), "socks")
@@ -132,7 +134,7 @@ func (conn *ForwardConnection) writeHttpRequest(req *http.Request) error {
 		if nil != err {
 			log.Printf("Resend request since error:%v occured.\n", err)
 			conn.Close()
-			conn.initForwardConn(req.Host)
+			conn.initForwardConn(req.Host, strings.EqualFold(req.Method, "Connect"))
 		} else {
 			return nil
 		}
@@ -382,7 +384,7 @@ func (auto *ForwardConnection) Request(conn *SessionConnection, ev event.Event) 
 		if !strings.Contains(addr, ":") {
 			addr = net.JoinHostPort(addr, "443")
 		}
-		err = auto.initForwardConn(addr)
+		err = auto.initForwardConn(addr, conn.Type == HTTPS_TUNNEL)
 		if nil != err {
 			log.Printf("Failed to connect forward proxy .\n")
 			return err, nil
@@ -465,7 +467,7 @@ func (auto *ForwardConnection) Request(conn *SessionConnection, ev event.Event) 
 				conn.State = STATE_SESSION_CLOSE
 			} else {
 				conn.State = STATE_RECV_HTTP
-				auto.Close()
+				//auto.Close()
 			}
 		}
 	default:

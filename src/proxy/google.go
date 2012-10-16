@@ -342,12 +342,11 @@ func InitGoogle() error {
 	if prefer, exist := common.Cfg.GetBoolProperty("Google", "PreferIP"); exist {
 		preferIP = prefer
 	}
+	googleHttpHost = GOOGLE_HTTP_IP
 	if preferIP {
-		googleHttpHost = GOOGLE_HTTP_IP
 		googleHttpsHost = GOOGLE_HTTPS_IP
 	} else {
 		googleHttpsHost = GOOGLE_HTTPS
-		googleHttpHost = GOOGLE_HTTP
 	}
 	//	googleHttpHost, _ = common.Cfg.GetProperty("Google", "HTTPHost")
 	//	googleHttpsHost, _ = common.Cfg.GetProperty("Google", "HTTPSHost")

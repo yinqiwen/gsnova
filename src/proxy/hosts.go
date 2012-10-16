@@ -93,6 +93,12 @@ func loadDiskHostFile() {
 				if strings.EqualFold(DNS_CACHE_FILE, file.Name()) {
 					if persistDNSCache {
 						json.Unmarshal(content, &reachableDNSResult)
+						for k, v := range reachableDNSResult {
+							_, port, _ := net.SplitHostPort(k)
+							for _, ip := range v.IP {
+								blockVerifyResult[net.JoinHostPort(ip, port)] = true
+							}
+						}
 					}
 					continue
 				}
@@ -222,7 +228,7 @@ func lookupReachableMappingHost(req *http.Request, hostport string) (string, boo
 	switch hostsEnable {
 	case HOSTS_DISABLE:
 		return "", false
-	case HOSTS_ENABLE_HTTPS, HOSTS_ENABLE_ALL:
+	case HOSTS_ENABLE_HTTPS:
 		if !strings.EqualFold(req.Method, "Connect") {
 			return "", false
 		}

@@ -358,13 +358,17 @@ func selectProxyByRequest(req *http.Request, host, port string, isHttpsConn bool
 		}
 	}
 
-//	if !isHttpsConn && needInjectCRLF(req.Host) {
-//		return []string{DIRECT_NAME, spac.defaultRule}
-//	}
+	//	if !isHttpsConn && needInjectCRLF(req.Host) {
+	//		return []string{DIRECT_NAME, spac.defaultRule}
+	//	}
 
 	if hostsEnable != HOSTS_DISABLE {
 		if _, exist := lookupReachableMappingHost(req, net.JoinHostPort(host, port)); exist {
-			return []string{"Direct", spac.defaultRule}
+			direct := DIRECT_NAME
+			if !strings.EqualFold(req.Method, "Connect") {
+				direct = CRLF_DIRECT_NAME
+			}
+			return []string{direct, spac.defaultRule}
 		} else {
 			//log.Printf("[WARN]No available IP for %s\n", host)
 		}

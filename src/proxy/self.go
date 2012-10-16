@@ -55,6 +55,7 @@ func statHandler(w http.ResponseWriter, req *http.Request) {
 	buf.WriteString(fmt.Sprintf("ReachableDNSResultSize: %d\n", len(reachableDNSResult)))
 	buf.WriteString(fmt.Sprintf("NumGoroutine: %d\n", runtime.NumGoroutine()))
 	buf.WriteString(fmt.Sprintf("NumCPU: %d\n", runtime.NumCPU()))
+	buf.WriteString(fmt.Sprintf("GOMAXPROCS: %d\n", runtime.GOMAXPROCS(runtime.NumCPU())))
 	if content, err := json.MarshalIndent(&stat, "", " "); nil == err {
 		buf.Write(content)
 	}

@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"proxy"
 	"remote"
+	"runtime"
 )
 
 func main() {
@@ -57,5 +58,6 @@ func main() {
 	if !exist {
 		log.Fatalln("No config [LocalServer]->Listen found")
 	}
+	runtime.GOMAXPROCS(runtime.NumCPU())
 	startLocalProxyServer(addr)
 }

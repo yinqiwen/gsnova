@@ -4,19 +4,15 @@
     "Proxy":["GoogleHttps", "Direct", "Default"]
   },
   {
-    "Host" : ["golang.org","*.blogspot.*","*.doubleclick.net*", "*.google-analytics.com*", "uploads.code.google.com", "groups.google.com", "apis.google.com", "www.blogger.com", "clients*.google.com"],
+    "Host" : ["*.doubleclick.net*", "*.google-analytics.com*", "uploads.code.google.com", "groups.google.com", "apis.google.com", "www.blogger.com", "clients*.google.com"],
     "Proxy":["GoogleHttps", "Direct", "Default"]
   },
   {
-    "Host" : ["(*.)?drive.google.com", "talkgadget.google.com", "plusone.google.com"],
-    "Proxy":["GoogleHttps", "Direct"]
+    "Host" : ["(*.)?drive.google.com", "talkgadget.google.com", "plusone.google.com", "www.google.com(.*)?", "www.google.co.*","*.appspot.com"],
+    "Proxy":["GoogleHttps", "Direct", "Default"]
   },
   {
-    "Host" : ["*.appspot.com"],
-    "Proxy":["Google","Default"]
-  },
-  {
-    "Host" : ["*.youtube.com", "*.ytimg.com"],
+    "Host" : ["*.youtube.com","*.blogspot.*","golang.org" ],
     "Proxy":["CRLFDirect", "Default"]
   },
   {
