@@ -14,6 +14,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"util"
 )
@@ -33,8 +34,10 @@ type DNSResult struct {
 var repoUrls []string
 var hostMapping = make(map[string]string)
 var reachableDNSResult = make(map[string]DNSResult)
+var reachableDNSResultMutex sync.Mutex
 var dnsResultChanged = false
 var blockVerifyResult = make(map[string]bool)
+var blockVerifyResultMutex sync.Mutex
 var preferDNS = true
 var dnsCacheExpire = uint32(604800)
 var persistDNSCache = true
@@ -96,7 +99,8 @@ func loadDiskHostFile() {
 						for k, v := range reachableDNSResult {
 							_, port, _ := net.SplitHostPort(k)
 							for _, ip := range v.IP {
-								blockVerifyResult[net.JoinHostPort(ip, port)] = true
+								//blockVerifyResult[net.JoinHostPort(ip, port)] = true
+								setBlockVerifyCacheResult(net.JoinHostPort(ip, port), true)
 							}
 						}
 					}
@@ -169,7 +173,7 @@ func persistDNSResult() {
 				break
 			}
 			if len(reachableDNSResult) > 0 {
-				if content, err := json.MarshalIndent(&reachableDNSResult, "", " "); nil == err {
+				if content, err := marshalReachableDNSResult(); nil == err {
 					filename := common.Home + "hosts/" + DNS_CACHE_FILE
 					if f, err := os.OpenFile(filename, os.O_CREATE, 0666); nil == err {
 						io.WriteString(f, string(content))
@@ -177,7 +181,7 @@ func persistDNSResult() {
 					}
 				}
 			}
-			dnsResultChanged = false
+			
 		}
 	}
 }
@@ -236,34 +240,79 @@ func lookupReachableMappingHost(req *http.Request, hostport string) (string, boo
 	return lookupReachableAddress(hostport)
 }
 
+func marshalReachableDNSResult() ([]byte, error) {
+	reachableDNSResultMutex.Lock()
+	defer reachableDNSResultMutex.Unlock()
+	dnsResultChanged = false
+	return json.MarshalIndent(&reachableDNSResult, "", " ")
+}
+
+func getReachableDNSResult(hostport string) (v DNSResult, exist bool) {
+	reachableDNSResultMutex.Lock()
+	defer reachableDNSResultMutex.Unlock()
+	v, exist = reachableDNSResult[hostport]
+	return
+}
+
+func setReachableDNSResult(hostport string, v DNSResult) {
+	reachableDNSResultMutex.Lock()
+	reachableDNSResult[hostport] = v
+	reachableDNSResultMutex.Unlock()
+}
+
+func expireReachableDNSResult(hostport string) {
+	reachableDNSResultMutex.Lock()
+	delete(reachableDNSResult, hostport)
+	reachableDNSResultMutex.Unlock()
+}
+
 func expireBlockVerifyCache(hostport string) {
+	blockVerifyResultMutex.Lock()
 	delete(blockVerifyResult, hostport)
+	blockVerifyResultMutex.Unlock()
+	dnsResultChanged = true
+}
+
+func setBlockVerifyCacheResult(hostport string, result bool) {
+	blockVerifyResultMutex.Lock()
+	blockVerifyResult[hostport] = result
+	blockVerifyResultMutex.Unlock()
+	dnsResultChanged = true
+}
+
+func getBlockVerifyCacheResult(hostport string) (v, exist bool) {
+	blockVerifyResultMutex.Lock()
+	defer blockVerifyResultMutex.Unlock()
+	v, exist = blockVerifyResult[hostport]
+	return
 }
 
 func isTCPAddressBlocked(host, ip, port string) bool {
 	addr := net.JoinHostPort(ip, port)
-	if verify, exist := blockVerifyResult[addr]; exist {
+	if verify, exist := getBlockVerifyCacheResult(addr); exist {
 		return verify
 	}
 	c, err := net.DialTimeout("tcp", addr, time.Duration(blockVerifyTimeout)*time.Second)
 	if nil != err {
 		delete(hostMapping, host)
 		hostport := net.JoinHostPort(host, port)
-		if addrs, exist := reachableDNSResult[hostport]; exist {
+		if addrs, exist := getReachableDNSResult(hostport); exist {
 			for i, v := range addrs.IP {
 				if v == ip {
 					addrs.IP = append(addrs.IP[:i], addrs.IP[i+1:]...)
 					dnsResultChanged = true
-					reachableDNSResult[hostport] = addrs
+					setReachableDNSResult(hostport, addrs)
 					break
 				}
 			}
 		}
-		blockVerifyResult[addr] = true
+		//blockVerifyResult[addr] = true
+		setBlockVerifyCacheResult(addr, true)
 		return true
 	}
 	c.Close()
-	blockVerifyResult[addr] = false
+	//blockVerifyResult[addr] = false
+	setBlockVerifyCacheResult(addr, false)
 	return false
 }
 
@@ -278,9 +327,10 @@ func hostNeedInjectRange(host string) bool {
 
 func trustedDNSQuery(host string, port string) ([]string, bool) {
 	hostport := net.JoinHostPort(host, port)
-	if result, exist := reachableDNSResult[hostport]; exist {
+	if result, exist := getReachableDNSResult(hostport); exist {
 		if time.Now().Sub(result.Date) >= time.Second*time.Duration(dnsCacheExpire) {
-			delete(reachableDNSResult, hostport)
+			//delete(reachableDNSResult, hostport)
+			expireReachableDNSResult(hostport)
 		} else {
 			return result.IP, len(result.IP) > 0
 		}
@@ -302,8 +352,9 @@ func trustedDNSQuery(host string, port string) ([]string, bool) {
 					result = append(result, ip.String())
 				}
 			}
-			dnsResultChanged = true
-			reachableDNSResult[hostport] = DNSResult{result, time.Now()}
+			//dnsResultChanged = true
+			//reachableDNSResult[hostport] = DNSResult{result, time.Now()}
+			setReachableDNSResult(hostport, DNSResult{result, time.Now()})
 			if len(result) > 0 {
 				return result, true
 			}
@@ -325,8 +376,9 @@ func trustedDNSQuery(host string, port string) ([]string, bool) {
 							result = append(result, ip)
 						}
 					}
-					dnsResultChanged = true
-					reachableDNSResult[hostport] = DNSResult{result, time.Now()}
+
+					//reachableDNSResult[hostport] = DNSResult{result, time.Now()}
+					setReachableDNSResult(hostport, DNSResult{result, time.Now()})
 					if len(result) > 0 {
 						return result, true
 					}
@@ -334,8 +386,8 @@ func trustedDNSQuery(host string, port string) ([]string, bool) {
 			}
 		}
 	}
-
-	reachableDNSResult[hostport] = DNSResult{[]string{}, time.Now()}
+	setReachableDNSResult(hostport, DNSResult{[]string{}, time.Now()})
+	//reachableDNSResult[hostport] = DNSResult{[]string{}, time.Now()}
 	return nil, false
 }
 

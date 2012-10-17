@@ -495,9 +495,12 @@ func (manager *Forward) RecycleRemoteConnection(conn RemoteConnection) {
 
 }
 
-func (manager *Forward) GetRemoteConnection(ev event.Event) (RemoteConnection, error) {
+func (manager *Forward) GetRemoteConnection(ev event.Event, attrs []string) (RemoteConnection, error) {
 	g := new(ForwardConnection)
 	g.manager = manager
 	g.Close()
+	if len(attrs) > 0 && attrs[0] == "CRLF" {
+		manager.inject_crlf = true
+	}
 	return g, nil
 }

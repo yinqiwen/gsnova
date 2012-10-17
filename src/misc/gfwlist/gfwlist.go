@@ -51,10 +51,13 @@ func (r *hostUrlWildcardRule) match(req *http.Request) bool {
 }
 
 type urlWildcardRule struct {
-	url_rule  string
+	url_rule string
 }
 
 func (r *urlWildcardRule) init(rule string) (err error) {
+	if !strings.Contains(rule, "*") {
+		rule = "*" + rule
+	}
 	r.url_rule = rule
 	return
 }
@@ -98,7 +101,7 @@ func (gfw *GFWList) IsBlockedByGFW(req *http.Request) bool {
 	}
 	for _, rule := range gfw.black_list {
 		if rule.match(req) {
-			//log.Printf("matched for :%s for %v\n", req.URL.String(), rule)
+			log.Printf("matched for :%s for %v\n", req.URL.String(), rule)
 			return true
 		}
 	}

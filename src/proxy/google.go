@@ -43,6 +43,7 @@ type GoogleConnection struct {
 	proxyURL           *url.URL
 	overProxy          bool
 	manager            *Google
+	simple_url         bool
 }
 
 func (conn *GoogleConnection) Close() error {
@@ -134,8 +135,8 @@ func (conn *GoogleConnection) initHttpClient(proxyAddr string) {
 		conn.http_client, err = net.DialTimeout("tcp", target, connTimeoutSecs)
 		if nil != err {
 			log.Printf("Failed to dial address:%s for reason:%s\n", proxyURL.Host, err.Error())
-		    conn.Close()
-		    return
+			conn.Close()
+			return
 		}
 		addr, _ := util.GetHostMapping(GOOGLE_HTTPS)
 		req := &http.Request{
@@ -167,12 +168,12 @@ func (conn *GoogleConnection) initHttpClient(proxyAddr string) {
 			addr, _ := util.GetHostMapping(googleHttpHost)
 			conn.http_client, err = net.DialTimeout("tcp", net.JoinHostPort(addr, "80"), connTimeoutSecs)
 			if nil != err {
-			    conn.Close()
+				conn.Close()
 				addr, _ = util.GetHostMapping(googleHttpHost)
 				conn.http_client, err = net.DialTimeout("tcp", net.JoinHostPort(addr, "80"), connTimeoutSecs)
 			}
 			if nil != err {
-			    conn.Close()
+				conn.Close()
 				log.Printf("Failed to dial address:%s for reason:%s\n", addr, err.Error())
 				return
 			}
@@ -180,7 +181,7 @@ func (conn *GoogleConnection) initHttpClient(proxyAddr string) {
 			addr, _ := util.GetHostMapping(googleHttpsHost)
 			conn.http_client, err = net.DialTimeout("tcp", net.JoinHostPort(addr, "443"), connTimeoutSecs)
 			if nil != err {
-			    conn.Close()
+				conn.Close()
 				addr, _ = util.GetHostMapping(googleHttpsHost)
 				conn.http_client, err = net.DialTimeout("tcp", net.JoinHostPort(addr, "443"), connTimeoutSecs)
 			}
@@ -208,8 +209,14 @@ func (google *GoogleConnection) writeHttpRequest(req *http.Request) error {
 		if useGlobalProxy && google.overProxy {
 			err = req.WriteProxy(google.http_client)
 		} else {
-			err = req.Write(google.http_client)
+			//err = req.Write(google.http_client)
+			if google.simple_url {
+				err = req.Write(google.http_client)
+			} else {
+				err = req.WriteProxy(google.http_client)
+			}
 		}
+		//err = req.WriteProxy(google.http_client)
 		if nil != err {
 			log.Printf("Resend request since error:%s occured.\n", err.Error())
 			google.Close()
@@ -242,7 +249,7 @@ func (google *GoogleConnection) Request(conn *SessionConnection, ev event.Event)
 			if nil == google.https_client {
 				google.initHttpsClient()
 			}
-			log.Printf("Session[%d]Request %s\n", req.GetHash(), util.GetURLString(req.RawReq,true))
+			log.Printf("Session[%d]Request %s\n", req.GetHash(), util.GetURLString(req.RawReq, true))
 			if nil != google.https_client {
 				conn.LocalRawConn.Write([]byte("HTTP/1.1 200 Connection established\r\n\r\n"))
 			} else {
@@ -265,7 +272,7 @@ func (google *GoogleConnection) Request(conn *SessionConnection, ev event.Event)
 				log.Printf("Failed to connect google http site.\n")
 				return errors.New("No google proxy reachable."), nil
 			}
-			log.Printf("Session[%d]Request %s\n", req.GetHash(), util.GetURLString(req.RawReq,true))
+			log.Printf("Session[%d]Request %s\n", req.GetHash(), util.GetURLString(req.RawReq, true))
 			err := google.writeHttpRequest(req.RawReq)
 			if nil != err {
 				return err, nil
@@ -309,7 +316,7 @@ func (manager *Google) RecycleRemoteConnection(conn RemoteConnection) {
 	}
 }
 
-func (manager *Google) GetRemoteConnection(ev event.Event) (RemoteConnection, error) {
+func (manager *Google) GetRemoteConnection(ev event.Event, attrs []string) (RemoteConnection, error) {
 	var b RemoteConnection
 	// Grab a buffer if available; allocate if not.
 	select {
@@ -323,6 +330,12 @@ func (manager *Google) GetRemoteConnection(ev event.Event) (RemoteConnection, er
 		//b.auth = 
 	} // Read next message from the net.
 	b.Close()
+	//log.Printf("##############%v\n", attrs)
+	if len(attrs) > 0 && attrs[0] == "Direct" {
+		b.(*GoogleConnection).simple_url = true
+	} else {
+		b.(*GoogleConnection).simple_url = false
+	}
 	return b, nil
 }
 

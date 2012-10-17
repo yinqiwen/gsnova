@@ -154,7 +154,7 @@ type SSH struct {
 func (ssh *SSH) RecycleRemoteConnection(conn RemoteConnection) {
 }
 
-func (ssh *SSH) GetRemoteConnection(ev event.Event) (RemoteConnection, error) {
+func (ssh *SSH) GetRemoteConnection(ev event.Event, attrs []string) (RemoteConnection, error) {
 	conn := &SSHConnection{manager: ssh,
 		ssh_conn: ssh.selector.Select().(*SSHRawConnection)}
 	return conn, nil

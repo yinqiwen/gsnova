@@ -340,7 +340,7 @@ func (manager *C4) RecycleRemoteConnection(conn RemoteConnection) {
 	//do nothing
 }
 
-func (manager *C4) GetRemoteConnection(ev event.Event) (RemoteConnection, error) {
+func (manager *C4) GetRemoteConnection(ev event.Event, attrs []string) (RemoteConnection, error) {
 	conn := &C4HttpConnection{}
 	conn.manager = manager
 	return conn, nil

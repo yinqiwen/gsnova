@@ -28,7 +28,7 @@ type JsonRule struct {
 	Proxy        []string
 	Filter       []string
 	Protocol     string
-	Attr         map[string]string
+	Attr         []string
 	method_regex []*regexp.Regexp
 	host_regex   []*regexp.Regexp
 	url_regex    []*regexp.Regexp
@@ -37,6 +37,7 @@ type JsonRule struct {
 func loadSpacScript() error {
 	file, e := ioutil.ReadFile(spac_script_path)
 	if e == nil {
+		spac.rules = []*JsonRule{}
 		e = json.Unmarshal(file, &spac.rules)
 		for _, json_rule := range spac.rules {
 			e = json_rule.init()
@@ -285,7 +286,7 @@ func generatePAC(url, date, content string) string {
 
 func fetchCloudSpacScript(url string) {
 	time.Sleep(5 * time.Second)
-	body,_, err := util.FetchLateastContent(url, common.ProxyPort)
+	body, _, err := util.FetchLateastContent(url, common.ProxyPort)
 	if nil == err && len(body) > 0 {
 		ioutil.WriteFile(spac_script_path, body, 0666)
 	}
@@ -338,7 +339,7 @@ func InitSpac() {
 	}
 
 	if addr, exist := common.Cfg.GetProperty("SPAC", "CloudRule"); exist {
-        go fetchCloudSpacScript(addr)
+		go fetchCloudSpacScript(addr)
 	}
 
 	script, exist := common.Cfg.GetProperty("SPAC", "Script")
@@ -351,32 +352,31 @@ func InitSpac() {
 	init_spac_func()
 }
 
-func selectProxyByRequest(req *http.Request, host, port string, isHttpsConn bool, proxyNames []string) []string {
+func selectProxyByRequest(req *http.Request, host, port string, isHttpsConn bool, proxyNames []string) ([]string, []string) {
 	for _, r := range spac.rules {
 		if r.match(req) {
-			return r.Proxy
+			return r.Proxy, r.Attr
 		}
 	}
 
 	//	if !isHttpsConn && needInjectCRLF(req.Host) {
 	//		return []string{DIRECT_NAME, spac.defaultRule}
 	//	}
-
+	attrs := []string{}
 	if hostsEnable != HOSTS_DISABLE {
 		if _, exist := lookupReachableMappingHost(req, net.JoinHostPort(host, port)); exist {
-			direct := DIRECT_NAME
 			if !strings.EqualFold(req.Method, "Connect") {
-				direct = CRLF_DIRECT_NAME
+				attrs = []string{"CRLF"}
 			}
-			return []string{direct, spac.defaultRule}
+			return []string{DIRECT_NAME, spac.defaultRule}, attrs
 		} else {
 			//log.Printf("[WARN]No available IP for %s\n", host)
 		}
 	}
-	return proxyNames
+	return proxyNames, nil
 }
 
-func SelectProxy(req *http.Request, conn net.Conn, isHttpsConn bool) []RemoteConnectionManager {
+func SelectProxy(req *http.Request, conn net.Conn, isHttpsConn bool) ([]RemoteConnectionManager, []string) {
 	host := req.Host
 	port := "80"
 	if v, p, err := net.SplitHostPort(req.Host); nil == err {
@@ -385,6 +385,7 @@ func SelectProxy(req *http.Request, conn net.Conn, isHttpsConn bool) []RemoteCon
 	}
 	proxyNames := []string{spac.defaultRule}
 	proxyManagers := make([]RemoteConnectionManager, 0)
+	attrs := []string{}
 	need_select_proxy := true
 	if util.IsPrivateIP(host) {
 		need_select_proxy = false
@@ -392,17 +393,17 @@ func SelectProxy(req *http.Request, conn net.Conn, isHttpsConn bool) []RemoteCon
 		if host == "127.0.0.1" || host == util.GetLocalIP() || strings.EqualFold(host, "localhost") {
 			if port == common.ProxyPort {
 				handleSelfHttpRequest(req, conn)
-				return nil
+				return nil, nil
 			}
 		}
 	}
 
 	if !isHttpsConn && needRedirectHttpsHost(req.Host) {
 		redirectHttps(conn, req)
-		return nil
+		return nil, nil
 	}
 	if need_select_proxy {
-		proxyNames = selectProxyByRequest(req, host, port, isHttpsConn, proxyNames)
+		proxyNames, attrs = selectProxyByRequest(req, host, port, isHttpsConn, proxyNames)
 	}
 	for _, proxyName := range proxyNames {
 		if strings.EqualFold(proxyName, DEFAULT_NAME) {
@@ -423,9 +424,8 @@ func SelectProxy(req *http.Request, conn net.Conn, isHttpsConn bool) []RemoteCon
 			if google_enable {
 				proxyManagers = append(proxyManagers, httpsGoogleManager)
 			}
-		case DIRECT_NAME, CRLF_DIRECT_NAME:
+		case DIRECT_NAME:
 			forward := &Forward{overProxy: false}
-			forward.inject_crlf = (CRLF_DIRECT_NAME == proxyName)
 			forward.target = req.Host
 			if !strings.Contains(forward.target, ":") {
 				forward.target = forward.target + ":80"
@@ -444,5 +444,5 @@ func SelectProxy(req *http.Request, conn net.Conn, isHttpsConn bool) []RemoteCon
 		}
 	}
 
-	return proxyManagers
+	return proxyManagers, attrs
 }

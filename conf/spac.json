@@ -8,16 +8,18 @@
     "Proxy":["GoogleHttps", "Direct", "Default"]
   },
   {
-    "Host" : ["(*.)?drive.google.com", "talkgadget.google.com", "plusone.google.com", "www.google.com(.*)?", "www.google.co.*","*.appspot.com", "mail.google.com"],
-    "Proxy":["GoogleHttps", "Direct", "Default"]
+    "Host" : ["*.c.youtube.com", "*.golang.org"],
+    "Proxy": ["Direct", "Default"],
+    "Attr":  ["CRLF"]
   },
   {
-    "Host" : ["*.youtube.com","*.blogspot.*","golang.org" ],
-    "Proxy":["CRLFDirect", "Default"]
+    "Host" : ["(*.)?drive.google.com","*.blogspot.*", "talkgadget.google.com", "plusone.google.com", "www.google.com(.*)?", "www.google.co.*","*.appspot.com", "^golang.org"],
+    "Proxy": ["GoogleHttps", "Direct", "Default"]
   },
   {
-    "Host" : ["*.qq.com", "*.baidu.com", "*.sina.com.*", "*.163.com", "*.sohu.com", "*.qzone.com", "*.tudou.com", "*.youku.com"],
-    "Proxy":["Direct"]
+    "Host" : ["*.youtube.com"],
+    "Proxy": ["GoogleHttps", "Direct", "Default"],
+    "Attr":  ["Direct"]
   },
   {
     "Filter" : ["!IsBlockedByGFW"],
