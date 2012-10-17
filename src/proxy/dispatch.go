@@ -2,7 +2,7 @@ package proxy
 
 import (
 	"bufio"
-	//"common"
+	"common"
 	"errors"
 	"event"
 	"io"
@@ -10,7 +10,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
-	//"time"
+	"time"
 )
 
 const (
@@ -139,9 +139,11 @@ func (session *SessionConnection) process() error {
 
 	switch session.State {
 	case STATE_RECV_HTTP:
-		//session.LocalRawConn.SetReadDeadline(time.Now().Add(common.KeepAliveTimeout * time.Second))
+		session.LocalRawConn.SetReadDeadline(time.Now().Add(common.KeepAliveTimeout * time.Second))
 		req, err := http.ReadRequest(session.LocalBufferConn)
 		if nil == err {
+		    var zero time.Time
+		    session.LocalRawConn.SetReadDeadline(zero)
 			var rev event.HTTPRequestEvent
 			rev.FromRequest(req)
 			rev.SetHash(session.SessionID)
@@ -157,25 +159,25 @@ func (session *SessionConnection) process() error {
 			}
 			close_session()
 		}
-	case STATE_RECV_HTTP_CHUNK:
-		buf := make([]byte, 8192)
-		n, err := session.LocalBufferConn.Read(buf)
-		if nil == err {
-			rev := new(event.HTTPChunkEvent)
-			rev.Content = buf[0:n]
-			err = session.processHttpChunkEvent(rev)
-		}
-		if nil != err {
-			operr, ok := err.(*net.OpError)
-			if ok && (operr.Timeout() || operr.Temporary()) {
-				log.Printf("Timeout to read\n")
-				return nil
-			}
-			if err != io.EOF {
-				log.Printf("Session[%d]Failed to read http chunk:%v %T\n", session.SessionID, err, err)
-			}
-			close_session()
-		}
+//	case STATE_RECV_HTTP_CHUNK:
+//		buf := make([]byte, 8192)
+//		n, err := session.LocalBufferConn.Read(buf)
+//		if nil == err {
+//			rev := new(event.HTTPChunkEvent)
+//			rev.Content = buf[0:n]
+//			err = session.processHttpChunkEvent(rev)
+//		}
+//		if nil != err {
+//			operr, ok := err.(*net.OpError)
+//			if ok && (operr.Timeout() || operr.Temporary()) {
+//				log.Printf("Timeout to read\n")
+//				return nil
+//			}
+//			if err != io.EOF {
+//				log.Printf("Session[%d]Failed to read http chunk:%v %T\n", session.SessionID, err, err)
+//			}
+//			close_session()
+//		}
 	case STATE_RECV_TCP:
 
 	}

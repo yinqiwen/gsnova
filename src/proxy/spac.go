@@ -283,37 +283,33 @@ func generatePAC(url, date, content string) string {
 	return buffer.String()
 }
 
+func fetchCloudSpacScript(url string) {
+	time.Sleep(5 * time.Second)
+	body,_, err := util.FetchLateastContent(url, common.ProxyPort)
+	if nil == err && len(body) > 0 {
+		ioutil.WriteFile(spac_script_path, body, 0666)
+	}
+	if nil != err {
+		log.Printf("Failed to fetch spac cloud script for reason:%v\n", err)
+	}
+}
+
 func generatePACFromGFWList(url string) {
+	time.Sleep(5 * time.Second)
 	log.Printf("Generate PAC from  gfwlist %s\n", url)
 	load_gfwlist_rule()
-	resp, err := util.HttpGet(url, "")
-	if err != nil {
-		if addr, exist := common.Cfg.GetProperty("LocalServer", "Listen"); exist {
-			_, port, _ := net.SplitHostPort(addr)
-			resp, err = util.HttpGet(url, "http://"+net.JoinHostPort("127.0.0.1", port))
-		}
-	}
-	if err != nil || resp.StatusCode != 200 {
-		log.Printf("Failed to fetch AutoProxy2PAC from %s for reason:%v\n", url, err)
-	} else {
-		last_mod_date := resp.Header.Get("last-modified")
-		t, err := time.Parse(time.RFC1123, last_mod_date)
-		if nil == err && t.Before(time.Now()) {
-			resp.Body.Close()
-			return
-		}
-		if nil != err {
-			log.Printf("Failed to translate time from last-modified:%s for reason:%v\n", last_mod_date, err)
-		}
-		body, err := ioutil.ReadAll(resp.Body)
-		if nil == err {
-			content, _ := base64.StdEncoding.DecodeString(string(body))
-			ioutil.WriteFile(common.Home+"spac/snova-gfwlist.txt", content, 0666)
-			hf := common.Home + "spac/snova-gfwlist.pac"
-			file_content := generatePAC(url, last_mod_date, string(content))
-			ioutil.WriteFile(hf, []byte(file_content), 0666)
-		}
+
+	body, last_mod_date, err := util.FetchLateastContent(url, common.ProxyPort)
+	if nil == err && len(body) > 0 {
+		content, _ := base64.StdEncoding.DecodeString(string(body))
+		ioutil.WriteFile(common.Home+"spac/snova-gfwlist.txt", content, 0666)
+		hf := common.Home + "spac/snova-gfwlist.pac"
+		file_content := generatePAC(url, last_mod_date, string(content))
+		ioutil.WriteFile(hf, []byte(file_content), 0666)
 		load_gfwlist_rule()
+	}
+	if nil != err {
+		log.Printf("Failed to fetch gfwlist for reason:%v\n", err)
 	}
 }
 
@@ -341,11 +337,15 @@ func InitSpac() {
 		pac_proxy = addr
 	}
 
+	if addr, exist := common.Cfg.GetProperty("SPAC", "CloudRule"); exist {
+        go fetchCloudSpacScript(addr)
+	}
+
 	script, exist := common.Cfg.GetProperty("SPAC", "Script")
 	if !exist {
 		script = "spac/spac.json"
 	}
-	spac_script_path = common.Home + "spac/" + script
+	spac_script_path = common.Home + script
 	loadSpacScript()
 	go reloadSpacScript()
 	init_spac_func()

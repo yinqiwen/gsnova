@@ -1,5 +1,5 @@
 #!/bin/sh
-VERSION="0.16.0"
+VERSION="0.17.0"
 
 GSNOVA_DIR=`dirname $0 | sed -e "s#^\\([^/]\\)#${PWD}/\\1#"` # sed makes absolute
 build_gsnova()
@@ -36,9 +36,9 @@ build_dist()
    cp $GSNOVA_DIR/bin/"$OS"_$ARCH/main* $GSNOVA_DIR/$DIST_DIR/$exename
    cp $GSNOVA_DIR/conf/*.conf $GSNOVA_DIR/$DIST_DIR
    cp $GSNOVA_DIR/conf/Fake* $GSNOVA_DIR/$DIST_DIR/cert
-   cp $GSNOVA_DIR/conf/spac.json $GSNOVA_DIR/$DIST_DIR
    cp -r $GSNOVA_DIR/web $GSNOVA_DIR/$DIST_DIR
-   cp $GSNOVA_DIR/conf/user-gfwlist.txt $GSNOVA_DIR/$DIST_DIR
+   cp $GSNOVA_DIR/conf/spac.json $GSNOVA_DIR/$DIST_DIR/spac
+   cp $GSNOVA_DIR/conf/user-gfwlist.txt $GSNOVA_DIR/$DIST_DIR/spac
    zip -r gsnova_"$VERSION"_"$OS"_"$ARCH".zip $DIST_DIR/*
    rm -rf $GSNOVA_DIR/$DIST_DIR
 }
@@ -52,6 +52,8 @@ main()
             export GOARCH=386
             build_dist $*
             export GOARCH=amd64
+            build_dist $*
+            export GOOS=linux
             build_dist $*
 	else
 		build_gsnova $*

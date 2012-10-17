@@ -1,5 +1,5 @@
 #!/bin/sh
-VERSION="0.17.0beta2"
+VERSION="0.17.0"
 
 #this part is copied from ANT's script
 # OS specific support.  $var _must_ be set to either true or false.
@@ -56,7 +56,6 @@ build_dist()
    cp $GSNOVA_DIR/conf/Fake* $GSNOVA_DIR/$DIST_DIR/cert
    cp $GSNOVA_DIR/conf/spac.json $GSNOVA_DIR/$DIST_DIR/spac
    cp $GSNOVA_DIR/conf/user-gfwlist.txt $GSNOVA_DIR/$DIST_DIR/spac
-   cp -r $GSNOVA_DIR/web $GSNOVA_DIR/$DIST_DIR
    cp -r $GSNOVA_DIR/web $GSNOVA_DIR/$DIST_DIR
    zip -r gsnova_"$VERSION"_"$OS"_"$ARCH".zip $DIST_DIR/*
    rm -rf $GSNOVA_DIR/$DIST_DIR

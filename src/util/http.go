@@ -5,10 +5,12 @@ import (
 	"crypto/tls"
 	"errors"
 	"io"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 )
 
 func isKeepAlive(header http.Header, protoMajor, protoMinor int) bool {
@@ -34,6 +36,31 @@ func IsResponseKeepAlive(res *http.Response) bool {
 		return false
 	}
 	return isKeepAlive(res.Header, res.ProtoMajor, res.ProtoMinor)
+}
+
+func FetchLateastContent(urlstr string, proxy_port string) ([]byte, string, error) {
+	resp, err := HttpGet(urlstr, "")
+	if err != nil {
+		resp, err = HttpGet(urlstr, "http://"+net.JoinHostPort("127.0.0.1", proxy_port))
+	}
+	if err != nil || resp.StatusCode != 200 {
+		return nil, "",err
+	} else {
+		last_mod_date := resp.Header.Get("last-modified")
+		t, err := time.Parse(time.RFC1123, last_mod_date)
+		if nil == err && t.Before(time.Now()) {
+			resp.Body.Close()
+			return []byte{}, last_mod_date,nil
+		}
+		if nil != err {
+			return nil,last_mod_date, err
+		}
+		body, err := ioutil.ReadAll(resp.Body)
+		if nil == err {
+			return body, last_mod_date, nil
+		}
+	}
+	return nil, "", errors.New("Invalid url")
 }
 
 func HttpGet(urlstr string, proxy string) (*http.Response, error) {
