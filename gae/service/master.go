@@ -4,11 +4,36 @@ import (
 	"appengine"
 	"appengine/datastore"
 	"appengine/mail"
-	//vector "container/vector"
+	"appengine/urlfetch"
+	"bytes"
 	"event"
+	"io"
 	"math/rand"
+	"strings"
 	"misc"
 )
+
+func isValidSnovaSite(c appengine.Context, appid string) bool {
+	client := urlfetch.Client(c)
+	resp, err := client.Get("http://" + appid + ".appspot.com")
+	if err == nil {
+		if resp.StatusCode == 200 {
+			var tmp bytes.Buffer
+			if _, err = io.Copy(&tmp, resp.Body); nil == err{
+			   if !strings.Contains(tmp.String(), "snova"){
+			      c.Errorf("Definitly invalid appid:%s", appid)
+			      return false
+			   }else{
+			      return true
+			   }
+			}
+		}
+		c.Errorf("Failed to verify appid:%s for response:%v", appid, resp)
+		return true
+	}
+	c.Errorf("Failed to verify appid:%s for reason:%v", appid, err)
+	return true
+}
 
 type AppIDItem struct {
 	AppID string
@@ -65,7 +90,7 @@ func getSharedAppItem(ctx appengine.Context, appid string) *AppIDItem {
 	for i := 0; i < slen; i++ {
 		item := sharedAppIdItems[i]
 		if item.AppID == appid {
-				return item
+			return item
 		}
 	}
 	return nil
@@ -85,11 +110,11 @@ func saveSharedAppItem(ctx appengine.Context, item *AppIDItem) {
 func deleteSharedAppItem(ctx appengine.Context, item *AppIDItem) {
 	var slen int = len(sharedAppIdItems)
 	for i := 0; i < slen; i++ {
-		tmp:= sharedAppIdItems[i]
-        if tmp.AppID == item.AppID {
-				//sharedAppIdItems.Delete(i)
-				sharedAppIdItems = append(sharedAppIdItems[:i], sharedAppIdItems[i+1:]...)
-			}
+		tmp := sharedAppIdItems[i]
+		if tmp.AppID == item.AppID {
+			//sharedAppIdItems.Delete(i)
+			sharedAppIdItems = append(sharedAppIdItems[:i], sharedAppIdItems[i+1:]...)
+		}
 	}
 	key := datastore.NewKey(ctx, "SharedAppID", item.AppID, 0, nil)
 	datastore.Delete(ctx, key)
@@ -119,8 +144,8 @@ func unShareAppID(ctx appengine.Context, appid, email string) event.Event {
 		resev.ErrorCause = "This appid is not shared before!"
 		return resev
 	}
-	
-	if item.Email != email && item.Email != misc.MasterAdminEmail{
+
+	if item.Email != email && item.Email != misc.MasterAdminEmail {
 		resev.ErrorCause = "The input email address is not equal the share email address."
 		return resev
 	}
@@ -128,9 +153,9 @@ func unShareAppID(ctx appengine.Context, appid, email string) event.Event {
 	item.AppID = appid
 	item.Email = email
 	deleteSharedAppItem(ctx, item)
-	email_content := "Your appid:"+appid+" is unshared from snova master."
-	if item.Email == misc.MasterAdminEmail{
-	   email_content = email_content + "\nWe noticied that your shared appid:" + appid + " is not a valid Snova Server AppID."
+	email_content := "Your appid:" + appid + " is unshared from snova master."
+	if item.Email == misc.MasterAdminEmail {
+		email_content = email_content + "\nWe noticied that your shared appid:" + appid + " is not a valid Snova Server AppID."
 	}
 	sendMail(ctx, email, "Unshared AppID:"+appid+"!", email_content)
 	resev.Response = "Success"
@@ -166,11 +191,15 @@ func HandleShareEvent(ctx appengine.Context, ev *event.ShareAppIDEvent) event.Ev
 
 func RetrieveAppIds(ctx appengine.Context) event.Event {
 	ctx.Infof("Shared items length  :%d", len(sharedAppIdItems))
-	if len(sharedAppIdItems) > 0 {
-		index := rand.Intn(len(sharedAppIdItems))
+	for len(sharedAppIdItems) > 0 {
 		res := new(event.RequestAppIDResponseEvent)
 		res.AppIDs = make([]string, 1)
+		index := rand.Intn(len(sharedAppIdItems))
 		item := sharedAppIdItems[index]
+		if !isValidSnovaSite(ctx, item.AppID) {
+			unShareAppID(ctx, item.AppID, item.Email)
+			continue
+		}
 		res.AppIDs[0] = item.AppID
 		return res
 	}
@@ -183,8 +212,8 @@ func RetrieveAllAppIds(ctx appengine.Context) event.Event {
 	if len(sharedAppIdItems) > 0 {
 		res := new(event.RequestAppIDResponseEvent)
 		res.AppIDs = make([]string, len(sharedAppIdItems))
-		for i := 0; i < len(sharedAppIdItems); i++{
-		   res.AppIDs[i] = sharedAppIdItems[i].AppID
+		for i := 0; i < len(sharedAppIdItems); i++ {
+			res.AppIDs[i] = sharedAppIdItems[i].AppID
 		}
 		return res
 	}
