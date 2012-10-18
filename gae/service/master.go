@@ -117,6 +117,7 @@ func deleteSharedAppItem(ctx appengine.Context, item *AppIDItem) {
 		if tmp.AppID == item.AppID {
 			//sharedAppIdItems.Delete(i)
 			sharedAppIdItems = append(sharedAppIdItems[:i], sharedAppIdItems[i+1:]...)
+			break
 		}
 	}
 	key := datastore.NewKey(ctx, "SharedAppID", item.AppID, 0, nil)
