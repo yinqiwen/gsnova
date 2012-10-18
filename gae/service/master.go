@@ -27,6 +27,9 @@ func isValidSnovaSite(c appengine.Context, appid string) bool {
 			      return true
 			   }
 			}
+		}else if(resp.StatusCode >= 400 && resp.StatusCode < 500){
+		    c.Errorf("Definitly invalid:%s for response:%v", appid, resp)
+		    return false
 		}
 		c.Errorf("Failed to verify appid:%s for response:%v", appid, resp)
 		return true
@@ -117,7 +120,10 @@ func deleteSharedAppItem(ctx appengine.Context, item *AppIDItem) {
 		}
 	}
 	key := datastore.NewKey(ctx, "SharedAppID", item.AppID, 0, nil)
-	datastore.Delete(ctx, key)
+	err := datastore.Delete(ctx, key)
+	if err != nil {
+		ctx.Errorf("Failed to delete appid:%s for reason:%v", item.AppID, err)
+	}
 }
 
 func shareAppID(ctx appengine.Context, appid, email string) event.Event {

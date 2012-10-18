@@ -11,12 +11,21 @@ import (
 	"util"
 )
 
+func containsAttr(attrs map[string]string, key string) bool{
+   if nil == attrs{
+      return false
+   }
+   _, exist := attrs[key]
+   return exist
+}
+
 func redirectHttps(conn net.Conn, req *http.Request) {
 	conn.Write([]byte("HTTP/1.1 302 Found\r\n"))
 	location := fmt.Sprintf("Location:https://%s%s\r\nConnection:close\r\n\r\n", req.Host, req.RequestURI)
 	if strings.HasPrefix(req.RequestURI, "http://") {
 		location = fmt.Sprintf("Location:%s\r\nConnection:close\r\n\r\n", strings.Replace(req.RequestURI, "http", "https", 1))
 	}
+	//log.Printf("Response is %s\n", location)
 	conn.Write([]byte(location))
 	conn.Close()
 }

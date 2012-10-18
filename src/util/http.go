@@ -47,6 +47,9 @@ func FetchLateastContent(urlstr string, proxy_port string) ([]byte, string, erro
 		return nil, "",err
 	} else {
 		last_mod_date := resp.Header.Get("last-modified")
+		if len(last_mod_date) == 0{
+		   return nil, "", errors.New("No last-modified header in response.")
+		}
 		t, err := time.Parse(time.RFC1123, last_mod_date)
 		if nil == err && t.Before(time.Now()) {
 			resp.Body.Close()

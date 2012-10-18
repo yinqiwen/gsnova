@@ -45,7 +45,7 @@ var persistDNSCache = true
 var hostsEnable int
 var trustedDNS = []string{}
 var useHttpDNS = []*regexp.Regexp{}
-var forceHttpsHosts = []*regexp.Regexp{}
+//var forceHttpsHosts = []*regexp.Regexp{}
 var exceptHosts = []*regexp.Regexp{}
 var httpDNS string
 var blockVerifyTimeout = 5
@@ -316,10 +316,9 @@ func isTCPAddressBlocked(host, ip, port string) bool {
 	return false
 }
 
-func needRedirectHttpsHost(host string) bool {
-	return hostPatternMatched(forceHttpsHosts, host)
-
-}
+//func needRedirectHttpsHost(host string) bool {
+//	return hostPatternMatched(forceHttpsHosts, host)
+//}
 
 func hostNeedInjectRange(host string) bool {
 	return hostPatternMatched(hostInjectRangePatterns, host)
@@ -419,9 +418,9 @@ func InitHosts() error {
 		hostRangeConcurrentFether = uint32(fetcher)
 	}
 
-	if pattern, exist := common.Cfg.GetProperty("Hosts", "RedirectHttps"); exist {
-		forceHttpsHosts = initHostMatchRegex(pattern)
-	}
+//	if pattern, exist := common.Cfg.GetProperty("Hosts", "RedirectHttps"); exist {
+//		forceHttpsHosts = initHostMatchRegex(pattern)
+//	}
 
 	if pattern, exist := common.Cfg.GetProperty("Hosts", "ExceptHosts"); exist {
 		exceptHosts = initHostMatchRegex(pattern)

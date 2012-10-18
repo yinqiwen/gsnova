@@ -499,7 +499,7 @@ func (manager *GAE) RecycleRemoteConnection(conn RemoteConnection) {
 	}
 }
 
-func (manager *GAE) GetRemoteConnection(ev event.Event, attrs []string) (RemoteConnection, error) {
+func (manager *GAE) GetRemoteConnection(ev event.Event, attrs map[string]string) (RemoteConnection, error) {
 	var b RemoteConnection
 	// Grab a buffer if available; allocate if not.
 	select {

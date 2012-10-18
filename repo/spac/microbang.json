@@ -1,0 +1,41 @@
+[
+  {
+    "Host" : ["*.ytimg.com*", "*.google.com(.*)?","*.googleusercontent.com*", "*.gstatic.com", "*.googleapis.com*", "*.googlecode.com"],
+    "Proxy":["GoogleHttps", "Direct", "Default"]
+  },
+  {
+    "Host" : ["*.doubleclick.net*", "*.google-analytics.com*", "www.blogger.com", "*.google.co.*"],
+    "Proxy":["GoogleHttps", "Direct", "Default"]
+  },
+  {
+    "Host" : ["*.c.youtube.com", "*.golang.org"],
+    "Proxy": ["Direct", "Default"],
+    "Attr":  ["CRLF"]
+  },
+  {
+    "Host" : ["*.blogspot.*", "*.appspot.com", "golang.org"],
+    "Proxy": ["GoogleHttps", "Direct", "Default"]
+  },
+  {
+    "Host" : ["*.youtube.com"],
+    "Proxy": ["GoogleHttps", "Direct", "Default"],
+    "Attr":  ["Direct"]
+  },
+  {
+    "Filter" : ["!IsBlockedByGFW"],
+    "Proxy":["Direct"]
+  },
+  {
+    "Protocol":["https"],
+    "Host" : ["Target https domain patterns for socks5 proxy"],
+    "Proxy":["socks://127.0.0.1:7070"]
+  },
+  {
+    "Host" : ["Target domain patterns for 3rd http proxy"],
+    "Proxy":["http://127.0.0.1:8080"]
+  },
+  {
+    "Host" : ["Configure direct access sites, like *.qq.com*"],
+    "Proxy":["Direct"]
+  }
+]

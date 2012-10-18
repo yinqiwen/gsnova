@@ -316,7 +316,7 @@ func (manager *Google) RecycleRemoteConnection(conn RemoteConnection) {
 	}
 }
 
-func (manager *Google) GetRemoteConnection(ev event.Event, attrs []string) (RemoteConnection, error) {
+func (manager *Google) GetRemoteConnection(ev event.Event, attrs map[string]string) (RemoteConnection, error) {
 	var b RemoteConnection
 	// Grab a buffer if available; allocate if not.
 	select {
@@ -331,7 +331,7 @@ func (manager *Google) GetRemoteConnection(ev event.Event, attrs []string) (Remo
 	} // Read next message from the net.
 	b.Close()
 	//log.Printf("##############%v\n", attrs)
-	if len(attrs) > 0 && attrs[0] == "Direct" {
+	if containsAttr(attrs, ATTR_DIRECT) {
 		b.(*GoogleConnection).simple_url = true
 	} else {
 		b.(*GoogleConnection).simple_url = false

@@ -126,7 +126,7 @@ func WildcardMatch(text string, pattern string) bool {
 		if idx == -1 {
 			return false
 		}
-		text = strings.TrimLeft(text, str)
+		text = strings.TrimLeft(text, str+"*")
 	}
 	return true
 }

@@ -32,8 +32,12 @@ const (
 	FORWARD_NAME             = "Forward"
 	SSH_NAME                 = "SSH"
 	DIRECT_NAME              = "Direct"
-//	CRLF_DIRECT_NAME         = "CRLFDirect"
-	DEFAULT_NAME             = "Default"
+	//	CRLF_DIRECT_NAME         = "CRLFDirect"
+	DEFAULT_NAME = "Default"
+
+	ATTR_REDIRECT_HTTPS = "RedirectHttps"
+	ATTR_CRLF_INJECT    = "CRLF"
+	ATTR_DIRECT    = "Direct"
 
 	MODE_HTTP    = "http"
 	MODE_HTTPS   = "httpS"
@@ -48,7 +52,7 @@ type RemoteConnection interface {
 }
 
 type RemoteConnectionManager interface {
-	GetRemoteConnection(ev event.Event, attrs []string) (RemoteConnection, error)
+	GetRemoteConnection(ev event.Event, attrs map[string]string) (RemoteConnection, error)
 	RecycleRemoteConnection(conn RemoteConnection)
 	GetName() string
 }
@@ -73,7 +77,7 @@ func newSessionConnection(sessionId uint32, conn net.Conn, reader *bufio.Reader)
 	return session_conn
 }
 
-func (session *SessionConnection) tryProxy(proxies []RemoteConnectionManager, attrs []string, ev *event.HTTPRequestEvent) error {
+func (session *SessionConnection) tryProxy(proxies []RemoteConnectionManager, attrs map[string]string, ev *event.HTTPRequestEvent) error {
 	for _, proxy := range proxies {
 		session.RemoteConn, _ = proxy.GetRemoteConnection(ev, attrs)
 		err, _ := session.RemoteConn.Request(session, ev)
@@ -107,7 +111,7 @@ func (session *SessionConnection) processHttpEvent(ev *event.HTTPRequestEvent) e
 		}
 		if !matched {
 			session.RemoteConn.Close()
-			err = session.tryProxy(proxies,attrs, ev)
+			err = session.tryProxy(proxies, attrs, ev)
 		} else {
 			err, _ = session.RemoteConn.Request(session, ev)
 		}
