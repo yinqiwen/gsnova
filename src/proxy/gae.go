@@ -490,6 +490,22 @@ type GAE struct {
 	idle_conns chan RemoteConnection
 }
 
+func (manager *GAE) shareAppId(appid, email string, operation uint32) error {
+//	var ev event.ShareAppIDEvent
+//	ev.Operation = operation
+//	conn, err := manager.GetRemoteConnection(&ev, make(map[string]string))
+//	if nil != err {
+//		return err
+//	}
+//	var res event.Event
+//	err, res = conn.Request(nil, &ev)
+//	if nil != err {
+//		return err
+//	}
+	return nil
+}
+
+
 func (manager *GAE) RecycleRemoteConnection(conn RemoteConnection) {
 	select {
 	case manager.idle_conns <- conn:

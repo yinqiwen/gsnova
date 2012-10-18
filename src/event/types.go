@@ -53,4 +53,7 @@ const (
 
 	TCP_CONN_OPENED uint32 = 1
 	TCP_CONN_CLOSED uint32 = 2
+
+	APPID_SHARE   uint32 = 0
+	APPID_UNSHARE uint32 = 1
 )

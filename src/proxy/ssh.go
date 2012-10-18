@@ -155,8 +155,12 @@ func (ssh *SSH) RecycleRemoteConnection(conn RemoteConnection) {
 }
 
 func (ssh *SSH) GetRemoteConnection(ev event.Event, attrs map[string]string) (RemoteConnection, error) {
+	c := ssh.selector.Select()
+	if nil == c{
+	   return nil, errors.New("SSH not available now.")
+	}
 	conn := &SSHConnection{manager: ssh,
-		ssh_conn: ssh.selector.Select().(*SSHRawConnection)}
+		ssh_conn: c.(*SSHRawConnection)}
 	return conn, nil
 }
 

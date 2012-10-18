@@ -2,23 +2,38 @@ package event
 
 import (
 	"bytes"
-	//"fmt"
 )
 
-type RequestAllAppIDEvent struct {
+type ShareAppIDEvent struct {
+	Operation uint32
+	AppId     string
+	Email     string
 	EventHeader
 }
 
-func (ev *RequestAllAppIDEvent) Encode(buffer *bytes.Buffer) {
+func (ev *ShareAppIDEvent) Encode(buffer *bytes.Buffer) {
+	EncodeUInt64Value(buffer, uint64(ev.Operation))
+	EncodeStringValue(buffer, ev.AppId)
+	EncodeStringValue(buffer, ev.Email)
 }
-func (ev *RequestAllAppIDEvent) Decode(buffer *bytes.Buffer) error {
-	return nil
+func (ev *ShareAppIDEvent) Decode(buffer *bytes.Buffer) error {
+	tmp, err := DecodeUInt32Value(buffer)
+	if err != nil {
+		return err
+	}
+	ev.Operation = tmp
+	ev.AppId, err = DecodeStringValue(buffer)
+	if err != nil {
+		return err
+	}
+	ev.Email, err = DecodeStringValue(buffer)
+	return err
 }
 
-func (ev *RequestAllAppIDEvent) GetType() uint32 {
-	return REQUEST_ALL_SHARED_APPID_EVENT_TYPE
+func (ev *ShareAppIDEvent) GetType() uint32 {
+	return SHARE_APPID_EVENT_TYPE
 }
-func (ev *RequestAllAppIDEvent) GetVersion() uint32 {
+func (ev *ShareAppIDEvent) GetVersion() uint32 {
 	return 1
 }
 
