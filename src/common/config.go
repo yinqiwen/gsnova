@@ -11,7 +11,7 @@ import (
 var Cfg *util.Ini
 
 func InitConfig() error {
-	cfg, err := util.LoadIniFile(Home + "gsnova.conf")
+	cfg, err := util.LoadIniFile(Home + Product + ".conf")
 	Cfg = cfg
 	if nil != err {
 		log.Fatalf("Failed to load config file for reason:%s\n", err.Error())

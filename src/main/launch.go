@@ -53,7 +53,7 @@ func main() {
 	proxy.InitSelfWebServer()
 	proxy.PostInitSpac()
 
-	log.Println("=============Start GSnova " + common.Version + "=============")
+	log.Printf("=============Start %s %s==============\n", common.Product, common.Version)
 	addr, exist := common.Cfg.GetProperty("LocalServer", "Listen")
 	if !exist {
 		log.Fatalln("No config [LocalServer]->Listen found")

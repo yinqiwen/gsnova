@@ -42,5 +42,5 @@ func initLogWriter(path string) *FileConsoleWriter {
 
 func InitLogger() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
-	log.SetOutput(initLogWriter(Home + "gsnova.log"))
+	log.SetOutput(initLogWriter(Home + Product + ".log"))
 }

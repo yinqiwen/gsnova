@@ -39,10 +39,11 @@ func indexHandler(w http.ResponseWriter, req *http.Request) {
 	hf := common.Home + "/web/html/index.html"
 	if t, err := template.ParseFiles(hf); nil == err {
 		type PageContent struct {
+			Product   string
 			Version   string
 			ProxyPort string
 		}
-		t.Execute(w, &PageContent{common.Version, common.ProxyPort})
+		t.Execute(w, &PageContent{common.Product, common.Version, common.ProxyPort})
 	}
 }
 
