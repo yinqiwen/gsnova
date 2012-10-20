@@ -22,8 +22,18 @@
     "Attr":  ["Direct"]
   },
   {
+    "Protocol" : "http",
+    "Proxy": ["twitter.com", "facebook.com"],
+    "Attr":  ["RedirectHttps"]
+  },
+  {
     "Filter" : ["!IsBlockedByGFW"],
     "Proxy":["Direct"]
+  },
+  {
+    "Protocol" : "http",
+    "Proxy":["Direct"],
+    "Attr":  ["CRLF"]
   },
   {
     "Protocol":["https"],
