@@ -1,16 +1,21 @@
 GSnova Changelog
 ===================
-Changes in version 0.17.0(2012.10.xx)
+Changes in version 0.17.0(2012.10.21)
 -------------------------------------------
 ** Features
+   * New Web UI
    * [SSH]: Add support for SSH tunnel
    * [SSH]: Support more than 1 ssh server
    * [SSH]: Support remote DNS over ssh tunnel 
    * [SSH]: Support user/pass auth and user/privatekey auth
    * [SPAC]:Support self defined proxy address(Default 127.0.0.1:48100)
+   * [SPAC]:Support GFWList rule
+   * [SPAC]:Support IP DB from wipmania
+   * [SPAC]:Auto reload modified spac.json
+   
 
 ** Improvement
-   * Improve performance, now memory footprint is only about 18MB or less in windows.
+   * Improve performance, reduce memory footprint.
       
 ** Task
    * NA
