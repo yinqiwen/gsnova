@@ -4,11 +4,15 @@ import (
 	"bytes"
 	"common"
 	"encoding/json"
+	"event"
 	"fmt"
 	"html/template"
+	"log"
 	"net"
 	"net/http"
+	"os"
 	"runtime"
+	"strings"
 	"util"
 )
 
@@ -16,8 +20,31 @@ var lp *util.DelegateConnListener
 
 func InitSelfWebServer() {
 	lp = util.NewDelegateConnListener()
-	http.Handle("/css/", http.FileServer(http.Dir(common.Home+"/css")))
-	http.Handle("/js/", http.FileServer(http.Dir(common.Home+"/js")))
+	http.HandleFunc("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Connection", "close")
+		http.FileServer(http.Dir(common.Home+"/web")).ServeHTTP(w, r)
+	})
+	http.HandleFunc("/share.html", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Connection", "close")
+		http.FileServer(http.Dir(common.Home+"/web")).ServeHTTP(w, r)
+	})
+	http.HandleFunc("/css/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Connection", "close")
+		http.FileServer(http.Dir(common.Home+"/web")).ServeHTTP(w, r)
+	})
+	http.HandleFunc("/scripts/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Connection", "close")
+		http.FileServer(http.Dir(common.Home+"/web")).ServeHTTP(w, r)
+	})
+	http.HandleFunc("/images/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Connection", "close")
+		http.FileServer(http.Dir(common.Home+"/web")).ServeHTTP(w, r)
+	})
+	//	http.Handle("/favicon.ico", http.FileServer(http.Dir(common.Home+"/web")))
+	//	http.Handle("/share.html", http.FileServer(http.Dir(common.Home+"/web")))
+	//	http.Handle("/css/", http.FileServer(http.Dir(common.Home+"/web")))
+	//	http.Handle("/scripts/", http.FileServer(http.Dir(common.Home+"/web")))
+	//	http.Handle("/images/", http.FileServer(http.Dir(common.Home+"/web")))
 	http.HandleFunc("/pac/gfwlist", func(w http.ResponseWriter, r *http.Request) {
 		r.URL.Path = "/spac/snova-gfwlist.pac"
 		w.Header().Set("Connection", "close")
@@ -26,17 +53,26 @@ func InitSelfWebServer() {
 		http.FileServer(http.Dir(common.Home)).ServeHTTP(w, r)
 	})
 	http.HandleFunc("/stat", statHandler)
+	http.HandleFunc("/share", shareHandler)
+	http.HandleFunc("/exit", exitHandler)
 	http.HandleFunc("/", indexHandler)
 	go http.Serve(lp, nil)
 }
 
 func indexHandler(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Connection", "close")
-	if req.URL.Path != "/" {
+	if req.URL.Path != "/" && !strings.HasSuffix(req.URL.Path, ".html") {
+		log.Printf("Not found %v\n", req.URL)
 		http.NotFound(w, req)
 		return
 	}
-	hf := common.Home + "/web/html/index.html"
+
+	dir := common.Home + "/web"
+	path := "/index.html"
+	if req.URL.Path != "/" {
+		path = req.URL.Path
+	}
+	hf := dir + path
 	if t, err := template.ParseFiles(hf); nil == err {
 		type PageContent struct {
 			Product   string
@@ -45,6 +81,31 @@ func indexHandler(w http.ResponseWriter, req *http.Request) {
 		}
 		t.Execute(w, &PageContent{common.Product, common.Version, common.ProxyPort})
 	}
+}
+
+func exitHandler(w http.ResponseWriter, req *http.Request) {
+	os.Exit(1)
+}
+
+func shareHandler(w http.ResponseWriter, req *http.Request) {
+	//log.Printf("Request args is %v\n", req.URL.Query())
+	req.ParseForm()
+	log.Printf("Request from is %v\n", req.Form)
+	w.Header().Set("Connection", "close")
+	if nil != singleton_gae {
+		op := event.APPID_SHARE
+		if len(req.Form.Get("share")) == 0 {
+			op = event.APPID_UNSHARE
+		}
+		err := singleton_gae.shareAppId(req.Form.Get("appid"), req.Form.Get("email"), op)
+		if nil == err {
+			w.Write([]byte("Success!"))
+		} else {
+			w.Write([]byte(err.Error()))
+		}
+		return
+	}
+	w.WriteHeader(500)
 }
 
 func statHandler(w http.ResponseWriter, req *http.Request) {

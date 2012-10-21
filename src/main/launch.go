@@ -11,6 +11,8 @@ import (
 	"proxy"
 	"remote"
 	"runtime"
+	"time"
+	"util"
 )
 
 func main() {
@@ -59,5 +61,12 @@ func main() {
 		log.Fatalln("No config [LocalServer]->Listen found")
 	}
 	runtime.GOMAXPROCS(runtime.NumCPU())
+	if v, exist := common.Cfg.GetBoolProperty("LocalServer", "AutoOpenWebUI"); !exist || v {
+		go func() {
+			time.Sleep(1 * time.Second)
+			util.OpenBrowser("http://localhost:" + common.ProxyPort + "/")
+		}()
+	}
+
 	startLocalProxyServer(addr)
 }

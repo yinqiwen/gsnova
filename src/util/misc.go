@@ -6,7 +6,9 @@ import (
 	"math/big"
 	"misc/myasn1"
 	"net/http"
+	"os/exec"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 )
@@ -129,4 +131,16 @@ func WildcardMatch(text string, pattern string) bool {
 		text = strings.TrimLeft(text, str+"*")
 	}
 	return true
+}
+
+func OpenBrowser(urlstr string) error {
+	if runtime.GOOS == "windows" {
+		return exec.Command("cmd.exe", "/C", "start "+urlstr).Run()
+	}
+
+	if runtime.GOOS == "darwin" {
+		return exec.Command("open", urlstr).Run()
+	}
+
+	return exec.Command("xdg-open", urlstr).Run()
 }

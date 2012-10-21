@@ -32,12 +32,11 @@ const (
 	FORWARD_NAME             = "Forward"
 	SSH_NAME                 = "SSH"
 	DIRECT_NAME              = "Direct"
-	//	CRLF_DIRECT_NAME         = "CRLFDirect"
 	DEFAULT_NAME = "Default"
 
 	ATTR_REDIRECT_HTTPS = "RedirectHttps"
 	ATTR_CRLF_INJECT    = "CRLF"
-	ATTR_DIRECT    = "Direct"
+	ATTR_DIRECT         = "Direct"
 
 	MODE_HTTP    = "http"
 	MODE_HTTPS   = "httpS"
@@ -77,10 +76,12 @@ func newSessionConnection(sessionId uint32, conn net.Conn, reader *bufio.Reader)
 	return session_conn
 }
 
-func (session *SessionConnection) tryProxy(proxies []RemoteConnectionManager, attrs map[string]string, ev *event.HTTPRequestEvent) error {
+func (session *SessionConnection) tryProxy(proxies []RemoteConnectionManager, attrs map[string]string, ev *event.HTTPRequestEvent) (err error) {
 	for _, proxy := range proxies {
-		session.RemoteConn, _ = proxy.GetRemoteConnection(ev, attrs)
-		err, _ := session.RemoteConn.Request(session, ev)
+		session.RemoteConn, err = proxy.GetRemoteConnection(ev, attrs)
+		if nil == err {
+			err, _ = session.RemoteConn.Request(session, ev)
+		}
 		if nil == err {
 			return nil
 		} else {

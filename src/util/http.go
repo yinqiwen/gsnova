@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"io/ioutil"
+	//"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -38,25 +39,26 @@ func IsResponseKeepAlive(res *http.Response) bool {
 	return isKeepAlive(res.Header, res.ProtoMajor, res.ProtoMinor)
 }
 
-func FetchLateastContent(urlstr string, proxy_port string) ([]byte, string, error) {
+func FetchLateastContent(urlstr string, proxy_port string, force bool) ([]byte, string, error) {
 	resp, err := HttpGet(urlstr, "")
 	if err != nil {
 		resp, err = HttpGet(urlstr, "http://"+net.JoinHostPort("127.0.0.1", proxy_port))
 	}
 	if err != nil || resp.StatusCode != 200 {
-		return nil, "",err
+		return nil, "", err
 	} else {
 		last_mod_date := resp.Header.Get("last-modified")
-		if len(last_mod_date) == 0{
-		   return nil, "", errors.New("No last-modified header in response.")
+		if !force && len(last_mod_date) > 0 {
+			//return nil, "", errors.New("No last-modified header in response.")
+			t, err := time.Parse(time.RFC1123, last_mod_date)
+			if nil == err && t.Before(time.Now()) {
+				resp.Body.Close()
+				return []byte{}, last_mod_date, nil
+			}
 		}
-		t, err := time.Parse(time.RFC1123, last_mod_date)
-		if nil == err && t.Before(time.Now()) {
-			resp.Body.Close()
-			return []byte{}, last_mod_date,nil
-		}
+
 		if nil != err {
-			return nil,last_mod_date, err
+			return nil, last_mod_date, err
 		}
 		body, err := ioutil.ReadAll(resp.Body)
 		if nil == err {

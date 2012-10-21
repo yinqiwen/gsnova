@@ -25,7 +25,7 @@ func redirectHttps(conn net.Conn, req *http.Request) {
 	if strings.HasPrefix(req.RequestURI, "http://") {
 		location = fmt.Sprintf("Location:%s\r\nConnection:close\r\n\r\n", strings.Replace(req.RequestURI, "http", "https", 1))
 	}
-	//log.Printf("Response is %s\n", location)
+	//log.Printf("redirectHttps %s\n", req.Host)
 	conn.Write([]byte(location))
 	conn.Close()
 }

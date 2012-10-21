@@ -73,6 +73,7 @@ func (conn *ForwardConnection) initForwardConn(proxyAddr string, isHttps bool) e
 
 	conn.Close()
 	var err error
+	log.Printf("#####Target is %s, addrs is %s\n", conn.manager.target, proxyAddr)
 	conn.conn_url, err = url.Parse(conn.manager.target)
 	if nil != err {
 		return err
@@ -382,7 +383,11 @@ func (auto *ForwardConnection) Request(conn *SessionConnection, ev event.Event) 
 		req := ev.(*event.HTTPRequestEvent)
 		addr := req.RawReq.Host
 		if !strings.Contains(addr, ":") {
-			addr = net.JoinHostPort(addr, "443")
+			if conn.Type == HTTPS_TUNNEL {
+				addr = net.JoinHostPort(addr, "443")
+			} else {
+				addr = net.JoinHostPort(addr, "80")
+			}
 		}
 		err = auto.initForwardConn(addr, conn.Type == HTTPS_TUNNEL)
 		if nil != err {

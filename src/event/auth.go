@@ -102,6 +102,42 @@ func (req *AuthResponseEvent) GetVersion() uint32 {
 	return 1
 }
 
+type AdminResponseEvent struct {
+	Response   string
+	ErrorCause string
+	errno      int32
+	EventHeader
+}
+
+func (res *AdminResponseEvent) Encode(buffer *bytes.Buffer) {
+	EncodeStringValue(buffer, res.Response)
+	EncodeStringValue(buffer, res.ErrorCause)
+	EncodeUInt64Value(buffer, uint64(res.errno))
+}
+func (res *AdminResponseEvent) Decode(buffer *bytes.Buffer) error {
+	var err error
+	res.Response, err = DecodeStringValue(buffer)
+	if nil != err {
+		return err
+	}
+	res.ErrorCause, err = DecodeStringValue(buffer)
+	if nil != err {
+		return err
+	}
+	tmp, err := DecodeUInt64Value(buffer)
+	if err != nil {
+		return err
+	}
+	res.errno = int32(tmp)
+	return nil
+}
+func (res *AdminResponseEvent) GetType() uint32 {
+	return ADMIN_RESPONSE_EVENT_TYPE
+}
+func (res *AdminResponseEvent) GetVersion() uint32 {
+	return 1
+}
+
 //const (
 //	APPID_SHARE   uint32 = 0
 //	APPID_UNSHARE uint32 = 1

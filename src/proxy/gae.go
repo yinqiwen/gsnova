@@ -38,6 +38,7 @@ type GAEConfig struct {
 	ConcurrentRangeFetcher uint32
 }
 
+var singleton_gae *GAE
 var gae_cfg *GAEConfig
 var gae_enable bool
 var gae_use_shared_appid bool
@@ -491,20 +492,27 @@ type GAE struct {
 }
 
 func (manager *GAE) shareAppId(appid, email string, operation uint32) error {
-//	var ev event.ShareAppIDEvent
-//	ev.Operation = operation
-//	conn, err := manager.GetRemoteConnection(&ev, make(map[string]string))
-//	if nil != err {
-//		return err
-//	}
-//	var res event.Event
-//	err, res = conn.Request(nil, &ev)
-//	if nil != err {
-//		return err
-//	}
+	var ev event.ShareAppIDEvent
+	ev.AppId = appid
+	ev.Email = email
+	ev.Operation = operation
+	var auth GAEAuth
+	auth.appid = gae_cfg.MasterAppID
+	auth.user = ANONYMOUSE
+	auth.passwd = ANONYMOUSE
+	conn := new(GAEHttpConnection)
+	conn.auth = auth
+	conn.manager = manager
+	err, res := conn.Request(nil, &ev)
+	if nil != err {
+		return err
+	}
+	admin_res := res.(*event.AdminResponseEvent)
+	if len(admin_res.ErrorCause) > 0{
+	   return fmt.Errorf("%s", admin_res.ErrorCause)
+	}
 	return nil
 }
-
 
 func (manager *GAE) RecycleRemoteConnection(conn RemoteConnection) {
 	select {
@@ -617,6 +625,7 @@ func (manager *GAE) Init() error {
 		}
 	}
 	log.Println("Init GAE.")
+	singleton_gae = manager
 	RegisteRemoteConnManager(manager)
 	initGAEConfig()
 	manager.idle_conns = make(chan RemoteConnection, gae_cfg.ConnectionPoolSize)

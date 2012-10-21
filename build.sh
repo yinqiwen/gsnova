@@ -64,9 +64,9 @@ build_dist()
 
 main()
 {
-    if [ "x$2" = "xdist" ]; then
+    if [ "x$1" = "xdist" ]; then
 	    shift
-            build_dist $*
+        build_dist $*
 	else
 		build_product $*
 	fi	

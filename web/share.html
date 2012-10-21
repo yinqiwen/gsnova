@@ -1,0 +1,121 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<title>Chrome Web Design - Contact Page</title>
+<meta name="keywords" content="Chrome, Contact, Web Design, CSS, HTML, free template" />
+<meta name="description" content="Contact Chrome Web - free HTML CSS template from templatemo.com" />
+<link href="css/templatemo_style.css" rel="stylesheet" type="text/css" />
+
+<link rel="stylesheet" type="text/css" href="css/ddsmoothmenu.css" />
+
+<script type="text/javascript" src="scripts/jquery.min.js"></script>
+<script type="text/javascript" src="scripts/ddsmoothmenu.js">
+
+/***********************************************
+* Smooth Navigational Menu- (c) Dynamic Drive DHTML code library (www.dynamicdrive.com)
+* This notice MUST stay intact for legal use
+* Visit Dynamic Drive at http://www.dynamicdrive.com/ for full source code
+***********************************************/
+
+</script>
+
+<script type="text/javascript">
+
+ddsmoothmenu.init({
+	mainmenuid: "templatemo_menu", //menu DIV id
+	orientation: 'h', //Horizontal or vertical menu: Set to "h" or "v"
+	classname: 'ddsmoothmenu', //class added to menu's outer DIV
+	//customtheme: ["#1c5a80", "#18374a"],
+	contentsource: "markup" //"markup" or ["container_id", "path_to_menu_file"]
+})
+
+</script>
+
+</head>
+<body>
+
+<div id="templatemo_wrapper">
+
+	<div id="templatemo_header">
+    
+    	<div id="site_title"><h1><a href="https://github.com/yinqiwen/gsnova" target="_parent">GSnova</a></h1></div>
+        
+        <div id="templatemo_menu" class="ddsmoothmenu">
+            <ul>
+              <li><a href="index.html" class="selected">Home</a></li>
+                <li><a href="index.html">Config</a>
+                    <ul>
+                        <li><a href="setting.html?target=gae">GAE</a></li>
+                        <li><a href="setting.html?target=c4">C4</a></li>
+                        <li><a href="setting.html?target=ssh">SSH</a></li>
+                        <li><a href="setting.html?target=spac">SPAC</a></li>
+                    </ul>
+                </li>
+                <li><a href="index.html">Links</a>
+                    <ul>
+                        <li><a href="pac/gfwlist">PAC(GFWList)</a></li>
+                        <li><a href="stat">GSnovaStat</a></li>
+                        <li><a href="http://code.google.com/p/snova/w/list">Wiki@GoogleCode</a></li>
+                        <li><a href="http://code.google.com/p/snova/">Snova@GoogleCode</a></li>
+                        <li><a href="https://github.com/yinqiwen/gsnova">GSnova@Github</a></li>
+                        <li><a href="https://twitter.com/yinqiwen">yinqiwen@twiiter</a></li>
+                        <li><a href="http://yinqiwen.blogspot.com/">yinqiwen@blogspot</a></li>
+                        
+                    </ul>
+                </li>
+                <li><a href="share.html">Share</a></li>
+            </ul>
+            <br style="clear: left" />
+        </div> <!-- end of templatemo_menu -->
+        
+    </div> <!-- end of header -->
+    
+    <div id="templatemo_main">
+    	<h4>Share/Unshare Snova(GAE) AppID</h4>
+        <div class="col_w630 float_l">
+        	
+             <div id="contact_form">
+                
+                <form method="post" name="contact" action="share">
+                    <input type="hidden" name="post" value="Send" />
+                    <label for="author">AppID:</label> <input type="text" id="author" name="appid" class="input_field" />
+                    <div class="cleaner h10"></div>
+                    
+                    <label for="email">Email:</label> <input type="text" id="email" name="email" class="validate-email input_field" />
+                    <div class="cleaner h10"></div>
+                    
+                    <div class="cleaner h10"></div>
+                    
+                    <input type="submit" class="submit_btn float_l" name="share" id="submit" value="Share" />
+                    <input type="submit" class="submit_btn float_r" name="unshare" id="submit" value="Unshare" />
+                
+                </form>
+        
+            </div> 
+        </div>
+        
+        <div class="col_w300 float_r">
+            <div class="col_fw">	
+            <h4>Note:</h4>
+            <ul>
+                <li>You can share your snova appid to people who do NOT known how to deploy snova(GAE) server.</li>
+                <li>An email account needed as a verify id for sharing/unsharing appid.</li>
+                <li>The shared appid can be used by anybody as 'anonymouse' user.</li>
+                <li>You can use snova admin tool to control traffic and blacklist for  'anonymouse'.</li>
+            </ul>
+            </div>            
+        </div>
+	    <div class="cleaner"></div>
+    </div> <!-- end of main -->
+</div>
+
+<div id="templatemo_footer_wrapper">
+    <div id="templatemo_footer">
+        Copyright © 2012 <a href="https://github.com/yinqiwen/gsnova">GSnova</a>
+        <div class="cleaner"></div>
+    </div>
+</div> 
+  
+</body>
+</html>

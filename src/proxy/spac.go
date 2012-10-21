@@ -286,7 +286,8 @@ func generatePAC(url, date, content string) string {
 
 func fetchCloudSpacScript(url string) {
 	time.Sleep(5 * time.Second)
-	body, _, err := util.FetchLateastContent(url, common.ProxyPort)
+	log.Printf("Fetch remote clound spac rule:%s\n", url)
+	body, _, err := util.FetchLateastContent(url, common.ProxyPort, false)
 	if nil == err && len(body) > 0 {
 		ioutil.WriteFile(spac_script_path, body, 0666)
 	}
@@ -300,7 +301,7 @@ func generatePACFromGFWList(url string) {
 	log.Printf("Generate PAC from  gfwlist %s\n", url)
 	load_gfwlist_rule()
 
-	body, last_mod_date, err := util.FetchLateastContent(url, common.ProxyPort)
+	body, last_mod_date, err := util.FetchLateastContent(url, common.ProxyPort, false)
 	if nil == err && len(body) > 0 {
 		content, _ := base64.StdEncoding.DecodeString(string(body))
 		ioutil.WriteFile(common.Home+"spac/snova-gfwlist.txt", content, 0666)
@@ -338,7 +339,7 @@ func InitSpac() {
 		pac_proxy = addr
 	}
 
-	if addr, exist := common.Cfg.GetProperty("SPAC", "ScriptInCloud"); exist {
+	if addr, exist := common.Cfg.GetProperty("SPAC", "CloudRule"); exist {
 		go fetchCloudSpacScript(addr)
 	}
 
@@ -438,6 +439,7 @@ func SelectProxy(req *http.Request, conn net.Conn, isHttpsConn bool) ([]RemoteCo
 			if !strings.Contains(forward.target, "://") {
 				forward.target = "http://" + forward.target
 			}
+			//log.Printf("########forward.target = %s\n", forward.target)
 			proxyManagers = append(proxyManagers, forward)
 		default:
 			forward := &Forward{overProxy: true}

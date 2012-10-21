@@ -101,7 +101,7 @@ func (gfw *GFWList) IsBlockedByGFW(req *http.Request) bool {
 	}
 	for _, rule := range gfw.black_list {
 		if rule.match(req) {
-			log.Printf("matched for :%s for %v\n", req.URL.String(), rule)
+			//log.Printf("matched for :%v for %v\n", req.URL, rule)
 			return true
 		}
 	}

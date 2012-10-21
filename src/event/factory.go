@@ -83,4 +83,5 @@ func Init() {
 	RegistEvent(&SocketConnectionEvent{})
 	RegistEvent(&UserLoginEvent{})
 	RegistEvent(&RSocketAcceptedEvent{})
+	RegistEvent(&AdminResponseEvent{})
 }

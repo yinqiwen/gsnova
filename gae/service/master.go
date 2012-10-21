@@ -9,8 +9,8 @@ import (
 	"event"
 	"io"
 	"math/rand"
-	"strings"
 	"misc"
+	"strings"
 )
 
 func isValidSnovaSite(c appengine.Context, appid string) bool {
@@ -19,17 +19,17 @@ func isValidSnovaSite(c appengine.Context, appid string) bool {
 	if err == nil {
 		if resp.StatusCode == 200 {
 			var tmp bytes.Buffer
-			if _, err = io.Copy(&tmp, resp.Body); nil == err{
-			   if !strings.Contains(tmp.String(), "snova"){
-			      c.Errorf("Definitly invalid appid:%s", appid)
-			      return false
-			   }else{
-			      return true
-			   }
+			if _, err = io.Copy(&tmp, resp.Body); nil == err {
+				if !strings.Contains(tmp.String(), "snova") {
+					c.Errorf("Definitly invalid appid:%s", appid)
+					return false
+				} else {
+					return true
+				}
 			}
-		}else if(resp.StatusCode >= 400 && resp.StatusCode < 500){
-		    c.Errorf("Definitly invalid:%s for response:%v", appid, resp)
-		    return false
+		} else if resp.StatusCode >= 400 && resp.StatusCode < 500 {
+			c.Errorf("Definitly invalid:%s for response:%v", appid, resp)
+			return false
 		}
 		c.Errorf("Failed to verify appid:%s for response:%v", appid, resp)
 		return true
@@ -129,6 +129,10 @@ func deleteSharedAppItem(ctx appengine.Context, item *AppIDItem) {
 
 func shareAppID(ctx appengine.Context, appid, email string) event.Event {
 	resev := new(event.AdminResponseEvent)
+	if !isValidSnovaSite(ctx, appid) {
+		resev.ErrorCause = "This AppId is not a valid snova appid."
+		return resev
+	}
 	item := getSharedAppItem(ctx, appid)
 	if nil != item {
 		resev.ErrorCause = "This AppId is already shared!"

@@ -1,10 +1,10 @@
 [
   {
-    "Host" : ["*.ytimg.com*", "mail.google.com", "plus.google.com", "sites.google.com","*.googleusercontent.com*", "*.gstatic.com", "*.googleapis.com*", "*.googlecode.com", "dl.google.com"],
+    "Host" : ["*.ytimg.com*", "*.google.com(.*)?","*.googleusercontent.com*", "*.gstatic.com", "*.googleapis.com*", "*.googlecode.com"],
     "Proxy":["GoogleHttps", "Direct", "Default"]
   },
   {
-    "Host" : ["*.doubleclick.net*", "*.google-analytics.com*", "uploads.code.google.com", "groups.google.com", "apis.google.com", "www.blogger.com", "clients*.google.com"],
+    "Host" : ["*.doubleclick.net*", "*.google-analytics.com*", "www.blogger.com", "*.google.co.*"],
     "Proxy":["GoogleHttps", "Direct", "Default"]
   },
   {
@@ -13,7 +13,7 @@
     "Attr":  ["CRLF"]
   },
   {
-    "Host" : ["(*.)?drive.google.com","*.blogspot.*", "talkgadget.google.com", "plusone.google.com", "www.google.com(.*)?", "www.google.co.*","*.appspot.com", "^golang.org"],
+    "Host" : ["*.blogspot.*", "*.appspot.com", "golang.org"],
     "Proxy": ["GoogleHttps", "Direct", "Default"]
   },
   {
@@ -22,8 +22,13 @@
     "Attr":  ["Direct"]
   },
   {
+    "Protocol" : "http",
+    "Host": ["twitter.com", "facebook.com"],
+    "Attr":  ["RedirectHttps"]
+  },
+  {
     "Filter" : ["!IsBlockedByGFW"],
-    "Proxy":["Direct"]
+    "Proxy":["Direct", "Default"]
   },
   {
     "Protocol":["https"],

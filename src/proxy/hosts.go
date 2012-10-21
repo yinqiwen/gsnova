@@ -45,6 +45,7 @@ var persistDNSCache = true
 var hostsEnable int
 var trustedDNS = []string{}
 var useHttpDNS = []*regexp.Regexp{}
+
 //var forceHttpsHosts = []*regexp.Regexp{}
 var exceptHosts = []*regexp.Regexp{}
 var httpDNS string
@@ -59,24 +60,14 @@ func loadIPRangeFile(ipRepo string) {
 		return
 	}
 	hf := common.Home + "hosts/" + "iprange.zip"
-
 	_, err := os.Stat(hf)
 	if nil != err {
-		resp, err := util.HttpGet(ipRepo, "")
+		body, _, err := util.FetchLateastContent(ipRepo, common.ProxyPort, true)
 		if err != nil {
-			if addr, exist := common.Cfg.GetProperty("LocalServer", "Listen"); exist {
-				_, port, _ := net.SplitHostPort(addr)
-				resp, err = util.HttpGet(ipRepo, "http://"+net.JoinHostPort("127.0.0.1", port))
-			}
-		}
-		if err != nil || resp.StatusCode != 200 {
 			log.Printf("Failed to fetch ip range file from %s for reason:%v\n", ipRepo, err)
 			return
 		} else {
-			body, err := ioutil.ReadAll(resp.Body)
-			if nil == err {
-				err = ioutil.WriteFile(hf, body, 0755)
-			}
+			err = ioutil.WriteFile(hf, body, 0755)
 			if nil != err {
 				log.Printf("Failed to manipulate ip range file for reason:%v\n", err)
 				return
@@ -181,7 +172,7 @@ func persistDNSResult() {
 					}
 				}
 			}
-			
+
 		}
 	}
 }
@@ -418,9 +409,9 @@ func InitHosts() error {
 		hostRangeConcurrentFether = uint32(fetcher)
 	}
 
-//	if pattern, exist := common.Cfg.GetProperty("Hosts", "RedirectHttps"); exist {
-//		forceHttpsHosts = initHostMatchRegex(pattern)
-//	}
+	//	if pattern, exist := common.Cfg.GetProperty("Hosts", "RedirectHttps"); exist {
+	//		forceHttpsHosts = initHostMatchRegex(pattern)
+	//	}
 
 	if pattern, exist := common.Cfg.GetProperty("Hosts", "ExceptHosts"); exist {
 		exceptHosts = initHostMatchRegex(pattern)
