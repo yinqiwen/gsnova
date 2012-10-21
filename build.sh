@@ -1,5 +1,5 @@
 #!/bin/sh
-VERSION="0.17.0"
+VERSION="0.17.1"
 
 #this part is copied from ANT's script
 # OS specific support.  $var _must_ be set to either true or false.

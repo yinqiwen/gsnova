@@ -32,7 +32,7 @@ const (
 	FORWARD_NAME             = "Forward"
 	SSH_NAME                 = "SSH"
 	DIRECT_NAME              = "Direct"
-	DEFAULT_NAME = "Default"
+	DEFAULT_NAME             = "Default"
 
 	ATTR_REDIRECT_HTTPS = "RedirectHttps"
 	ATTR_CRLF_INJECT    = "CRLF"
@@ -165,25 +165,25 @@ func (session *SessionConnection) process() error {
 			}
 			close_session()
 		}
-		//	case STATE_RECV_HTTP_CHUNK:
-		//		buf := make([]byte, 8192)
-		//		n, err := session.LocalBufferConn.Read(buf)
-		//		if nil == err {
-		//			rev := new(event.HTTPChunkEvent)
-		//			rev.Content = buf[0:n]
-		//			err = session.processHttpChunkEvent(rev)
-		//		}
-		//		if nil != err {
-		//			operr, ok := err.(*net.OpError)
-		//			if ok && (operr.Timeout() || operr.Temporary()) {
-		//				log.Printf("Timeout to read\n")
-		//				return nil
-		//			}
-		//			if err != io.EOF {
-		//				log.Printf("Session[%d]Failed to read http chunk:%v %T\n", session.SessionID, err, err)
-		//			}
-		//			close_session()
-		//		}
+	case STATE_RECV_HTTP_CHUNK:
+		buf := make([]byte, 8192)
+		n, err := session.LocalBufferConn.Read(buf)
+		if nil == err {
+			rev := new(event.HTTPChunkEvent)
+			rev.Content = buf[0:n]
+			err = session.processHttpChunkEvent(rev)
+		}
+		if nil != err {
+			operr, ok := err.(*net.OpError)
+			if ok && (operr.Timeout() || operr.Temporary()) {
+				log.Printf("Timeout to read\n")
+				return nil
+			}
+			if err != io.EOF {
+				log.Printf("Session[%d]Failed to read http chunk:%v %T\n", session.SessionID, err, err)
+			}
+			close_session()
+		}
 	case STATE_RECV_TCP:
 
 	}
