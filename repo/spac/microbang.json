@@ -23,7 +23,7 @@
   },
   {
     "Protocol" : "http",
-    "Proxy": ["twitter.com", "facebook.com"],
+    "Host": ["twitter.com", "facebook.com"],
     "Attr":  ["RedirectHttps"]
   },
   {
