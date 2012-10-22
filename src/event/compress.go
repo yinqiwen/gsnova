@@ -5,7 +5,8 @@ import (
 	"errors"
 	//	"io/ioutil"
 	//	"misc/lz4"
-	"misc/snappy"
+	//"misc/snappy"
+	"code.google.com/p/snappy-go/snappy"
 	"strconv"
 )
 
