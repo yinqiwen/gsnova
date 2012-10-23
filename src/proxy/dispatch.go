@@ -3,7 +3,7 @@ package proxy
 import (
 	"bufio"
 	"common"
-	"errors"
+	"fmt"
 	"event"
 	"io"
 	"log"
@@ -88,13 +88,13 @@ func (session *SessionConnection) tryProxy(proxies []RemoteConnectionManager, at
 			log.Printf("Session[%d][WARN][%s]Failed to request proxy event for reason:%v", session.SessionID, proxy.GetName(),err)
 		}
 	}
-	return errors.New("No proxy found")
+	return fmt.Errorf("No proxy found for request '%s %s' with %d candidates", ev.RawReq.Method, ev.RawReq.Host, len(proxies))
 }
 
 func (session *SessionConnection) processHttpEvent(ev *event.HTTPRequestEvent) error {
 	ev.SetHash(session.SessionID)
 	proxies, attrs := SelectProxy(ev.RawReq, session.LocalRawConn, session.Type == HTTPS_TUNNEL)
-	if nil == proxies {
+	if nil == proxies{
 		session.State = STATE_SESSION_CLOSE
 		return nil
 	}
@@ -119,7 +119,7 @@ func (session *SessionConnection) processHttpEvent(ev *event.HTTPRequestEvent) e
 	}
 
 	if nil != err {
-		log.Printf("Session[%d]Process error:%v", session.SessionID, err)
+		log.Printf("Session[%d]Process error:%v for host:%s", session.SessionID, err,ev.RawReq.Host)
 		session.LocalRawConn.Write([]byte("HTTP/1.1 500 Internal Server Error\r\n\r\n"))
 		session.LocalRawConn.Close()
 	}

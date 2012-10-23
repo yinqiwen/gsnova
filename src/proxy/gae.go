@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"common"
 	"crypto/tls"
-	"errors"
 	"event"
 	"fmt"
 	"io"
@@ -62,12 +61,12 @@ func (auth *GAEAuth) parse(line string) error {
 		auth.appid = v[1]
 		us := strings.Split(userpass, ":")
 		if len(us) != 2 {
-			return errors.New("Invalid user/pass: " + userpass)
+			return fmt.Errorf("Invalid user/pass:%s", userpass)
 		}
 		auth.user = us[0]
 		auth.passwd = us[1]
 	} else {
-		return errors.New("Invalid user/pass/appid: " + line)
+		return fmt.Errorf("Invalid user/pass/appid: %s", line)
 	}
 	return nil
 }
@@ -174,7 +173,7 @@ func (conn *GAEHttpConnection) Auth() error {
 	}
 	if authres, ok := res.(*event.AuthResponseEvent); !ok {
 		log.Printf("Type is  %d\n", res.GetType())
-		return errors.New("Invalid auth response.")
+		return fmt.Errorf("Invalid auth response.")
 	} else {
 		log.Printf("Auth token is %s\n", authres.Token)
 		conn.authToken = authres.Token
@@ -239,13 +238,13 @@ func (gae *GAEHttpConnection) requestEvent(conn *SessionConnection, ev event.Eve
 	} else {
 		if response.StatusCode != 200 {
 			log.Printf("Session[%d]Invalid response:%d\n", ev.GetHash(), response.StatusCode)
-			return errors.New("Invalid response"), nil
+			return fmt.Errorf("Invalid response"), nil
 		} else {
 			//log.Printf("Response with content len:%d\n", response.ContentLength)
 			content := make([]byte, response.ContentLength)
 			n, err := io.ReadFull(response.Body, content)
 			if int64(n) < response.ContentLength {
-				return errors.New("No sufficient space in body."), nil
+				return fmt.Errorf("No sufficient space in body."), nil
 			}
 			if nil != err {
 				return err, nil
@@ -254,7 +253,7 @@ func (gae *GAEHttpConnection) requestEvent(conn *SessionConnection, ev event.Eve
 
 			buf := bytes.NewBuffer(content[0:response.ContentLength])
 			if !tags.Decode(buf) {
-				return errors.New("Failed to decode event tag"), nil
+				return fmt.Errorf("Failed to decode event tag"), nil
 			}
 			err, res = event.DecodeEvent(buf)
 			if nil == err {
@@ -425,6 +424,7 @@ func (gae *GAEHttpConnection) Request(conn *SessionConnection, ev event.Event) (
 			conn.LocalRawConn.Write([]byte("HTTP/1.1 200 Connection established\r\n\r\n"))
 			tlscfg, err := common.TLSConfig(httpreq.GetHeader("Host"))
 			if nil != err {
+			    log.Printf("##########%v\n", err)
 				return err, nil
 			}
 			conn.LocalRawConn = tls.Server(conn.LocalRawConn, tlscfg)
@@ -611,14 +611,14 @@ func (manager *GAE) fetchSharedAppIDs() (error, []string) {
 	if ok {
 		return nil, appidres.AppIDs
 	}
-	return errors.New("Invalid response for shared appid."), nil
+	return fmt.Errorf("Invalid response for shared appid."), nil
 }
 
 func (manager *GAE) Init() error {
 	if enable, exist := common.Cfg.GetIntProperty("GAE", "Enable"); exist {
 		gae_enable = (enable != 0)
 		if enable == 0 {
-			return errors.New("GAE not inited since [GAE] Enable=0")
+			return fmt.Errorf("GAE not inited since [GAE] Enable=0")
 		}
 	}
 	log.Println("Init GAE.")

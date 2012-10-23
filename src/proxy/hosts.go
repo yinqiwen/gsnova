@@ -61,7 +61,7 @@ func loadIPRangeFile(ipRepo string) {
 	if len(ipRepo) == 0 {
 		return
 	}
-	time.sleep(5*time.Second)
+	time.Sleep(5*time.Second)
 	hf := common.Home + "hosts/" + "iprange.zip"
 	_, err := os.Stat(hf)
 	if nil != err {

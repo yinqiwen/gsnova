@@ -132,10 +132,10 @@ func (r *JsonRule) init() (err error) {
 	return
 }
 
-func (r *JsonRule) matchProtocol(req *http.Request) bool {
+func (r *JsonRule) matchProtocol(req *http.Request, isHttpsConn bool) bool {
 	if len(r.Protocol) > 0 {
 		protocol := "http"
-		if strings.EqualFold(req.Method, "Connect") {
+		if strings.EqualFold(req.Method, "Connect") || isHttpsConn {
 			protocol = "https"
 		}
 		return strings.EqualFold(r.Protocol, protocol)
@@ -154,8 +154,8 @@ func (r *JsonRule) matchFilters(req *http.Request) bool {
 	return matched
 }
 
-func (r *JsonRule) match(req *http.Request) bool {
-	return r.matchFilters(req) && r.matchProtocol(req) && matchRegexs(req.Method, r.method_regex) && matchRegexs(req.Host, r.host_regex) && matchRegexs(req.RequestURI, r.url_regex)
+func (r *JsonRule) match(req *http.Request, isHttpsConn bool) bool {
+	return r.matchFilters(req) && r.matchProtocol(req, isHttpsConn) && matchRegexs(req.Method, r.method_regex) && matchRegexs(req.Host, r.host_regex) && matchRegexs(req.RequestURI, r.url_regex)
 }
 
 type SpacConfig struct {
@@ -377,7 +377,7 @@ func InitSpac() {
 func selectProxyByRequest(req *http.Request, host, port string, isHttpsConn bool, proxyNames []string) ([]string, map[string]string) {
 	attrs := make(map[string]string)
 	for _, r := range spac.rules {
-		if r.match(req) {
+		if r.match(req, isHttpsConn) {
 			for _, v := range r.Attr {
 				attrs[v] = v
 			}
