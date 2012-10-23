@@ -58,14 +58,28 @@ func (conn *GoogleConnection) Close() error {
 	return nil
 }
 
+func isLocalGoogleProxy() bool {
+	proxyInfo, exist := common.Cfg.GetProperty("LocalProxy", "Proxy")
+	if exist {
+		if strings.Contains(proxyInfo, GOOGLE_HTTPS_IP) || strings.Contains(proxyInfo, GOOGLE_HTTPS) {
+			return true
+		}
+		if strings.Contains(proxyInfo, GOOGLE_HTTP_IP) || strings.Contains(proxyInfo, GOOGLE_HTTP) {
+			return true
+		}
+	}
+	return false
+}
+
 func (conn *GoogleConnection) initHttpsClient() {
 	if nil != conn.https_client {
 		return
 	}
 	conn.forwardChan = make(chan int)
 	proxyInfo, exist := common.Cfg.GetProperty("LocalProxy", "Proxy")
-	if useGlobalProxy && exist {
-		proxy := util.GetUrl(proxyInfo)
+
+	if useGlobalProxy && exist && !isLocalGoogleProxy() {
+		proxy := getLocalUrlMapping(proxyInfo)
 		log.Printf("Google use proxy:%s\n", proxy)
 		proxyURL, err := url.Parse(proxy)
 		conn.https_client, err = net.Dial("tcp", proxyURL.Host)
@@ -74,7 +88,7 @@ func (conn *GoogleConnection) initHttpsClient() {
 			return
 		}
 		//3rd Proxy only accept domain as target
-		addr, _ := util.GetHostMapping(GOOGLE_HTTPS)
+		addr, _ := getLocalHostMapping(GOOGLE_HTTPS)
 		req := &http.Request{
 			Method:        "CONNECT",
 			URL:           &url.URL{Scheme: "https", Host: addr},
@@ -98,12 +112,12 @@ func (conn *GoogleConnection) initHttpsClient() {
 		}
 		conn.overProxy = true
 	} else {
-		addr, _ := util.GetHostMapping(googleHttpsHost)
+		addr, _ := getLocalHostMapping(googleHttpsHost)
 		var err error
 		conn.https_client, err = net.DialTimeout("tcp", net.JoinHostPort(addr, "443"), connTimeoutSecs)
 		//try again
 		if nil != err {
-			addr, _ = util.GetHostMapping(googleHttpsHost)
+			addr, _ = getLocalHostMapping(googleHttpsHost)
 			conn.https_client, err = net.DialTimeout("tcp", net.JoinHostPort(addr, "443"), connTimeoutSecs)
 		}
 		if nil != err {
@@ -118,8 +132,8 @@ func (conn *GoogleConnection) initHttpClient(proxyAddr string) {
 	}
 	conn.Close()
 	proxyInfo, exist := common.Cfg.GetProperty("LocalProxy", "Proxy")
-	if useGlobalProxy && exist {
-		proxy := util.GetUrl(proxyInfo)
+	if useGlobalProxy && exist && !isLocalGoogleProxy() {
+		proxy := getLocalUrlMapping(proxyInfo)
 		log.Printf("Google use proxy:%s\n", proxy)
 		proxyURL, err := url.Parse(proxy)
 		target := proxyURL.Host
@@ -138,7 +152,7 @@ func (conn *GoogleConnection) initHttpClient(proxyAddr string) {
 			conn.Close()
 			return
 		}
-		addr, _ := util.GetHostMapping(GOOGLE_HTTPS)
+		addr, _ := getLocalHostMapping(GOOGLE_HTTPS)
 		req := &http.Request{
 			Method:        "CONNECT",
 			URL:           &url.URL{Scheme: "https", Host: addr},
@@ -165,11 +179,11 @@ func (conn *GoogleConnection) initHttpClient(proxyAddr string) {
 		var err error
 		conn.overProxy = false
 		if conn.manager == httpGoogleManager {
-			addr, _ := util.GetHostMapping(googleHttpHost)
+			addr, _ := getLocalHostMapping(googleHttpHost)
 			conn.http_client, err = net.DialTimeout("tcp", net.JoinHostPort(addr, "80"), connTimeoutSecs)
 			if nil != err {
 				conn.Close()
-				addr, _ = util.GetHostMapping(googleHttpHost)
+				addr, _ = getLocalHostMapping(googleHttpHost)
 				conn.http_client, err = net.DialTimeout("tcp", net.JoinHostPort(addr, "80"), connTimeoutSecs)
 			}
 			if nil != err {
@@ -178,11 +192,11 @@ func (conn *GoogleConnection) initHttpClient(proxyAddr string) {
 				return
 			}
 		} else {
-			addr, _ := util.GetHostMapping(googleHttpsHost)
+			addr, _ := getLocalHostMapping(googleHttpsHost)
 			conn.http_client, err = net.DialTimeout("tcp", net.JoinHostPort(addr, "443"), connTimeoutSecs)
 			if nil != err {
 				conn.Close()
-				addr, _ = util.GetHostMapping(googleHttpsHost)
+				addr, _ = getLocalHostMapping(googleHttpsHost)
 				conn.http_client, err = net.DialTimeout("tcp", net.JoinHostPort(addr, "443"), connTimeoutSecs)
 			}
 			if nil != err {

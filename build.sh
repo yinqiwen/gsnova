@@ -1,5 +1,5 @@
 #!/bin/sh
-VERSION="0.17.1"
+VERSION="0.17.2"
 
 #this part is copied from ANT's script
 # OS specific support.  $var _must_ be set to either true or false.
@@ -41,6 +41,7 @@ build_dist()
    DIST_DIR="$1"-"$VERSION"
    mkdir -p $GSNOVA_DIR/$DIST_DIR/cert
    mkdir -p $GSNOVA_DIR/$DIST_DIR/spac
+   mkdir -p $GSNOVA_DIR/$DIST_DIR/hosts
    
    OS="`go env GOOS`"
    ARCH="`go env GOARCH`"
@@ -53,9 +54,9 @@ build_dist()
    cp $GSNOVA_DIR/*.txt $GSNOVA_DIR/$DIST_DIR
    cp $GSNOVA_DIR/bin/main "$GSNOVA_DIR/$DIST_DIR/$exename"
    cp $GSNOVA_DIR/conf/"$1".conf $GSNOVA_DIR/$DIST_DIR
-   cp $GSNOVA_DIR/conf/hosts.conf $GSNOVA_DIR/$DIST_DIR
+   cp $GSNOVA_DIR/conf/*_hosts.conf $GSNOVA_DIR/$DIST_DIR/hosts
    cp $GSNOVA_DIR/conf/Fake* $GSNOVA_DIR/$DIST_DIR/cert
-   cp $GSNOVA_DIR/conf/spac.json $GSNOVA_DIR/$DIST_DIR/spac
+   cp $GSNOVA_DIR/conf/*_spac.json $GSNOVA_DIR/$DIST_DIR/spac
    cp $GSNOVA_DIR/conf/user-gfwlist.txt $GSNOVA_DIR/$DIST_DIR/spac
    cp -r $GSNOVA_DIR/web $GSNOVA_DIR/$DIST_DIR
    zip -r "$1"_"$VERSION"_"$OS"_"$ARCH".zip $DIST_DIR/*

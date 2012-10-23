@@ -21,6 +21,8 @@ import (
 
 const (
 	DNS_CACHE_FILE     = "DNSCache.json"
+	USER_HOSTS_FILE    = "user_hosts.conf"
+	CLOUD_HOSTS_FILE   = "cloud_hosts.conf"
 	HOSTS_DISABLE      = 0
 	HOSTS_ENABLE_HTTPS = 1
 	HOSTS_ENABLE_ALL   = 2
@@ -59,6 +61,7 @@ func loadIPRangeFile(ipRepo string) {
 	if len(ipRepo) == 0 {
 		return
 	}
+	time.sleep(5*time.Second)
 	hf := common.Home + "hosts/" + "iprange.zip"
 	_, err := os.Stat(hf)
 	if nil != err {
@@ -82,6 +85,10 @@ func loadDiskHostFile() {
 	files, err := ioutil.ReadDir(common.Home + "hosts/")
 	if nil == err {
 		for _, file := range files {
+			switch file.Name() {
+			case USER_HOSTS_FILE, CLOUD_HOSTS_FILE:
+				continue
+			}
 			content, err := ioutil.ReadFile(common.Home + "hosts/" + file.Name())
 			if nil == err {
 				if strings.EqualFold(DNS_CACHE_FILE, file.Name()) {
@@ -200,7 +207,7 @@ func lookupReachableAddress(hostport string) (string, bool) {
 			return addr, true
 		}
 	}
-	v, exist := util.GetHostMapping(host)
+	v, exist := getLocalHostMapping(host)
 	if !exist {
 		v, exist = hostMapping[host]
 	}
@@ -307,10 +314,6 @@ func isTCPAddressBlocked(host, ip, port string) bool {
 	return false
 }
 
-//func needRedirectHttpsHost(host string) bool {
-//	return hostPatternMatched(forceHttpsHosts, host)
-//}
-
 func hostNeedInjectRange(host string) bool {
 	return hostPatternMatched(hostInjectRangePatterns, host)
 }
@@ -382,6 +385,11 @@ func trustedDNSQuery(host string, port string) ([]string, bool) {
 }
 
 func InitHosts() error {
+	loadLocalHostMappings()
+	if cloud_hosts, exist := common.Cfg.GetProperty("Hosts", "CloudHosts"); exist {
+		go fetchCloudHosts(cloud_hosts)
+	}
+
 	if enable, exist := common.Cfg.GetIntProperty("Hosts", "Enable"); exist {
 		hostsEnable = int(enable)
 		if enable == 0 {

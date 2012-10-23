@@ -119,7 +119,7 @@ func (conn *GAEHttpConnection) initHttpClient() {
 	}
 	proxyInfo, exist := common.Cfg.GetProperty("LocalProxy", "Proxy")
 	if exist {
-		proxy := util.GetUrl(proxyInfo)
+		proxy := getLocalUrlMapping(proxyInfo)
 		if strings.HasPrefix(proxyInfo, "https") {
 			dial = sslDial
 		}
@@ -190,7 +190,7 @@ func (gae *GAEHttpConnection) requestEvent(conn *SessionConnection, ev event.Eve
 	if strings.Contains(auth.appid, ".") {
 		domain = auth.appid
 	}
-	addr, _ := util.GetHostMapping(domain)
+	addr, _ := getLocalHostMapping(domain)
 	scheme := MODE_HTTP
 	if strings.EqualFold(MODE_HTTPS, gae_cfg.ConnectionMode) {
 		scheme = MODE_HTTPS
@@ -545,9 +545,6 @@ func (manager *GAE) GetName() string {
 	return GAE_NAME
 }
 
-//func (manager *GAE) GetArg() string {
-//	return ""
-//}
 
 func initGAEConfig() {
 	//init config

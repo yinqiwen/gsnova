@@ -85,7 +85,7 @@ func (session *SessionConnection) tryProxy(proxies []RemoteConnectionManager, at
 		if nil == err {
 			return nil
 		} else {
-			log.Printf("Session[%d][WARN]Failed to request proxy event for reason:%v", session.SessionID, err)
+			log.Printf("Session[%d][WARN][%s]Failed to request proxy event for reason:%v", session.SessionID, proxy.GetName(),err)
 		}
 	}
 	return errors.New("No proxy found")

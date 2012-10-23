@@ -1,0 +1,33 @@
+[
+  {
+    "Host" : ["*.ytimg.com*", "*.google.com(.*)?","*.googleusercontent.com*", "*.gstatic.com", "*.googleapis.com*", "*.googlecode.com"],
+    "Proxy":["GoogleHttps", "Direct", "Default"]
+  },
+  {
+    "Host" : ["*.doubleclick.net*", "*.google-analytics.com*", "www.blogger.com", "*.google.co.*"],
+    "Proxy":["GoogleHttps", "Direct", "Default"]
+  },
+  {
+    "Host" : ["*.c.youtube.com", "*.golang.org"],
+    "Proxy": ["Direct", "Default"],
+    "Attr":  ["CRLF"]
+  },
+  {
+    "Host" : ["*.blogspot.*", "*.appspot.com", "golang.org"],
+    "Proxy": ["GoogleHttps", "Direct", "Default"]
+  },
+  {
+    "Host" : ["*.youtube.com"],
+    "Proxy": ["GoogleHttps", "Direct", "Default"],
+    "Attr":  ["Direct"]
+  },
+  {
+    "Protocol" : "http",
+    "Host": ["twitter.com", "facebook.com"],
+    "Attr":  ["RedirectHttps"]
+  },
+  {
+    "Filter" : ["!IsBlockedByGFW"],
+    "Proxy":["Direct", "Default"]
+  }
+]

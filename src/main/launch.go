@@ -31,9 +31,9 @@ func main() {
 	common.Home, _ = filepath.Split(path)
 	common.InitLogger()
 	common.InitConfig()
+	proxy.InitHosts()
 	proxy.InitSpac()
 	proxy.InitGoogle()
-	proxy.InitHosts()
 
 	var gae proxy.GAE
 	var c4 proxy.C4

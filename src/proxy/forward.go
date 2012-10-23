@@ -73,7 +73,7 @@ func (conn *ForwardConnection) initForwardConn(proxyAddr string, isHttps bool) e
 
 	conn.Close()
 	var err error
-	log.Printf("#####Target is %s, addrs is %s\n", conn.manager.target, proxyAddr)
+	//log.Printf("#####Target is %s, addrs is %s\n", conn.manager.target, proxyAddr)
 	conn.conn_url, err = url.Parse(conn.manager.target)
 	if nil != err {
 		return err

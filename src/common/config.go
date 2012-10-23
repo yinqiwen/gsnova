@@ -32,6 +32,6 @@ func InitConfig() error {
 	if enable, exist := Cfg.GetIntProperty("Debug", "Enable"); exist {
 		DebugEnable = (enable != 0)
 	}
-	err = util.LoadHostMapping(Home + "hosts.conf")
+	//err = util.LoadHostMapping(Home + "hosts.conf")
 	return err
 }

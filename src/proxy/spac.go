@@ -19,7 +19,7 @@ import (
 	"util"
 )
 
-var spac_script_path string
+var spac_script_path []string
 
 type JsonRule struct {
 	Method       []string
@@ -35,32 +35,56 @@ type JsonRule struct {
 }
 
 func loadSpacScript() error {
-	file, e := ioutil.ReadFile(spac_script_path)
-	if e == nil {
-		spac.rules = []*JsonRule{}
-		e = json.Unmarshal(file, &spac.rules)
-		for _, json_rule := range spac.rules {
-			e = json_rule.init()
+	rules := []*JsonRule{}
+	var err error
+	defer func() {
+		if nil != err {
+			log.Printf("Failed to init SPAC for reason:%v", err)
+		}
+	}()
+	for _, path := range spac_script_path {
+		file, e := ioutil.ReadFile(path)
+		err = e
+		if err == nil {
+			tmp := []*JsonRule{}
+			err = json.Unmarshal(file, &tmp)
+			if nil != err {
+			    log.Printf("[ERROR]Failed to unmarshal spac script file:%s for reason:%v\n", path, err)
+			    continue
+			}
+			for _, json_rule := range tmp {
+				err = json_rule.init()
+				if nil != err {
+					return err
+				}
+			}
+			rules = append(rules, tmp...)
+		} else {
+			return err
 		}
 	}
-	if nil != e {
-		log.Printf("Failed to init SPAC for reason:%v", e)
-	}
-	return e
+	spac.rules = rules
+	return nil
 }
 
 func reloadSpacScript() {
 	tick := time.NewTicker(5 * time.Second)
-	var mod_time time.Time
+	mod_times := make([]time.Time, len(spac_script_path))
 	for {
 		select {
 		case <-tick.C:
-			f, err := os.Stat(spac_script_path)
-			if nil == err {
-				if !mod_time.IsZero() && mod_time.Before(f.ModTime()) {
-					loadSpacScript()
+		    modified := false 
+			for i, path := range spac_script_path {
+				f, err := os.Stat(path)
+				if nil == err {
+					if !mod_times[i].IsZero() && mod_times[i].Before(f.ModTime()) {
+						modified = true
+					}
+					mod_times[i] = f.ModTime()
 				}
-				mod_time = f.ModTime()
+			}
+			if modified{
+			   loadSpacScript()
 			}
 		}
 	}
@@ -289,7 +313,7 @@ func fetchCloudSpacScript(url string) {
 	log.Printf("Fetch remote clound spac rule:%s\n", url)
 	body, _, err := util.FetchLateastContent(url, common.ProxyPort, false)
 	if nil == err && len(body) > 0 {
-		ioutil.WriteFile(spac_script_path, body, 0666)
+		ioutil.WriteFile(spac_script_path[1], body, 0666)
 	}
 	if nil != err {
 		log.Printf("Failed to fetch spac cloud script for reason:%v\n", err)
@@ -343,11 +367,8 @@ func InitSpac() {
 		go fetchCloudSpacScript(addr)
 	}
 
-	script, exist := common.Cfg.GetProperty("SPAC", "Script")
-	if !exist {
-		script = "spac/spac.json"
-	}
-	spac_script_path = common.Home + script
+	//user script has higher priority
+	spac_script_path = []string{common.Home + "spac/user_spac.json", common.Home + "spac/cloud_spac.json"}
 	loadSpacScript()
 	go reloadSpacScript()
 	init_spac_func()
@@ -357,9 +378,9 @@ func selectProxyByRequest(req *http.Request, host, port string, isHttpsConn bool
 	attrs := make(map[string]string)
 	for _, r := range spac.rules {
 		if r.match(req) {
-		    for _, v := range r.Attr{
-		       attrs[v]=v
-		    }
+			for _, v := range r.Attr {
+				attrs[v] = v
+			}
 			return r.Proxy, attrs
 		}
 	}
@@ -371,7 +392,7 @@ func selectProxyByRequest(req *http.Request, host, port string, isHttpsConn bool
 	if hostsEnable != HOSTS_DISABLE {
 		if _, exist := lookupReachableMappingHost(req, net.JoinHostPort(host, port)); exist {
 			if !strings.EqualFold(req.Method, "Connect") {
-				attrs["CRLF"]="CRLF"
+				attrs["CRLF"] = "CRLF"
 			}
 			return []string{DIRECT_NAME, spac.defaultRule}, attrs
 		} else {
@@ -381,7 +402,7 @@ func selectProxyByRequest(req *http.Request, host, port string, isHttpsConn bool
 	return proxyNames, attrs
 }
 
-func SelectProxy(req *http.Request, conn net.Conn, isHttpsConn bool) ([]RemoteConnectionManager,map[string]string) {
+func SelectProxy(req *http.Request, conn net.Conn, isHttpsConn bool) ([]RemoteConnectionManager, map[string]string) {
 	host := req.Host
 	port := "80"
 	if v, p, err := net.SplitHostPort(req.Host); nil == err {
@@ -406,7 +427,7 @@ func SelectProxy(req *http.Request, conn net.Conn, isHttpsConn bool) ([]RemoteCo
 	if need_select_proxy {
 		proxyNames, attrs = selectProxyByRequest(req, host, port, isHttpsConn, proxyNames)
 	}
-	
+
 	if !isHttpsConn && containsAttr(attrs, ATTR_REDIRECT_HTTPS) {
 		redirectHttps(conn, req)
 		return nil, nil
