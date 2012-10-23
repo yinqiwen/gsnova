@@ -1,5 +1,15 @@
 GSnova Changelog
 ===================
+Changes in version 0.17.2(2012.10.23)
+-------------------------------------------
+** Features
+   * [SPAC]:Split spac script into cloud/user spac scripts
+   * [Hosts]:Split hosts file into cloud/user hosts files
+   * [GAE]:Upgrade snappy
+   
+** Improvement
+   * Change default proxy setting to https.
+
 Changes in version 0.17.0(2012.10.21)
 -------------------------------------------
 ** Features
