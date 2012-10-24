@@ -16,55 +16,29 @@ type GAEServerConfig struct {
 	CompressFilter         map[string]string
 }
 
-func (cfg *GAEServerConfig)IsContentTypeInCompressFilter(v string)bool{
-   for key := range cfg.CompressFilter {
+func (cfg *GAEServerConfig) IsContentTypeInCompressFilter(v string) bool {
+	for key := range cfg.CompressFilter {
 		if strings.Index(v, key) != -1 {
-		   return true
+			return true
 		}
 	}
 	return false
 }
 
-func (cfg *GAEServerConfig) Encode(buffer *bytes.Buffer) bool {
-	codec.WriteUvarint(buffer, uint64(cfg.RetryFetchCount))
-	codec.WriteUvarint(buffer, uint64(cfg.MaxXMPPDataPackageSize))
-	codec.WriteUvarint(buffer, uint64(cfg.RangeFetchLimit))
-	codec.WriteUvarint(buffer, uint64(cfg.CompressType))
-	codec.WriteUvarint(buffer, uint64(cfg.EncryptType))
-	buffer.WriteByte(cfg.IsMaster)
-	codec.WriteUvarint(buffer, uint64(len(cfg.CompressFilter)))
-	for key := range cfg.CompressFilter {
-		codec.WriteVarString(buffer, key)
-	}
-	return true
+func (cfg *GAEServerConfig) Encode(buffer *bytes.Buffer) {
+	//	EncodeUInt32Value(buffer, cfg.RetryFetchCount)
+	//	EncodeUInt32Value(buffer, cfg.MaxXMPPDataPackageSize)
+	//	EncodeUInt32Value(buffer, cfg.RangeFetchLimit)
+	//	EncodeUInt32Value(buffer, cfg.CompressType)
+	//	EncodeUInt32Value(buffer, cfg.EncryptType)
+	//	buffer.WriteByte(cfg.IsMaster)
+	//	EncodeUInt32Value(buffer, uint32(len(cfg.CompressFilter)))
+	//	for key := range cfg.CompressFilter {
+	//		codec.WriteVarString(buffer, key)
+	//	}
 }
 
-func (cfg *GAEServerConfig) Decode(buffer *bytes.Buffer) bool {
-	tmp1, err1 := codec.ReadUvarint(buffer)
-	tmp2, err2 := codec.ReadUvarint(buffer)
-	tmp3, err3 := codec.ReadUvarint(buffer)
-	tmp4, err4 := codec.ReadUvarint(buffer)
-	tmp5, err5 := codec.ReadUvarint(buffer)
-	tmp7, err7 := buffer.ReadByte()
-	tmp6, err6 := codec.ReadUvarint(buffer)
-	if err1 != nil || err2 != nil || err3 != nil || err4 != nil || err5 != nil || err6 != nil || err7 != nil {
-		return false
-	}
-	cfg.RetryFetchCount = uint32(tmp1)
-	cfg.MaxXMPPDataPackageSize = uint32(tmp2)
-	cfg.RangeFetchLimit = uint32(tmp3)
-	cfg.CompressType = uint32(tmp4)
-	cfg.EncryptType = uint32(tmp5)
-	cfg.IsMaster = uint8(tmp7)
-	filter := make(map[string]string)
-	for i := 0; i < int(tmp6); i++ {
-		line, ok := codec.ReadVarString(buffer)
-		if !ok {
-			return false
-		}
-		filter[line] = line
-	}
-	cfg.CompressFilter = filter
+func (cfg *GAEServerConfig) Decode(buffer *bytes.Buffer) (err error) {
 	return true
 }
 
@@ -76,45 +50,45 @@ type User struct {
 	BlackList map[string]string
 }
 
-func (cfg *User) Encode(buffer *bytes.Buffer) bool {
-	codec.WriteVarString(buffer, cfg.Email)
-	codec.WriteVarString(buffer, cfg.Passwd)
-	codec.WriteVarString(buffer, cfg.Group)
-	codec.WriteVarString(buffer, cfg.AuthToken)
-	codec.WriteUvarint(buffer, uint64(len(cfg.BlackList)))
+func (cfg *User) Encode(buffer *bytes.Buffer) {
+	EncodeStringValue(buffer, cfg.Email)
+	EncodeStringValue(buffer, cfg.Passwd)
+	EncodeStringValue(buffer, cfg.Group)
+	EncodeStringValue(buffer, cfg.AuthToken)
+	EncodeUInt64Value(buffer, uint64(len(cfg.BlackList)))
 	for key := range cfg.BlackList {
-		codec.WriteVarString(buffer, key)
+		EncodeStringValue(buffer, key)
 	}
-	return true
 }
-func (cfg *User) Decode(buffer *bytes.Buffer) bool {
+func (cfg *User) Decode(buffer *bytes.Buffer) (err error) {
 	var ok bool
-	if cfg.Email, ok = codec.ReadVarString(buffer); !ok {
-		return false
+	if cfg.Email, err = DecodeStringValue(buffer); nil != err {
+		return
 	}
-	if cfg.Passwd, ok = codec.ReadVarString(buffer); !ok {
-		return false
+	if cfg.Passwd, err = DecodeStringValue(buffer); nil != err {
+		return
 	}
-	if cfg.Group, ok = codec.ReadVarString(buffer); !ok {
-		return false
+	if cfg.Group, err = DecodeStringValue(buffer); nil != err {
+		return
 	}
-	if cfg.AuthToken, ok = codec.ReadVarString(buffer); !ok {
-		return false
+	if cfg.AuthToken, err = DecodeStringValue(buffer); nil != err {
+		return
 	}
-	tmp, err := codec.ReadUvarint(buffer)
+	var tmp uint32
+	tmp, err = DecodeUInt32Value(buffer)
 	if err != nil {
 		return false
 	}
 	blacklist := make(map[string]string)
 	for i := 0; i < int(tmp); i++ {
-		line, success := codec.ReadVarString(buffer)
-		if !success {
-			return false
+	    var line string
+		if line, err = DecodeStringValue(buffer); nil != err{
+		  return
 		}
 		blacklist[line] = line
 	}
 	cfg.BlackList = blacklist
-	return true
+	return nil
 }
 
 type Group struct {
@@ -122,31 +96,30 @@ type Group struct {
 	BlackList map[string]string
 }
 
-func (cfg *Group) Encode(buffer *bytes.Buffer) bool {
-	codec.WriteVarString(buffer, cfg.Name)
-	codec.WriteUvarint(buffer, uint64(len(cfg.BlackList)))
+func (cfg *Group) Encode(buffer *bytes.Buffer) {
+	EncodeStringValue(buffer, cfg.Name)
+	EncodeUInt64Value(buffer, uint64(len(cfg.BlackList)))
 	for key := range cfg.BlackList {
-		codec.WriteVarString(buffer, key)
+		EncodeStringValue(buffer, key)
 	}
-	return true
 }
-func (cfg *Group) Decode(buffer *bytes.Buffer) bool {
-	var ok bool
-	if cfg.Name, ok = codec.ReadVarString(buffer); !ok {
-		return false
+func (cfg *Group) Decode(buffer *bytes.Buffer) (err error) {
+	if cfg.Name, err = DecodeStringValue(buffer); nil != err {
+		return 
 	}
-	tmp, err := codec.ReadUvarint(buffer)
+	var tmp uint32
+	tmp, err = DecodeUInt32Value((buffer)
 	if err != nil {
-		return false
+		return 
 	}
 	blacklist := make(map[string]string)
 	for i := 0; i < int(tmp); i++ {
-		line, success := codec.ReadVarString(buffer)
-		if !success {
-			return false
+		var line string
+		if line, err = DecodeStringValue(buffer); nil != err{
+		  return
 		}
 		blacklist[line] = line
 	}
 	cfg.BlackList = blacklist
-	return true
+	return nil
 }

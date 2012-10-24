@@ -100,7 +100,6 @@ func (dispatcher *DispatchEventHandler) OnEvent(header *event.EventHeader, ev ev
 	tags := ((ev.GetAttachement().([]interface{}))[0]).(*event.EventHeaderTags)
 	ctx = ((ev.GetAttachement().([]interface{}))[1]).(appengine.Context)
 	sendservice := ((ev.GetAttachement().([]interface{}))[2]).(service.EventSendService)
-	//ctx.Infof("Received event hash :%d",  ev.GetHash())
 	var res event.Event = dispatcher.handleRecvEvent(ctx, header, ev)
 	if nil != res {
 		res.SetHash(ev.GetHash())
@@ -125,9 +124,7 @@ func (dispatcher *DispatchEventHandler) OnEvent(header *event.EventHeader, ev ev
 		event.EncodeEventWithTags(&buf, y, tags)
 		if sendservice.GetMaxDataPackageSize() > 0 && buf.Len() > sendservice.GetMaxDataPackageSize() {
 			bufs := splitBuffer(&buf, uint32(ev.GetHash()), uint32(sendservice.GetMaxDataPackageSize()), tags)
-			//ctx.Infof("Buff total len %d while split len is %d",  buf.Len(), sendservice.GetMaxDataPackageSize())
 			for _, x := range bufs {
-		    	//ctx.Infof("Send  message with len %d",  x.Len())
 				sendservice.Send(x)
 			}
 		} else {

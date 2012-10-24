@@ -23,7 +23,6 @@ func init() {
 	event.InitEvents(new(handler.DispatchEventHandler))
 	http.HandleFunc("/", IndexEntry)
 	http.HandleFunc("/admin", AdminEntry)
-	//http.HandleFunc("/dns", dnsHandler)
 	http.HandleFunc("/invoke", HTTPEventDispatch)
 	http.HandleFunc("/_ah/start", BackendInit)
 	//warmup request is no available in GO runtime now
@@ -31,18 +30,6 @@ func init() {
 	xmpp.Handle(XMPPEventDispatch)
 }
 
-func dnsHandler(w http.ResponseWriter, r *http.Request) {
-	host := r.URL.Query().Get("Host")
-	if len(host) > 0 {
-		if addrs, err := net.LookupHost(host); nil == err {
-			w.Write([]byte(fmt.Sprintf("[%s]", strings.Join(addrs, ","))))
-			return
-		} else {
-			w.Write([]byte(fmt.Sprintf("%v", err)))
-		}
-	}
-	w.Write([]byte("No Host para."))
-}
 
 func initGAEProxyServer(ctx appengine.Context) {
 	if !serverInited {

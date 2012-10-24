@@ -76,17 +76,22 @@ type GAEHttpConnection struct {
 	support_tunnel     bool
 	over_tunnel        bool
 	authToken          string
+	sess               *SessionConnection
 	client             *http.Client
 	manager            *GAE
 	proxyURL           *url.URL
 	rangeStart         int
 	tunnelChannel      chan event.Event
+	tunnel_remote_addr string
 	rangeFetchChannel  chan *rangeChunk
 	range_expected_pos int
 	closed             bool
 }
 
 func (gae *GAEHttpConnection) Close() error {
+	if gae.over_tunnel {
+		gae.doCloseTunnel()
+	}
 	gae.closed = true
 	return nil
 }
@@ -419,6 +424,7 @@ func (gae *GAEHttpConnection) handleHttpRes(conn *SessionConnection, req *event.
 
 func (gae *GAEHttpConnection) Request(conn *SessionConnection, ev event.Event) (err error, res event.Event) {
 	gae.closed = false
+	gae.sess = conn
 	if gae.over_tunnel {
 		return gae.requestOverTunnel(conn, ev)
 	}
