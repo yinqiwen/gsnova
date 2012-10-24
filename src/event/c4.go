@@ -4,9 +4,51 @@ import (
 	"bytes"
 )
 
-type RSocketAcceptedEvent struct{
-    Server string 
-    EventHeader
+type SocketReadEvent struct {
+	Timeout uint32
+	EventHeader
+}
+
+func (req *SocketReadEvent) Encode(buffer *bytes.Buffer) {
+	EncodeUInt32Value(buffer, req.Timeout)
+}
+func (req *SocketReadEvent) Decode(buffer *bytes.Buffer) (err error) {
+	req.Timeout, err = DecodeUInt32Value(buffer)
+	return
+}
+
+func (req *SocketReadEvent) GetType() uint32 {
+	return EVENT_SOCKET_READ_TYPE
+}
+func (req *SocketReadEvent) GetVersion() uint32 {
+	return 1
+}
+
+type SocketConnectWithDataEvent struct {
+	Content []byte
+	Addr    string
+	Net     string
+	EventHeader
+}
+
+func (req *SocketConnectWithDataEvent) Encode(buffer *bytes.Buffer) {
+	EncodeBytesValue(buffer, req.Content)
+}
+func (req *SocketConnectWithDataEvent) Decode(buffer *bytes.Buffer) (err error) {
+	req.Content, err = DecodeBytesValue(buffer)
+	return
+}
+
+func (req *SocketConnectWithDataEvent) GetType() uint32 {
+	return EVENT_SOCKET_CONNECT_WITH_DATA_TYPE
+}
+func (req *SocketConnectWithDataEvent) GetVersion() uint32 {
+	return 1
+}
+
+type RSocketAcceptedEvent struct {
+	Server string
+	EventHeader
 }
 
 func (req *RSocketAcceptedEvent) Encode(buffer *bytes.Buffer) {
@@ -26,7 +68,6 @@ func (req *RSocketAcceptedEvent) GetType() uint32 {
 func (req *RSocketAcceptedEvent) GetVersion() uint32 {
 	return 1
 }
-
 
 type TCPChunkEvent struct {
 	Sequence uint32
@@ -59,7 +100,7 @@ func (req *TCPChunkEvent) GetVersion() uint32 {
 
 type SocketConnectionEvent struct {
 	Status uint32
-	Addr  string
+	Addr   string
 	EventHeader
 }
 
@@ -87,7 +128,7 @@ func (req *SocketConnectionEvent) GetVersion() uint32 {
 }
 
 type UserLoginEvent struct {
-	User  string
+	User string
 	EventHeader
 }
 

@@ -293,7 +293,6 @@ func (c4 *C4HttpConnection) Request(conn *SessionConnection, ev event.Event) (er
 				req.Url = proxyURL.RequestURI()
 			}
 			log.Printf("Session[%d]Request %s\n", req.GetHash(), util.GetURLString(req.RawReq, true))
-			//log.Printf("Session[%d]Request %s %s\n", ev.GetHash(), req.Method, req.Url)
 			handler.requestEvent(req)
 			if conn.State == STATE_RECV_HTTP {
 				if req.RawReq.ContentLength > 0 {

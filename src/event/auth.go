@@ -71,6 +71,7 @@ type AuthResponseEvent struct {
 	Appid string
 	Token string
 	Error string
+	Version string
 	EventHeader
 }
 
@@ -78,6 +79,7 @@ func (req *AuthResponseEvent) Encode(buffer *bytes.Buffer) {
 	EncodeStringValue(buffer, req.Appid)
 	EncodeStringValue(buffer, req.Token)
 	EncodeStringValue(buffer, req.Error)
+	EncodeStringValue(buffer, req.Version)
 }
 func (req *AuthResponseEvent) Decode(buffer *bytes.Buffer) error {
 	var err error
@@ -93,6 +95,7 @@ func (req *AuthResponseEvent) Decode(buffer *bytes.Buffer) error {
 	if nil != err {
 		return err
 	}
+	req.Version, _ = DecodeStringValue(buffer)
 	return nil
 }
 func (req *AuthResponseEvent) GetType() uint32 {

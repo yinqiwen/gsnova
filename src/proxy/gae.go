@@ -73,12 +73,14 @@ func (auth *GAEAuth) parse(line string) error {
 
 type GAEHttpConnection struct {
 	auth               GAEAuth
+	support_tunnel     bool
+	over_tunnel        bool
 	authToken          string
 	client             *http.Client
-	remote_conn        net.Conn
 	manager            *GAE
 	proxyURL           *url.URL
 	rangeStart         int
+	tunnelChannel      chan event.Event
 	rangeFetchChannel  chan *rangeChunk
 	range_expected_pos int
 	closed             bool
@@ -177,6 +179,7 @@ func (conn *GAEHttpConnection) Auth() error {
 	} else {
 		log.Printf("Auth token is %s\n", authres.Token)
 		conn.authToken = authres.Token
+		conn.support_tunnel = len(authres.Version) > 0
 	}
 	return nil
 }
@@ -411,20 +414,26 @@ func (gae *GAEHttpConnection) handleHttpRes(conn *SessionConnection, req *event.
 		return httpres, nil
 	}
 	err := httpres.Write(conn.LocalRawConn)
-
 	return httpres, err
 }
 
 func (gae *GAEHttpConnection) Request(conn *SessionConnection, ev event.Event) (err error, res event.Event) {
 	gae.closed = false
+	if gae.over_tunnel {
+		return gae.requestOverTunnel(conn, ev)
+	}
 	if ev.GetType() == event.HTTP_REQUEST_EVENT_TYPE {
 		httpreq := ev.(*event.HTTPRequestEvent)
 		if strings.EqualFold(httpreq.Method, "CONNECT") {
+			//try https over tunnel
+			if gae.support_tunnel {
+				gae.over_tunnel = true
+				return gae.requestOverTunnel(conn, ev)
+			}
 			log.Printf("Session[%d]Request %s\n", httpreq.GetHash(), util.GetURLString(httpreq.RawReq, true))
 			conn.LocalRawConn.Write([]byte("HTTP/1.1 200 Connection established\r\n\r\n"))
 			tlscfg, err := common.TLSConfig(httpreq.GetHeader("Host"))
 			if nil != err {
-			    log.Printf("##########%v\n", err)
 				return err, nil
 			}
 			conn.LocalRawConn = tls.Server(conn.LocalRawConn, tlscfg)
@@ -508,8 +517,8 @@ func (manager *GAE) shareAppId(appid, email string, operation uint32) error {
 		return err
 	}
 	admin_res := res.(*event.AdminResponseEvent)
-	if len(admin_res.ErrorCause) > 0{
-	   return fmt.Errorf("%s", admin_res.ErrorCause)
+	if len(admin_res.ErrorCause) > 0 {
+		return fmt.Errorf("%s", admin_res.ErrorCause)
 	}
 	return nil
 }
@@ -538,13 +547,17 @@ func (manager *GAE) GetRemoteConnection(ev event.Event, attrs map[string]string)
 		b = gae
 		//b.auth = 
 	} // Read next message from the net.
+	if containsAttr(attrs, ATTR_TUNNEL) {
+		b.(*GAEHttpConnection).over_tunnel = true && b.(*GAEHttpConnection).support_tunnel
+	} else {
+		b.(*GAEHttpConnection).over_tunnel = false
+	}
 	return b, nil
 }
 
 func (manager *GAE) GetName() string {
 	return GAE_NAME
 }
-
 
 func initGAEConfig() {
 	//init config

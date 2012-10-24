@@ -3,8 +3,8 @@ package proxy
 import (
 	"bufio"
 	"common"
-	"fmt"
 	"event"
+	"fmt"
 	"io"
 	"log"
 	"net"
@@ -37,6 +37,7 @@ const (
 	ATTR_REDIRECT_HTTPS = "RedirectHttps"
 	ATTR_CRLF_INJECT    = "CRLF"
 	ATTR_DIRECT         = "Direct"
+	ATTR_TUNNEL         = "Tunnel"
 
 	MODE_HTTP    = "http"
 	MODE_HTTPS   = "httpS"
@@ -72,8 +73,17 @@ func newSessionConnection(sessionId uint32, conn net.Conn, reader *bufio.Reader)
 	session_conn.SessionID = sessionId
 	session_conn.State = STATE_RECV_HTTP
 	session_conn.Type = HTTP_TUNNEL
-
 	return session_conn
+}
+
+func (session *SessionConnection) Close() error {
+	if nil != session.LocalRawConn {
+		session.LocalRawConn.Close()
+	}
+	if nil != session.RemoteConn {
+		session.RemoteConn.Close()
+	}
+	return nil
 }
 
 func (session *SessionConnection) tryProxy(proxies []RemoteConnectionManager, attrs map[string]string, ev *event.HTTPRequestEvent) (err error) {
@@ -85,7 +95,7 @@ func (session *SessionConnection) tryProxy(proxies []RemoteConnectionManager, at
 		if nil == err {
 			return nil
 		} else {
-			log.Printf("Session[%d][WARN][%s]Failed to request proxy event for reason:%v", session.SessionID, proxy.GetName(),err)
+			log.Printf("Session[%d][WARN][%s]Failed to request proxy event for reason:%v", session.SessionID, proxy.GetName(), err)
 		}
 	}
 	return fmt.Errorf("No proxy found for request '%s %s' with %d candidates", ev.RawReq.Method, ev.RawReq.Host, len(proxies))
@@ -94,7 +104,7 @@ func (session *SessionConnection) tryProxy(proxies []RemoteConnectionManager, at
 func (session *SessionConnection) processHttpEvent(ev *event.HTTPRequestEvent) error {
 	ev.SetHash(session.SessionID)
 	proxies, attrs := SelectProxy(ev.RawReq, session.LocalRawConn, session.Type == HTTPS_TUNNEL)
-	if nil == proxies{
+	if nil == proxies {
 		session.State = STATE_SESSION_CLOSE
 		return nil
 	}
@@ -119,7 +129,7 @@ func (session *SessionConnection) processHttpEvent(ev *event.HTTPRequestEvent) e
 	}
 
 	if nil != err {
-		log.Printf("Session[%d]Process error:%v for host:%s", session.SessionID, err,ev.RawReq.Host)
+		log.Printf("Session[%d]Process error:%v for host:%s", session.SessionID, err, ev.RawReq.Host)
 		session.LocalRawConn.Write([]byte("HTTP/1.1 500 Internal Server Error\r\n\r\n"))
 		session.LocalRawConn.Close()
 	}
