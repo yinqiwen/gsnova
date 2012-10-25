@@ -2,7 +2,6 @@ package event
 
 import (
 	"bytes"
-	"codec"
 	"strings"
 )
 
@@ -39,7 +38,7 @@ func (cfg *GAEServerConfig) Encode(buffer *bytes.Buffer) {
 }
 
 func (cfg *GAEServerConfig) Decode(buffer *bytes.Buffer) (err error) {
-	return true
+	return nil
 }
 
 type User struct {
@@ -61,7 +60,6 @@ func (cfg *User) Encode(buffer *bytes.Buffer) {
 	}
 }
 func (cfg *User) Decode(buffer *bytes.Buffer) (err error) {
-	var ok bool
 	if cfg.Email, err = DecodeStringValue(buffer); nil != err {
 		return
 	}
@@ -77,7 +75,7 @@ func (cfg *User) Decode(buffer *bytes.Buffer) (err error) {
 	var tmp uint32
 	tmp, err = DecodeUInt32Value(buffer)
 	if err != nil {
-		return false
+		return err
 	}
 	blacklist := make(map[string]string)
 	for i := 0; i < int(tmp); i++ {
@@ -108,7 +106,7 @@ func (cfg *Group) Decode(buffer *bytes.Buffer) (err error) {
 		return 
 	}
 	var tmp uint32
-	tmp, err = DecodeUInt32Value((buffer)
+	tmp, err = DecodeUInt32Value(buffer)
 	if err != nil {
 		return 
 	}

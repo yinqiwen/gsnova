@@ -14,12 +14,12 @@ type SegmentEvent struct {
 func (seg *SegmentEvent) Encode(buffer *bytes.Buffer) {
 	EncodeUInt32Value(buffer, seg.Sequence)
 	EncodeUInt32Value(buffer, seg.Total)
-	EncodeBytesValue(buffer, seq.Content)
+	EncodeBytesValue(buffer, seg.Content)
 }
 func (seg *SegmentEvent) Decode(buffer *bytes.Buffer) (err error) {
 	if seg.Sequence, err = DecodeUInt32Value(buffer); nil == err {
 		if seg.Total, err = DecodeUInt32Value(buffer); nil == err {
-			seg.Content, err = DecodeByteBufferValue(buffer)
+			seg.Content, err = DecodeBytesValue(buffer)
 		}
 	}
 	return
@@ -47,7 +47,6 @@ type UserOperationEvent struct {
 func (ev *UserOperationEvent) Encode(buffer *bytes.Buffer) {
 	ev.User.Encode(buffer)
 	EncodeUInt32Value(buffer, ev.Operation)
-	return true
 }
 func (ev *UserOperationEvent) Decode(buffer *bytes.Buffer) (err error) {
 	if err := ev.User.Decode(buffer); nil != err {
@@ -105,7 +104,6 @@ type ServerConfigEvent struct {
 func (ev *ServerConfigEvent) Encode(buffer *bytes.Buffer) {
 	EncodeUInt32Value(buffer, ev.Operation)
 	ev.Cfg.Encode(buffer)
-	return true
 }
 func (ev *ServerConfigEvent) Decode(buffer *bytes.Buffer) (err error) {
 	ev.Operation, err = DecodeUInt32Value(buffer)
@@ -129,7 +127,6 @@ type ListGroupRequestEvent struct {
 }
 
 func (ev *ListGroupRequestEvent) Encode(buffer *bytes.Buffer) {
-	return true
 }
 func (ev *ListGroupRequestEvent) Decode(buffer *bytes.Buffer) error {
 	return nil
@@ -180,7 +177,6 @@ type ListUserRequestEvent struct {
 }
 
 func (ev *ListUserRequestEvent) Encode(buffer *bytes.Buffer) {
-	return true
 }
 func (ev *ListUserRequestEvent) Decode(buffer *bytes.Buffer) error {
 	return nil
@@ -262,4 +258,14 @@ func (ev *BlackListOperationEvent) GetType() uint32 {
 }
 func (ev *BlackListOperationEvent) GetVersion() uint32 {
 	return 1
+}
+
+func InitGAEAuthEvents() {
+	RegistEvent(&BlackListOperationEvent{})
+	RegistEvent(&SegmentEvent{})
+	RegistEvent(&UserOperationEvent{})
+	RegistEvent(&GroupOperationEvent{})
+	RegistEvent(&ServerConfigEvent{})
+	RegistEvent(&ListGroupRequestEvent{})
+	RegistEvent(&ListUserRequestEvent{})
 }

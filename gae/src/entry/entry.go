@@ -8,19 +8,18 @@ import (
 	"encoding/base64"
 	"event"
 	"fmt"
-	"handler"
 	"misc"
-	"net"
 	"net/http"
 	"service"
 	"strconv"
-	"strings"
 )
 
 var serverInited bool = false
 
 func init() {
-	event.InitEvents(new(handler.DispatchEventHandler))
+	//event.InitEvents(new(handler.DispatchEventHandler))
+	event.Init()
+	event.InitGAEAuthEvents()
 	http.HandleFunc("/", IndexEntry)
 	http.HandleFunc("/admin", AdminEntry)
 	http.HandleFunc("/invoke", HTTPEventDispatch)
@@ -29,7 +28,6 @@ func init() {
 	http.HandleFunc("/_ah/warmup", InitGAEServer)
 	xmpp.Handle(XMPPEventDispatch)
 }
-
 
 func initGAEProxyServer(ctx appengine.Context) {
 	if !serverInited {
@@ -182,6 +180,20 @@ func (serv *XMPPEventSendService) Send(buf *bytes.Buffer) {
 	}
 }
 
+func decodeEventWithTags(content []byte) (*event.EventHeaderTags, event.Event, error) {
+	var tags event.EventHeaderTags
+	buf := bytes.NewBuffer(content)
+	if ok := tags.Decode(buf); !ok {
+		return nil, nil, fmt.Errorf("Failed to decode event header tags")
+	}
+	err, res := event.DecodeEvent(buf)
+	if nil != err {
+		return nil, nil, err
+	}
+	res = event.ExtractEvent(res)
+	return &tags, res, nil
+}
+
 func XMPPEventDispatch(ctx appengine.Context, m *xmpp.Message) {
 	initGAEProxyServer(ctx)
 	src, err := base64.StdEncoding.DecodeString(m.Body)
@@ -189,21 +201,16 @@ func XMPPEventDispatch(ctx appengine.Context, m *xmpp.Message) {
 		ctx.Errorf("Failed to decode base64 XMPP.")
 		return
 	}
-	success, ev, tags, cause := event.ParseEventWithTags(src)
-	if success {
+	tags, ev, err := decodeEventWithTags(src)
+	if nil == err {
 		serv := new(XMPPEventSendService)
 		serv.jid = m.To[0]
 		serv.from = m.Sender
 		serv.ctx = ctx
-		attach := make([]interface{}, 3)
-		attach[0] = tags
-		attach[1] = ctx
-		attach[2] = serv
-		ev.SetAttachement(attach)
-		event.DiaptchEvent(ev)
+		service.HandleEvent(tags, ev, ctx, serv)
 		return
 	}
-	ctx.Errorf("Failed to parse XMPP event:" + cause)
+	ctx.Errorf("Failed to parse XMPP event:" + err.Error())
 }
 
 func HTTPEventDispatch(w http.ResponseWriter, r *http.Request) {
@@ -213,16 +220,10 @@ func HTTPEventDispatch(w http.ResponseWriter, r *http.Request) {
 	r.Body.Read(buf)
 	serv := new(HTTPEventSendService)
 	serv.writer = w
-	success, ev, tags, cause := event.ParseEventWithTags(buf)
-	if success {
-		attach := make([]interface{}, 3)
-		attach[0] = tags
-		attach[1] = ctx
-		attach[2] = serv
-		ev.SetAttachement(attach)
-		event.DiaptchEvent(ev)
+	tags, ev, err := decodeEventWithTags(buf)
+	if nil == err {
+		service.HandleEvent(tags, ev, ctx, serv)
 		return
 	}
-	ctx.Errorf("Failed to parse HTTP event:" + cause)
-	fmt.Fprintf(w, "Failed to parse HTTP event:"+cause)
+	ctx.Errorf("Failed to parse HTTP event:" + err.Error())
 }

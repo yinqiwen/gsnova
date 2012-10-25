@@ -16,8 +16,8 @@ func initServerConfig() *event.GAEServerConfig {
 	cfg.RetryFetchCount = 2
 	cfg.RangeFetchLimit = 256 * 1024
 	cfg.MaxXMPPDataPackageSize = 40960
-	cfg.CompressType = event.C_SNAPPY
-	cfg.EncryptType = event.E_SE1
+	cfg.CompressType = event.COMPRESSOR_SNAPPY
+	cfg.EncryptType = event.ENCRYPTER_SE1
 	cfg.IsMaster = 0
 	cfg.CompressFilter = make(map[string]string)
 	return cfg

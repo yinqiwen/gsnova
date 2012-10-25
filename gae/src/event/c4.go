@@ -6,14 +6,17 @@ import (
 
 type SocketReadEvent struct {
 	Timeout uint32
+	MaxRead uint32
 	EventHeader
 }
 
 func (req *SocketReadEvent) Encode(buffer *bytes.Buffer) {
 	EncodeUInt32Value(buffer, req.Timeout)
+	EncodeUInt32Value(buffer, req.MaxRead)
 }
 func (req *SocketReadEvent) Decode(buffer *bytes.Buffer) (err error) {
 	req.Timeout, err = DecodeUInt32Value(buffer)
+	req.MaxRead, err = DecodeUInt32Value(buffer)
 	return
 }
 
@@ -28,6 +31,7 @@ type SocketConnectWithDataEvent struct {
 	Content []byte
 	Addr    string
 	Net     string
+	Timeout uint32
 	EventHeader
 }
 
@@ -35,11 +39,14 @@ func (req *SocketConnectWithDataEvent) Encode(buffer *bytes.Buffer) {
 	EncodeBytesValue(buffer, req.Content)
 	EncodeStringValue(buffer, req.Addr)
 	EncodeStringValue(buffer, req.Net)
+	EncodeUInt32Value(buffer, req.Timeout)
 }
 func (req *SocketConnectWithDataEvent) Decode(buffer *bytes.Buffer) (err error) {
 	if req.Content, err = DecodeBytesValue(buffer); nil == err {
 		if req.Addr, err = DecodeStringValue(buffer); nil == err {
-			req.Net, err = DecodeStringValue(buffer)
+			if req.Net, err = DecodeStringValue(buffer); nil == err {
+				req.Timeout, err = DecodeUInt32Value(buffer)
+			}
 		}
 	}
 	return

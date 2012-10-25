@@ -3,18 +3,26 @@ package event
 import (
 	"bytes"
 	"encoding/binary"
+	"strings"
 )
 
+const _splitter = "@@@"
+
 type EventHeaderTags struct {
-	magic uint16
-	Token string
+	magic     uint16
+	Token     string
+	UserToken string
 }
 
 func (tags *EventHeaderTags) Encode(buffer *bytes.Buffer) {
 	b := make([]byte, 2)
 	binary.BigEndian.PutUint16(b, MAGIC_NUMBER)
 	buffer.Write(b)
-	EncodeStringValue(buffer, tags.Token)
+	str := tags.Token
+	if len(tags.UserToken) > 0 {
+		str = tags.UserToken + _splitter + tags.Token
+	}
+	EncodeStringValue(buffer, str)
 }
 func (tags *EventHeaderTags) Decode(buffer *bytes.Buffer) bool {
 	b := make([]byte, 2)
@@ -26,9 +34,20 @@ func (tags *EventHeaderTags) Decode(buffer *bytes.Buffer) bool {
 	if tags.magic != MAGIC_NUMBER {
 		return false
 	}
-	token, ok := DecodeStringValue(buffer)
-	tags.Token = token
-	return ok == nil
+	if token, ok := DecodeStringValue(buffer); nil == ok {
+		ss := strings.Split(token, _splitter)
+		if len(ss) > 1 {
+			tags.Token = ss[1]
+			tags.UserToken = ss[0]
+		} else if len(ss) == 1 {
+			tags.Token = token
+		} else {
+			return false
+		}
+	} else {
+		return false
+	}
+	return true
 }
 
 type AuthRequestEvent struct {
@@ -68,18 +87,22 @@ func (req *AuthRequestEvent) GetVersion() uint32 {
 }
 
 type AuthResponseEvent struct {
-	Appid string
-	Token string
-	Error string
-	Version string
+	Appid      string
+	Token      string
+	Error      string
+	Capability uint64
 	EventHeader
+}
+
+func (req *AuthResponseEvent) SupportTunnel() bool {
+	return req.Capability&CAPABILITY_TUNNEL == CAPABILITY_TUNNEL
 }
 
 func (req *AuthResponseEvent) Encode(buffer *bytes.Buffer) {
 	EncodeStringValue(buffer, req.Appid)
 	EncodeStringValue(buffer, req.Token)
 	EncodeStringValue(buffer, req.Error)
-	EncodeStringValue(buffer, req.Version)
+	EncodeUInt64Value(buffer, req.Capability)
 }
 func (req *AuthResponseEvent) Decode(buffer *bytes.Buffer) error {
 	var err error
@@ -95,7 +118,7 @@ func (req *AuthResponseEvent) Decode(buffer *bytes.Buffer) error {
 	if nil != err {
 		return err
 	}
-	req.Version, _ = DecodeStringValue(buffer)
+	req.Capability, _ = DecodeUInt64Value(buffer)
 	return nil
 }
 func (req *AuthResponseEvent) GetType() uint32 {

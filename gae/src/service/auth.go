@@ -39,6 +39,7 @@ func Auth(ctx appengine.Context, ev *event.AuthRequestEvent) event.Event {
 	} else {
 		res.Error = "Invalid user/passwd."
 	}
+	//res.Capability = event.CAPABILITY_TUNNEL
 	return res
 }
 
@@ -49,10 +50,9 @@ func assertRootAuth(user *event.User) string {
 	return ""
 }
 
-func HandlerUserEvent(ctx appengine.Context, ev *event.UserOperationEvent) event.Event {
+func HandlerUserEvent(ctx appengine.Context, tags *event.EventHeaderTags, ev *event.UserOperationEvent) event.Event {
 	var res string
 	resev := new(event.AdminResponseEvent)
-	tags := ((ev.GetAttachement().([]interface{}))[0]).(*event.EventHeaderTags)
 	opruser := GetUserWithToken(ctx, tags.Token)
 	if nil == opruser {
 		resev.ErrorCause = "Invalid user token"
@@ -71,9 +71,8 @@ func HandlerUserEvent(ctx appengine.Context, ev *event.UserOperationEvent) event
 	return resev
 }
 
-func HandlerUserListEvent(ctx appengine.Context, ev *event.ListUserRequestEvent) event.Event {
+func HandlerUserListEvent(ctx appengine.Context, tags *event.EventHeaderTags,ev *event.ListUserRequestEvent) event.Event {
 	var res string
-	tags := ((ev.GetAttachement().([]interface{}))[0]).(*event.EventHeaderTags)
 	opruser := GetUserWithToken(ctx, tags.Token)
 	if nil == opruser {
 		resev := new(event.AdminResponseEvent)
@@ -92,10 +91,9 @@ func HandlerUserListEvent(ctx appengine.Context, ev *event.ListUserRequestEvent)
 	return resev
 }
 
-func HandlerGroupEvent(ctx appengine.Context, ev *event.GroupOperationEvent) event.Event {
+func HandlerGroupEvent(ctx appengine.Context, tags *event.EventHeaderTags, ev *event.GroupOperationEvent) event.Event {
 	var res string
 	resev := new(event.AdminResponseEvent)
-	tags := ((ev.GetAttachement().([]interface{}))[0]).(*event.EventHeaderTags)
 	opruser := GetUserWithToken(ctx, tags.Token)
 	if nil == opruser {
 		resev.ErrorCause = "Invalid user token"
@@ -112,9 +110,8 @@ func HandlerGroupEvent(ctx appengine.Context, ev *event.GroupOperationEvent) eve
 	return resev
 }
 
-func HandlerGroupListEvent(ctx appengine.Context, ev *event.ListGroupRequestEvent) event.Event {
+func HandlerGroupListEvent(ctx appengine.Context, tags *event.EventHeaderTags,ev *event.ListGroupRequestEvent) event.Event {
 	var res string
-	tags := ((ev.GetAttachement().([]interface{}))[0]).(*event.EventHeaderTags)
 	opruser := GetUserWithToken(ctx, tags.Token)
 	if nil == opruser {
 		resev := new(event.AdminResponseEvent)
@@ -133,9 +130,8 @@ func HandlerGroupListEvent(ctx appengine.Context, ev *event.ListGroupRequestEven
 	return resev
 }
 
-func HandlerBalcklistEvent(ctx appengine.Context, ev *event.BlackListOperationEvent) event.Event {
+func HandlerBalcklistEvent(ctx appengine.Context,tags *event.EventHeaderTags, ev *event.BlackListOperationEvent) event.Event {
 	var res string
-	tags := ((ev.GetAttachement().([]interface{}))[0]).(*event.EventHeaderTags)
 	opruser := GetUserWithToken(ctx, tags.Token)
 	if nil == opruser {
 		resev := new(event.AdminResponseEvent)

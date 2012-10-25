@@ -58,4 +58,6 @@ const (
 
 	APPID_SHARE   uint32 = 0
 	APPID_UNSHARE uint32 = 1
+
+	CAPABILITY_TUNNEL uint64 = 1
 )
