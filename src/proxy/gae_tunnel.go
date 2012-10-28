@@ -58,7 +58,7 @@ func (gae *GAEHttpConnection) handleTunnelResponse(conn *SessionConnection, ev e
 		}
 	case event.EVENT_TCP_CHUNK_TYPE:
 		chunk := ev.(*event.TCPChunkEvent)
-		n, err := conn.LocalRawConn.Write(chunk.Content)
+		_, err := conn.LocalRawConn.Write(chunk.Content)
 		if nil != err {
 			log.Printf("[%d]Failed to write  data to local client:%v.\n", ev.GetHash(), err)
 			conn.Close()

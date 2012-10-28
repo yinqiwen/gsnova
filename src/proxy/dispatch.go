@@ -31,6 +31,7 @@ const (
 	GOOGLE_HTTPS_DIRECT_NAME = "GoogleHttpsDirect"
 	FORWARD_NAME             = "Forward"
 	SSH_NAME                 = "SSH"
+	AUTO_NAME                 = "Auto"
 	DIRECT_NAME              = "Direct"
 	DEFAULT_NAME             = "Default"
 

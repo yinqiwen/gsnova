@@ -49,8 +49,8 @@ func loadSpacScript() error {
 			tmp := []*JsonRule{}
 			err = json.Unmarshal(file, &tmp)
 			if nil != err {
-			    log.Printf("[ERROR]Failed to unmarshal spac script file:%s for reason:%v\n", path, err)
-			    continue
+				log.Printf("[ERROR]Failed to unmarshal spac script file:%s for reason:%v\n", path, err)
+				continue
 			}
 			for _, json_rule := range tmp {
 				err = json_rule.init()
@@ -73,7 +73,7 @@ func reloadSpacScript() {
 	for {
 		select {
 		case <-tick.C:
-		    modified := false 
+			modified := false
 			for i, path := range spac_script_path {
 				f, err := os.Stat(path)
 				if nil == err {
@@ -83,8 +83,8 @@ func reloadSpacScript() {
 					mod_times[i] = f.ModTime()
 				}
 			}
-			if modified{
-			   loadSpacScript()
+			if modified {
+				loadSpacScript()
 			}
 		}
 	}
@@ -311,7 +311,13 @@ func generatePAC(url, date, content string) string {
 func fetchCloudSpacScript(url string) {
 	time.Sleep(5 * time.Second)
 	log.Printf("Fetch remote clound spac rule:%s\n", url)
-	body, _, err := util.FetchLateastContent(url, common.ProxyPort, false)
+	var file_ts time.Time
+	if fi, err := os.Stat(spac_script_path[1]); nil == err {
+		file_ts = fi.ModTime()
+	}
+
+	body, _, err := util.FetchLateastContent(url, common.ProxyPort, file_ts, false)
+
 	if nil == err && len(body) > 0 {
 		ioutil.WriteFile(spac_script_path[1], body, 0666)
 	}
@@ -324,11 +330,15 @@ func generatePACFromGFWList(url string) {
 	time.Sleep(5 * time.Second)
 	log.Printf("Generate PAC from  gfwlist %s\n", url)
 	load_gfwlist_rule()
-
-	body, last_mod_date, err := util.FetchLateastContent(url, common.ProxyPort, false)
+	gfwlist_txt := common.Home+"spac/snova-gfwlist.txt"
+	var file_ts time.Time
+	if fi, err := os.Stat(gfwlist_txt); nil == err {
+		file_ts = fi.ModTime()
+	}
+	body, last_mod_date, err := util.FetchLateastContent(url, common.ProxyPort, file_ts, false)
 	if nil == err && len(body) > 0 {
 		content, _ := base64.StdEncoding.DecodeString(string(body))
-		ioutil.WriteFile(common.Home+"spac/snova-gfwlist.txt", content, 0666)
+		ioutil.WriteFile(gfwlist_txt, content, 0666)
 		hf := common.Home + "spac/snova-gfwlist.pac"
 		file_content := generatePAC(url, last_mod_date, string(content))
 		ioutil.WriteFile(hf, []byte(file_content), 0666)
@@ -340,6 +350,17 @@ func generatePACFromGFWList(url string) {
 }
 
 func PostInitSpac() {
+	if spac.defaultRule == AUTO_NAME {
+		if gae_enable {
+			spac.defaultRule = GAE_NAME
+		} else if c4_enable {
+			spac.defaultRule = C4_NAME
+		} else if ssh_enable {
+			spac.defaultRule = SSH_NAME
+		} else {
+			spac.defaultRule = DIRECT_NAME
+		}
+	}
 }
 
 func InitSpac() {
@@ -349,6 +370,7 @@ func InitSpac() {
 	if len(spac.defaultRule) == 0 {
 		spac.defaultRule = GAE_NAME
 	}
+
 	spac.rules = make([]*JsonRule, 0)
 	if enable, exist := common.Cfg.GetIntProperty("SPAC", "Enable"); exist {
 		if enable == 0 {
@@ -460,7 +482,6 @@ func SelectProxy(req *http.Request, conn net.Conn, isHttpsConn bool) ([]RemoteCo
 			if !strings.Contains(forward.target, "://") {
 				forward.target = "http://" + forward.target
 			}
-			//log.Printf("########forward.target = %s\n", forward.target)
 			proxyManagers = append(proxyManagers, forward)
 		default:
 			forward := &Forward{overProxy: true}

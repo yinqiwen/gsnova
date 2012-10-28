@@ -29,8 +29,9 @@ const (
 )
 
 type DNSResult struct {
-	IP   []string
-	Date time.Time
+	IP         []string
+	Date       time.Time
+	InjectCRLF bool
 }
 
 var repoUrls []string
@@ -61,11 +62,12 @@ func loadIPRangeFile(ipRepo string) {
 	if len(ipRepo) == 0 {
 		return
 	}
-	time.Sleep(5*time.Second)
+	time.Sleep(5 * time.Second)
 	hf := common.Home + "hosts/" + "iprange.zip"
 	_, err := os.Stat(hf)
 	if nil != err {
-		body, _, err := util.FetchLateastContent(ipRepo, common.ProxyPort, true)
+	    var zero time.Time
+		body, _, err := util.FetchLateastContent(ipRepo, common.ProxyPort,zero, true)
 		if err != nil {
 			log.Printf("Failed to fetch ip range file from %s for reason:%v\n", ipRepo, err)
 			return
@@ -249,12 +251,27 @@ func getReachableDNSResult(hostport string) (v DNSResult, exist bool) {
 	reachableDNSResultMutex.Lock()
 	defer reachableDNSResultMutex.Unlock()
 	v, exist = reachableDNSResult[hostport]
+	if exist {
+		if time.Now().Sub(v.Date) >= time.Second*time.Duration(dnsCacheExpire) {
+			delete(reachableDNSResult, hostport)
+			v.IP = []string{}
+		}
+	}
 	return
 }
 
 func setReachableDNSResult(hostport string, v DNSResult) {
 	reachableDNSResultMutex.Lock()
 	reachableDNSResult[hostport] = v
+	reachableDNSResultMutex.Unlock()
+}
+
+func setDNSResultCRLFAttr(hostport string) {
+	reachableDNSResultMutex.Lock()
+	if v, exist := reachableDNSResult[hostport]; exist {
+		v.InjectCRLF = true
+		reachableDNSResult[hostport] = v
+	}
 	reachableDNSResultMutex.Unlock()
 }
 
@@ -321,12 +338,7 @@ func hostNeedInjectRange(host string) bool {
 func trustedDNSQuery(host string, port string) ([]string, bool) {
 	hostport := net.JoinHostPort(host, port)
 	if result, exist := getReachableDNSResult(hostport); exist {
-		if time.Now().Sub(result.Date) >= time.Second*time.Duration(dnsCacheExpire) {
-			//delete(reachableDNSResult, hostport)
-			expireReachableDNSResult(hostport)
-		} else {
-			return result.IP, len(result.IP) > 0
-		}
+		return result.IP, len(result.IP) > 0
 	}
 	useTCPDns := (len(trustedDNS) > 0)
 	if len(httpDNS) > 0 && hostPatternMatched(useHttpDNS, host) {
@@ -347,7 +359,7 @@ func trustedDNSQuery(host string, port string) ([]string, bool) {
 			}
 			//dnsResultChanged = true
 			//reachableDNSResult[hostport] = DNSResult{result, time.Now()}
-			setReachableDNSResult(hostport, DNSResult{result, time.Now()})
+			setReachableDNSResult(hostport, DNSResult{result, time.Now(), false})
 			if len(result) > 0 {
 				return result, true
 			}
@@ -371,7 +383,7 @@ func trustedDNSQuery(host string, port string) ([]string, bool) {
 					}
 
 					//reachableDNSResult[hostport] = DNSResult{result, time.Now()}
-					setReachableDNSResult(hostport, DNSResult{result, time.Now()})
+					setReachableDNSResult(hostport, DNSResult{result, time.Now(), false})
 					if len(result) > 0 {
 						return result, true
 					}
@@ -379,7 +391,7 @@ func trustedDNSQuery(host string, port string) ([]string, bool) {
 			}
 		}
 	}
-	setReachableDNSResult(hostport, DNSResult{[]string{}, time.Now()})
+	setReachableDNSResult(hostport, DNSResult{[]string{}, time.Now(), false})
 	//reachableDNSResult[hostport] = DNSResult{[]string{}, time.Now()}
 	return nil, false
 }

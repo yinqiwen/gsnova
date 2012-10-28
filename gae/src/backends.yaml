@@ -1,0 +1,5 @@
+backends:
+- name: worker
+  instances: 1
+  class: B8
+  options: failfast,dynamic,public

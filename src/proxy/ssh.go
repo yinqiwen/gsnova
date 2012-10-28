@@ -28,6 +28,7 @@ import (
 
 var sshUseGlobalProxy bool
 var sshResolveRemote bool
+var ssh_enable bool
 
 type SSHConnection struct {
 	ssh_conn          *SSHRawConnection
@@ -263,7 +264,7 @@ func InitSSH() error {
 			return nil
 		}
 	}
-
+    ssh_enable = true
 	log.Println("Init SSH.")
 	if enable, exist := common.Cfg.GetIntProperty("SSH", "UseGlobalProxy"); exist {
 		sshUseGlobalProxy = (enable != 0)

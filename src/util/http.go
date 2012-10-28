@@ -6,7 +6,7 @@ import (
 	"errors"
 	"io"
 	"io/ioutil"
-	//"log"
+	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -39,7 +39,7 @@ func IsResponseKeepAlive(res *http.Response) bool {
 	return isKeepAlive(res.Header, res.ProtoMajor, res.ProtoMinor)
 }
 
-func FetchLateastContent(urlstr string, proxy_port string, force bool) ([]byte, string, error) {
+func FetchLateastContent(urlstr string, proxy_port string, cmp time.Time, force bool) ([]byte, string, error) {
 	resp, err := HttpGet(urlstr, "")
 	if err != nil {
 		resp, err = HttpGet(urlstr, "http://"+net.JoinHostPort("127.0.0.1", proxy_port))
@@ -51,8 +51,9 @@ func FetchLateastContent(urlstr string, proxy_port string, force bool) ([]byte, 
 		if !force && len(last_mod_date) > 0 {
 			//return nil, "", errors.New("No last-modified header in response.")
 			t, err := time.Parse(time.RFC1123, last_mod_date)
-			if nil == err && t.Before(time.Now()) {
+			if nil == err && t.Before(cmp) {
 				resp.Body.Close()
+				log.Printf("###########%v, %v for %s\n", t, cmp, urlstr)
 				return []byte{}, last_mod_date, nil
 			}
 		}

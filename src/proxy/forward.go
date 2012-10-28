@@ -27,6 +27,7 @@ type ForwardConnection struct {
 	proxyAddr            string
 	forwardChan          chan int
 	manager              *Forward
+	try_inject_crlf      bool
 	closed               bool
 	range_fetch_conns    []net.Conn
 	range_fetch_raw_addr string
@@ -62,6 +63,34 @@ func createDirectForwardConn(hostport string) (net.Conn, error) {
 	return conn, err
 }
 
+func (conn *ForwardConnection) dialRemote(addr string, lookup_trusted_dns bool) (net.Conn, error) {
+	timeout := 5 * time.Second
+	if lookup_trusted_dns {
+		addr, _ = lookupReachableAddress(addr)
+	} else {
+		if tmp, exist := getReachableDNSResult(addr); exist && len(tmp.IP) > 0 {
+			if len(tmp.IP) > 0 {
+				_, port, _ := net.SplitHostPort(addr)
+				addr = net.JoinHostPort(tmp.IP[0], port)
+				conn.manager.inject_crlf = tmp.InjectCRLF
+				if !tmp.InjectCRLF {
+					conn.try_inject_crlf = true
+				}
+			} else {
+				return nil, fmt.Errorf("No reachable host for %s", addr)
+			}
+		}
+	}
+	c, err := net.DialTimeout("tcp", addr, timeout)
+	if nil != err && !lookup_trusted_dns {
+		if tmp, success := lookupReachableAddress(addr); success {
+			conn.try_inject_crlf = true
+			c, err = net.DialTimeout("tcp", tmp, timeout)
+		}
+	}
+	return c, err
+}
+
 func (conn *ForwardConnection) initForwardConn(proxyAddr string, isHttps bool) error {
 	if !strings.Contains(proxyAddr, ":") {
 		proxyAddr = proxyAddr + ":80"
@@ -80,21 +109,16 @@ func (conn *ForwardConnection) initForwardConn(proxyAddr string, isHttps bool) e
 	}
 
 	addr := conn.conn_url.Host
+	lookup_trusted_dns := false
 	if !conn.manager.overProxy {
 		if isHttps || conn.manager.inject_crlf {
-			addr, _ = lookupReachableAddress(addr)
+			lookup_trusted_dns = true
 		}
 	}
 
 	isSocks := strings.HasPrefix(strings.ToLower(conn.conn_url.Scheme), "socks")
 	if !isSocks {
-		conn.forward_conn, err = net.DialTimeout("tcp", addr, 2*time.Second)
-		if nil != err {
-			conn.forward_conn, err = net.DialTimeout("tcp", addr, 4*time.Second)
-		}
-		if nil != err {
-			expireBlockVerifyCache(addr)
-		}
+		conn.forward_conn, err = conn.dialRemote(addr, lookup_trusted_dns)
 	} else {
 		proxy := &socks.Proxy{Addr: conn.conn_url.Host}
 		if nil != conn.conn_url.User {
@@ -394,6 +418,9 @@ func (auto *ForwardConnection) Request(conn *SessionConnection, ev event.Event) 
 			log.Printf("Failed to connect forward proxy .\n")
 			return err, nil
 		}
+		if auto.try_inject_crlf {
+			auto.manager.inject_crlf = true
+		}
 		if conn.Type == HTTPS_TUNNEL {
 			log.Printf("Session[%d]Request %s\n", req.GetHash(), util.GetURLString(req.RawReq, true))
 			if !auto.manager.overProxy || strings.HasPrefix(auto.conn_url.Scheme, "socks") {
@@ -449,6 +476,11 @@ func (auto *ForwardConnection) Request(conn *SessionConnection, ev event.Event) 
 				log.Printf("Session[%d]Recv response with error %v\n", ev.GetHash(), err)
 				return err, nil
 			}
+
+			if auto.try_inject_crlf {
+				setDNSResultCRLFAttr(addr)
+			}
+
 			responsed := false
 			if rangeInjdected {
 				contentRange := resp.Header.Get("Content-Range")

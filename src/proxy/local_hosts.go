@@ -4,10 +4,11 @@ import (
 	"common"
 	"io/ioutil"
 	"log"
+	"net"
 	"net/url"
+	"os"
 	"strings"
 	"time"
-	"net"
 	"util"
 )
 
@@ -34,9 +35,14 @@ func loadLocalHostMapping(file string) error {
 func fetchCloudHosts(url string) {
 	time.Sleep(5 * time.Second)
 	log.Printf("Fetch remote clound spac rule:%s\n", url)
-	body, _, err := util.FetchLateastContent(url, common.ProxyPort, false)
+	file := common.Home + "hosts/" + CLOUD_HOSTS_FILE
+	var file_ts time.Time
+	if fi, err := os.Stat(file); nil == err {
+		file_ts = fi.ModTime()
+	}
+	body, _, err := util.FetchLateastContent(url, common.ProxyPort, file_ts, false)
 	if nil == err && len(body) > 0 {
-		ioutil.WriteFile(common.Home+"hosts/"+CLOUD_HOSTS_FILE, body, 0666)
+		ioutil.WriteFile(file, body, 0666)
 		mapping = make(map[string]*util.ListSelector)
 		loadLocalHostMappings()
 	}
@@ -98,10 +104,10 @@ func getLocalUrlMapping(addr string) string {
 		l.Host = tmp + ":" + v[1]
 	} else {
 		l.Host, _ = getLocalHostMapping(l.Host)
-		if l.Scheme == "https"{
-		   l.Host = net.JoinHostPort(l.Host, "443")
-		}else{
-		   l.Host = net.JoinHostPort(l.Host, "80")
+		if l.Scheme == "https" {
+			l.Host = net.JoinHostPort(l.Host, "443")
+		} else {
+			l.Host = net.JoinHostPort(l.Host, "80")
 		}
 	}
 	return l.String()
