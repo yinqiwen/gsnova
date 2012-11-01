@@ -680,7 +680,13 @@ func (manager *GAE) Init() error {
 		conn := new(GAEHttpConnection)
 		conn.auth = *auth
 		conn.manager = manager
-		if err := conn.Auth(); nil != err {
+		err := conn.Auth()
+		if nil != err {
+			conn.Close()
+			//try again
+			err = conn.Auth()
+		}
+		if nil != err {
 			log.Printf("Failed to auth appid:%s\n", err.Error())
 			gae_enable = false
 			return err

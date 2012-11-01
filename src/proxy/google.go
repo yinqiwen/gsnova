@@ -267,7 +267,6 @@ func (google *GoogleConnection) Request(conn *SessionConnection, ev event.Event)
 			if nil != google.https_client {
 				conn.LocalRawConn.Write([]byte("HTTP/1.1 200 Connection established\r\n\r\n"))
 			} else {
-				//conn.LocalRawConn.Write([]byte("HTTP/1.1 500 Internal Server Error\r\n\r\n"))
 				return errors.New("No google proxy reachable."), nil
 			}
 			go f(conn.LocalRawConn, google.https_client)
@@ -361,10 +360,7 @@ func InitGoogle() error {
 		}
 	}
 	log.Println("Init Google.")
-	//	googleHttpHost = "GoogleCNIP"
-	//	googleHttpsHost = "GoogleHttpsIP"
-	connTimeoutSecs = 1500 * time.Millisecond
-	//RegisteRemoteConnManager(manager)
+	connTimeoutSecs = 5000 * time.Millisecond
 	if tmp, exist := common.Cfg.GetIntProperty("Google", "UseGlobalProxy"); exist {
 		useGlobalProxy = tmp == 1
 	}
@@ -377,8 +373,6 @@ func InitGoogle() error {
 	} else {
 		googleHttpsHost = GOOGLE_HTTPS
 	}
-	//	googleHttpHost, _ = common.Cfg.GetProperty("Google", "HTTPHost")
-	//	googleHttpsHost, _ = common.Cfg.GetProperty("Google", "HTTPSHost")
 	if tmp, exist := common.Cfg.GetIntProperty("Google", "ConnectTimeout"); exist {
 		connTimeoutSecs = time.Duration(tmp) * time.Millisecond
 	}

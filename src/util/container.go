@@ -14,6 +14,15 @@ func (se *ListSelector) ArrayValues() []interface{} {
 	return se.values
 }
 
+func (se *ListSelector) Pop() interface{} {
+    if len(se.values) > 0{
+       v := se.values[0]
+       se.values = se.values[1:]
+       return v
+    }
+	return nil
+}
+
 func (se *ListSelector) Select() interface{} {
 	if len(se.values) == 0 {
 		return nil

@@ -435,12 +435,8 @@ func selectProxyByRequest(req *http.Request, host, port string, isHttpsConn bool
 		}
 	}
 
-	//	if !isHttpsConn && needInjectCRLF(req.Host) {
-	//		return []string{DIRECT_NAME, spac.defaultRule}
-	//	}
-
 	if hostsEnable != HOSTS_DISABLE {
-		if _, exist := lookupReachableMappingHost(req, net.JoinHostPort(host, port)); exist {
+		if _, exist := lookupAvailableHostPort(req, net.JoinHostPort(host, port)); exist {
 			if !strings.EqualFold(req.Method, "Connect") {
 				attrs["CRLF"] = "CRLF"
 			}

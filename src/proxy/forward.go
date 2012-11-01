@@ -52,13 +52,13 @@ func (conn *ForwardConnection) Close() error {
 }
 
 func createDirectForwardConn(hostport string) (net.Conn, error) {
-	addr, _ := lookupReachableAddress(hostport)
+	addr, _ := lookupAvailableAddress(hostport)
 	conn, err := net.DialTimeout("tcp", addr, 2*time.Second)
 	if nil != err {
 		conn, err = net.DialTimeout("tcp", addr, 4*time.Second)
 	}
 	if nil != err {
-		expireBlockVerifyCache(addr)
+		setDNSCacheBlocked(hostport, addr)
 	}
 	return conn, err
 }
@@ -66,14 +66,14 @@ func createDirectForwardConn(hostport string) (net.Conn, error) {
 func (conn *ForwardConnection) dialRemote(addr string, lookup_trusted_dns bool) (net.Conn, error) {
 	timeout := 5 * time.Second
 	if lookup_trusted_dns {
-		addr, _ = lookupReachableAddress(addr)
+		addr, _ = lookupAvailableAddress(addr)
 	} else {
-		if tmp, exist := getReachableDNSResult(addr); exist && len(tmp.IP) > 0 {
-			if len(tmp.IP) > 0 {
+		if ip, v, exist := getDNSCacheIP(addr); exist {
+			if len(ip) > 0 {
 				_, port, _ := net.SplitHostPort(addr)
-				addr = net.JoinHostPort(tmp.IP[0], port)
-				conn.manager.inject_crlf = tmp.InjectCRLF
-				if !tmp.InjectCRLF {
+				addr = net.JoinHostPort(ip, port)
+				conn.manager.inject_crlf = v.InjectCRLF
+				if v.InjectCRLF {
 					conn.try_inject_crlf = true
 				}
 			} else {
@@ -83,7 +83,7 @@ func (conn *ForwardConnection) dialRemote(addr string, lookup_trusted_dns bool) 
 	}
 	c, err := net.DialTimeout("tcp", addr, timeout)
 	if nil != err && !lookup_trusted_dns {
-		if tmp, success := lookupReachableAddress(addr); success {
+		if tmp, success := lookupAvailableAddress(addr); success {
 			conn.try_inject_crlf = true
 			c, err = net.DialTimeout("tcp", tmp, timeout)
 		}
@@ -99,10 +99,8 @@ func (conn *ForwardConnection) initForwardConn(proxyAddr string, isHttps bool) e
 	if nil != conn.forward_conn && conn.proxyAddr == proxyAddr {
 		return nil
 	}
-
 	conn.Close()
 	var err error
-	//log.Printf("#####Target is %s, addrs is %s\n", conn.manager.target, proxyAddr)
 	conn.conn_url, err = url.Parse(conn.manager.target)
 	if nil != err {
 		return err
@@ -111,7 +109,7 @@ func (conn *ForwardConnection) initForwardConn(proxyAddr string, isHttps bool) e
 	addr := conn.conn_url.Host
 	lookup_trusted_dns := false
 	if !conn.manager.overProxy {
-		if isHttps || conn.manager.inject_crlf {
+		if isHttps || (conn.manager.inject_crlf || conn.try_inject_crlf) {
 			lookup_trusted_dns = true
 		}
 	}
@@ -272,7 +270,7 @@ func (auto *ForwardConnection) rangeFetchWorker(req *http.Request, hash uint32, 
 	var buf bytes.Buffer
 	req.Write(&buf)
 	clonereq, _ := http.ReadRequest(bufio.NewReader(&buf))
-	rawaddr, _ := lookupReachableAddress(net.JoinHostPort(req.Host, "80"))
+	rawaddr, _ := lookupAvailableAddress(net.JoinHostPort(req.Host, "80"))
 	if auto.range_fetch_raw_addr != rawaddr {
 		if common.DebugEnable {
 			log.Printf("##########Session[%d:%d]addr is %s-%s %p\n", hash, index, auto.range_fetch_raw_addr, rawaddr, auto)
@@ -317,11 +315,12 @@ func (auto *ForwardConnection) rangeFetchWorker(req *http.Request, hash uint32, 
 		retry_count = retry_count + 1
 		close_func()
 	}
+	close_func()
 	for startpos < limit-1 && !auto.closed && retry_count <= retry_limit {
 		if auto.range_fetch_error != nil {
 			break
 		}
-		close_func()
+		//close_func()
 		if startpos-auto.range_expected_pos >= 1024*1024 {
 			time.Sleep(500 * time.Millisecond)
 			close_func()
@@ -402,6 +401,7 @@ func (auto *ForwardConnection) Request(conn *SessionConnection, ev event.Event) 
 		auto.forwardChan <- int(n)
 	}
 	auto.closed = false
+L:
 	switch ev.GetType() {
 	case event.HTTP_REQUEST_EVENT_TYPE:
 		req := ev.(*event.HTTPRequestEvent)
@@ -415,7 +415,7 @@ func (auto *ForwardConnection) Request(conn *SessionConnection, ev event.Event) 
 		}
 		err = auto.initForwardConn(addr, conn.Type == HTTPS_TUNNEL)
 		if nil != err {
-			log.Printf("Failed to connect forward proxy .\n")
+			log.Printf("Failed to connect forward address for %s.\n", addr)
 			return err, nil
 		}
 		if auto.try_inject_crlf {
@@ -472,13 +472,18 @@ func (auto *ForwardConnection) Request(conn *SessionConnection, ev event.Event) 
 				log.Printf("Session[%d]Send request \n%s\n", ev.GetHash(), tmp.String())
 			}
 			resp, err := http.ReadResponse(auto.buf_forward_conn, req.RawReq)
+			if nil != err && (!auto.manager.inject_crlf && !auto.try_inject_crlf) {
+			    auto.try_inject_crlf = true
+			    auto.Close()
+				goto L
+			}
 			if err != nil {
 				log.Printf("Session[%d]Recv response with error %v\n", ev.GetHash(), err)
 				return err, nil
 			}
 
 			if auto.try_inject_crlf {
-				setDNSResultCRLFAttr(addr)
+				setDNSCacheCRLFAttr(addr)
 			}
 
 			responsed := false

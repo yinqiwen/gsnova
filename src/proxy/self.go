@@ -112,9 +112,8 @@ func statHandler(w http.ResponseWriter, req *http.Request) {
 	var stat runtime.MemStats
 	runtime.ReadMemStats(&stat)
 	var buf bytes.Buffer
-	buf.WriteString(fmt.Sprintf("HostPortBlockVerifyResultSize: %d\n", len(blockVerifyResult)))
 	buf.WriteString(fmt.Sprintf("HostMappingSize: %d\n", len(hostMapping)))
-	buf.WriteString(fmt.Sprintf("ReachableDNSResultSize: %d\n", len(reachableDNSResult)))
+	buf.WriteString(fmt.Sprintf("DNSCacheSize: %d\n", len(dnsCache)))
 	buf.WriteString(fmt.Sprintf("NumGoroutine: %d\n", runtime.NumGoroutine()))
 	buf.WriteString(fmt.Sprintf("GOMAXPROCS: %d\n", runtime.GOMAXPROCS(runtime.NumCPU())))
 	if content, err := json.MarshalIndent(&stat, "", " "); nil == err {
