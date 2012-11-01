@@ -326,6 +326,31 @@ func fetchCloudSpacScript(url string) {
 	}
 }
 
+func loadIPRangeFile(ipRepo string) {
+	if len(ipRepo) == 0 {
+		return
+	}
+	time.Sleep(5 * time.Second)
+	hf := common.Home + "spac/" + "iprange.zip"
+	_, err := os.Stat(hf)
+	if nil != err {
+	    var zero time.Time
+		body, _, err := util.FetchLateastContent(ipRepo, common.ProxyPort,zero, true)
+		if err != nil {
+			log.Printf("Failed to fetch ip range file from %s for reason:%v\n", ipRepo, err)
+			return
+		} else {
+			err = ioutil.WriteFile(hf, body, 0755)
+			if nil != err {
+				log.Printf("Failed to manipulate ip range file for reason:%v\n", err)
+				return
+			}
+		}
+		log.Printf("Fetch ip range file success.\n")
+	}
+	init_iprange_func(hf)
+}
+
 func generatePACFromGFWList(url string) {
 	time.Sleep(5 * time.Second)
 	log.Printf("Generate PAC from  gfwlist %s\n", url)
@@ -387,6 +412,9 @@ func InitSpac() {
 
 	if addr, exist := common.Cfg.GetProperty("SPAC", "CloudRule"); exist {
 		go fetchCloudSpacScript(addr)
+	}
+	if url, exist := common.Cfg.GetProperty("Hosts", "IPRangeRepo"); exist {
+		go loadIPRangeFile(strings.TrimSpace(url))
 	}
 
 	//user script has higher priority

@@ -58,31 +58,6 @@ var hostRangeFetchLimitSize = uint32(256000)
 var hostInjectRangePatterns = []*regexp.Regexp{}
 var hostRangeConcurrentFether = uint32(5)
 
-func loadIPRangeFile(ipRepo string) {
-	if len(ipRepo) == 0 {
-		return
-	}
-	time.Sleep(5 * time.Second)
-	hf := common.Home + "hosts/" + "iprange.zip"
-	_, err := os.Stat(hf)
-	if nil != err {
-	    var zero time.Time
-		body, _, err := util.FetchLateastContent(ipRepo, common.ProxyPort,zero, true)
-		if err != nil {
-			log.Printf("Failed to fetch ip range file from %s for reason:%v\n", ipRepo, err)
-			return
-		} else {
-			err = ioutil.WriteFile(hf, body, 0755)
-			if nil != err {
-				log.Printf("Failed to manipulate ip range file for reason:%v\n", err)
-				return
-			}
-		}
-		log.Printf("Fetch ip range file success.\n")
-	}
-	init_iprange_func(hf)
-}
-
 func loadDiskHostFile() {
 	files, err := ioutil.ReadDir(common.Home + "hosts/")
 	if nil == err {
@@ -181,7 +156,6 @@ func persistDNSResult() {
 					}
 				}
 			}
-
 		}
 	}
 }
@@ -429,11 +403,7 @@ func InitHosts() error {
 		hostRangeConcurrentFether = uint32(fetcher)
 	}
 
-	//	if pattern, exist := common.Cfg.GetProperty("Hosts", "RedirectHttps"); exist {
-	//		forceHttpsHosts = initHostMatchRegex(pattern)
-	//	}
-
-	if pattern, exist := common.Cfg.GetProperty("Hosts", "ExceptHosts"); exist {
+	if pattern, exist := common.Cfg.GetProperty("Hosts", "ExceptCloudHosts"); exist {
 		exceptHosts = initHostMatchRegex(pattern)
 	}
 	if pattern, exist := common.Cfg.GetProperty("Hosts", "UseHttpDNS"); exist {
@@ -446,9 +416,7 @@ func InitHosts() error {
 	if url, exist := common.Cfg.GetProperty("Hosts", "HttpDNS"); exist {
 		httpDNS = strings.TrimSpace(url)
 	}
-	if url, exist := common.Cfg.GetProperty("Hosts", "IPRangeRepo"); exist {
-		go loadIPRangeFile(strings.TrimSpace(url))
-	}
+	
 	if len(httpDNS) > 0 || len(trustedDNS) > 0 {
 		if enable, exist := common.Cfg.GetBoolProperty("Hosts", "PersistDNSCache"); exist {
 			persistDNSCache = enable
@@ -461,7 +429,7 @@ func InitHosts() error {
 	repoUrls = make([]string, 0)
 	index := 0
 	for {
-		v, exist := common.Cfg.GetProperty("Hosts", "HostsRepo["+strconv.Itoa(index)+"]")
+		v, exist := common.Cfg.GetProperty("Hosts", "CloudHostsRepo["+strconv.Itoa(index)+"]")
 		if !exist || len(v) == 0 {
 			break
 		}

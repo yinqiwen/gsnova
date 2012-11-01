@@ -126,7 +126,7 @@ func http_remote_loop(remote string, index int) {
 				log.Printf("Unexpected response %s for %s\n", resp.Status, remote)
 				continue
 			}
-			
+
 			// write http response response to conn
 			//io.Copy(conn, resp.Body)
 			if resp.ContentLength > 0 {
