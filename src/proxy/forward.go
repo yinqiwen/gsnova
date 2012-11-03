@@ -229,9 +229,6 @@ func (auto *ForwardConnection) rangeFetch(hash uint32, resp *http.Response, req 
 	if nil == auto.range_fetch_conns {
 		auto.range_fetch_conns = make([]net.Conn, hostRangeConcurrentFether)
 	}
-	defer func() {
-		close(rangeFetchChannel)
-	}()
 	log.Printf("Session[%d]Start %d range chunk %s from %s\n", hash, hostRangeConcurrentFether, contentRange, req.Host)
 	auto.range_fetch_error = nil
 	for i := 0; i < int(hostRangeConcurrentFether); i++ {
