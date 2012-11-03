@@ -261,6 +261,10 @@ type C4HttpConnection struct {
 	manager       *C4
 }
 
+func (conn *C4HttpConnection) IsDisconnected() bool {
+   return false
+}
+
 func (c4 *C4HttpConnection) Close() error {
 	session, err := getSession(c4.lastSessionId)
 	if nil == err {

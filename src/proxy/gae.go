@@ -41,6 +41,7 @@ var singleton_gae *GAE
 var gae_cfg *GAEConfig
 var gae_enable bool
 var gae_use_shared_appid bool
+var total_gae_conn_num uint32
 
 type GAEAuth struct {
 	appid  string
@@ -80,12 +81,15 @@ type GAEHttpConnection struct {
 	client             *http.Client
 	manager            *GAE
 	proxyURL           *url.URL
-	rangeStart         int
 	tunnelChannel      chan event.Event
 	tunnel_remote_addr string
-	rangeFetchChannel  chan *rangeChunk
+	rangeStart         int
 	range_expected_pos int
 	closed             bool
+}
+
+func (conn *GAEHttpConnection) IsDisconnected() bool {
+   return false
 }
 
 func (gae *GAEHttpConnection) Close() error {
@@ -100,16 +104,13 @@ func (conn *GAEHttpConnection) GetConnectionManager() RemoteConnectionManager {
 	return conn.manager
 }
 
-func (conn *GAEHttpConnection) initHttpClient() {
-	if nil != conn.client {
-		return
-	}
-	conn.client = new(http.Client)
+func (conn *GAEHttpConnection) createHttpClient() *http.Client {
+	client := new(http.Client)
 	tlcfg := &tls.Config{}
 	tlcfg.InsecureSkipVerify = true
 
 	dial := func(n, addr string) (net.Conn, error) {
-		conn, err := net.DialTimeout(n, addr, 2*time.Second)
+		conn, err := net.DialTimeout(n, addr, 5*time.Second)
 		if err != nil {
 			return nil, err
 		}
@@ -117,7 +118,7 @@ func (conn *GAEHttpConnection) initHttpClient() {
 	}
 
 	sslDial := func(n, addr string) (net.Conn, error) {
-		conn, err := net.DialTimeout(n, addr, 2*time.Second)
+		conn, err := net.DialTimeout(n, addr, 5*time.Second)
 		if err != nil {
 			return nil, err
 		}
@@ -151,7 +152,7 @@ func (conn *GAEHttpConnection) initHttpClient() {
 			TLSClientConfig:    tlcfg,
 			DisableCompression: true,
 		}
-		conn.client.Transport = tr
+		client.Transport = tr
 	} else {
 		if mode, exist := common.Cfg.GetProperty("GAE", "ConnectionMode"); exist {
 			if strings.EqualFold(mode, MODE_HTTPS) {
@@ -163,8 +164,16 @@ func (conn *GAEHttpConnection) initHttpClient() {
 			TLSClientConfig:    tlcfg,
 			DisableCompression: true,
 		}
-		conn.client.Transport = tr
+		client.Transport = tr
 	}
+	return client
+}
+
+func (conn *GAEHttpConnection) initHttpClient() {
+	if nil != conn.client {
+		return
+	}
+	conn.client = conn.createHttpClient()
 }
 
 func (conn *GAEHttpConnection) Auth() error {
@@ -189,10 +198,9 @@ func (conn *GAEHttpConnection) Auth() error {
 	return nil
 }
 
-func (gae *GAEHttpConnection) requestEvent(conn *SessionConnection, ev event.Event) (err error, res event.Event) {
-	gae.initHttpClient()
+func (gae *GAEHttpConnection) requestEvent(client *http.Client, conn *SessionConnection, ev event.Event) (err error, res event.Event) {
+	//gae.initHttpClient()
 	auth := &gae.auth
-
 	domain := auth.appid + ".appspot.com"
 	if strings.Contains(auth.appid, ".") {
 		domain = auth.appid
@@ -239,18 +247,17 @@ func (gae *GAEHttpConnection) requestEvent(conn *SessionConnection, ev event.Eve
 	req.Header.Set("Connection", "keep-alive")
 	req.Header.Set("Content-Type", "image/jpeg")
 	var response *http.Response
-	response, err = gae.client.Do(req)
+	response, err = client.Do(req)
 	if nil != err {
 		log.Printf("Failed to request data from GAE:%s for:%s\n", domain, err.Error())
 		return err, nil
 	} else {
 		if response.StatusCode != 200 {
 			log.Printf("Session[%d]Invalid response:%d\n", ev.GetHash(), response.StatusCode)
-			return fmt.Errorf("Invalid response"), nil
+			return fmt.Errorf("Invalid response:%d", response.StatusCode), nil
 		} else {
-			//log.Printf("Response with content len:%d\n", response.ContentLength)
-			content := make([]byte, response.ContentLength)
-			n, err := io.ReadFull(response.Body, content)
+			var buf bytes.Buffer
+			n, err := io.Copy(&buf, response.Body)
 			if int64(n) < response.ContentLength {
 				return fmt.Errorf("No sufficient space in body."), nil
 			}
@@ -258,12 +265,10 @@ func (gae *GAEHttpConnection) requestEvent(conn *SessionConnection, ev event.Eve
 				return err, nil
 			}
 			response.Body.Close()
-
-			buf := bytes.NewBuffer(content[0:response.ContentLength])
-			if !tags.Decode(buf) {
+			if !tags.Decode(&buf) {
 				return fmt.Errorf("Failed to decode event tag"), nil
 			}
-			err, res = event.DecodeEvent(buf)
+			err, res = event.DecodeEvent(&buf)
 			if nil == err {
 				res = event.ExtractEvent(res)
 			}
@@ -274,11 +279,12 @@ func (gae *GAEHttpConnection) requestEvent(conn *SessionConnection, ev event.Eve
 	return nil, nil
 }
 
-func (gae *GAEHttpConnection) rangeFetch(req *event.HTTPRequestEvent, index, startpos, limit int) {
+func (gae *GAEHttpConnection) rangeFetch(req *event.HTTPRequestEvent, index, startpos, limit int, ch chan *rangeChunk) {
 	clonereq := req.DeepClone()
+	client := gae.createHttpClient()
 	for startpos < limit-1 && !gae.closed {
-		if startpos-gae.range_expected_pos >= 1024*1024 {
-			time.Sleep(500 * time.Millisecond)
+		if startpos-gae.range_expected_pos >= 2*1024*1024 {
+			time.Sleep(10 * time.Millisecond)
 			continue
 		}
 		endpos := startpos + int(gae_cfg.FetchLimitSize) - 1
@@ -286,11 +292,12 @@ func (gae *GAEHttpConnection) rangeFetch(req *event.HTTPRequestEvent, index, sta
 			endpos = limit
 		}
 		log.Printf("Session[%d]Fetch[%d] range chunk[%d:%d-%d]from %s", req.GetHash(), index, startpos, endpos, limit, clonereq.Url)
-		clonereq.SetHeader("Range", fmt.Sprintf("bytes=%d-%d", startpos, endpos))
-		err, rangeres := gae.requestEvent(nil, clonereq)
+		rangeHeader := fmt.Sprintf("bytes=%d-%d", startpos, endpos)
+		clonereq.SetHeader("Range", rangeHeader)
+		err, rangeres := gae.requestEvent(client, nil, clonereq)
 		//try again
 		if nil != err {
-			err, rangeres = gae.requestEvent(nil, clonereq)
+			err, rangeres = gae.requestEvent(client, nil, clonereq)
 		}
 		if nil != err {
 			log.Printf("Failed to fetch range chunk[%d:%d-%d] from %s for reason:%v", startpos, endpos, limit, clonereq.Url, err)
@@ -307,10 +314,10 @@ func (gae *GAEHttpConnection) rangeFetch(req *event.HTTPRequestEvent, index, sta
 			xrange := rangeHttpRes.GetHeader("X-Range")
 			if len(location) > 0 && len(xrange) > 0 {
 				clonereq.Url = location
-				clonereq.SetHeader("Range", xrange)
-				err, rangeres = gae.requestEvent(nil, clonereq)
+				clonereq.SetHeader("Range", rangeHeader)
+				err, rangeres = gae.requestEvent(client, nil, clonereq)
 				if nil != err {
-					err, rangeres = gae.requestEvent(nil, clonereq)
+					err, rangeres = gae.requestEvent(client, nil, clonereq)
 				}
 				if nil != err {
 					log.Printf("Failed to fetch range chunk[%s] from %s for reason:%v", xrange, clonereq.Url, err)
@@ -326,7 +333,9 @@ func (gae *GAEHttpConnection) rangeFetch(req *event.HTTPRequestEvent, index, sta
 		chunk := &rangeChunk{}
 		chunk.start = startpos
 		chunk.content = rangeHttpRes.Content.Bytes()
-		gae.rangeFetchChannel <- chunk
+		rangeHttpRes.Content.Reset()
+		rangeHttpRes = nil
+		ch <- chunk
 		startpos = startpos + int(gae_cfg.FetchLimitSize*gae_cfg.ConcurrentRangeFetcher)
 	}
 	//end
@@ -335,7 +344,76 @@ func (gae *GAEHttpConnection) rangeFetch(req *event.HTTPRequestEvent, index, sta
 	} else {
 		log.Printf("Session[%d]Fetch[%d] close abnormally", req.GetHash(), index)
 	}
-	gae.rangeFetchChannel <- &rangeChunk{start: -1}
+	ch <- &rangeChunk{start: -1}
+}
+
+func (gae *GAEHttpConnection) concurrentRrangeFetch(req *event.HTTPRequestEvent, httpres *http.Response, limit, endpos int) {
+	rangeFetchChannel := make(chan *rangeChunk)
+	for i := 0; i < int(gae_cfg.ConcurrentRangeFetcher); i++ {
+		go gae.rangeFetch(req, i, endpos+1+i*int(gae_cfg.FetchLimitSize), limit, rangeFetchChannel)
+	}
+	//write response after launch goroutines
+	httpres.Write(gae.sess.LocalRawConn)
+	responsedChunks := make(map[int]*rangeChunk)
+	stopedWorker := uint32(0)
+	gae.range_expected_pos = endpos + 1
+
+	try_write_chunk := func(chunk *rangeChunk) (bool, error) {
+		if chunk.start == gae.range_expected_pos {
+			_, err := gae.sess.LocalRawConn.Write(chunk.content)
+			if nil != err {
+				log.Printf("????????????????????????????%v\n", err)
+				gae.sess.LocalRawConn.Close()
+				gae.Close()
+			}
+			gae.range_expected_pos = gae.range_expected_pos + len(chunk.content)
+			return true, err
+		}
+		return false, nil
+	}
+
+	for {
+		select {
+		case chunk := <-rangeFetchChannel:
+			if nil != chunk {
+				if chunk.start < 0 {
+					stopedWorker = stopedWorker + 1
+				} else {
+					if success, err := try_write_chunk(chunk); nil != err {
+						break
+					} else if !success {
+						responsedChunks[chunk.start] = chunk
+						log.Printf("Session[%d]recv chunk:%d, expected chunk:%d", req.GetHash(), chunk.start, gae.range_expected_pos)
+					}
+				}
+				chunk = nil
+			}
+			for {
+				if chunk, exist := responsedChunks[gae.range_expected_pos]; exist {
+					_, err := gae.sess.LocalRawConn.Write(chunk.content)
+					delete(responsedChunks, chunk.start)
+					if nil != err {
+						log.Printf("????????????????????????????%v\n", err)
+						gae.sess.LocalRawConn.Close()
+						gae.Close()
+						//return err
+					} else {
+						gae.range_expected_pos = gae.range_expected_pos + len(chunk.content)
+					}
+					chunk = nil
+				} else {
+					break
+				}
+			}
+		}
+		if stopedWorker >= gae_cfg.ConcurrentRangeFetcher {
+			if len(responsedChunks) > 0 {
+				log.Printf("Session[%d]Rest %d unwrite chunks.\n", req.GetHash(), len(responsedChunks))
+			}
+			break
+		}
+	}
+	log.Printf("Session[%d]Exit concurrent range fetch.\n", req.GetHash())
 }
 
 func (gae *GAEHttpConnection) handleHttpRes(conn *SessionConnection, req *event.HTTPRequestEvent, ev *event.HTTPResponseEvent, rangeHeader string) (*http.Response, error) {
@@ -344,7 +422,7 @@ func (gae *GAEHttpConnection) handleHttpRes(conn *SessionConnection, req *event.
 	limit := 0
 	if len(contentRange) > 0 {
 		httpres.Header.Del("Content-Range")
-		_, endpos, length := util.ParseContentRangeHeaderValue(contentRange)
+		startpos, endpos, length := util.ParseContentRangeHeaderValue(contentRange)
 		limit = length - 1
 		if httpres.StatusCode < 300 {
 			if len(rangeHeader) == 0 {
@@ -368,50 +446,48 @@ func (gae *GAEHttpConnection) handleHttpRes(conn *SessionConnection, req *event.
 			return httpres, nil
 		}
 		if endpos < limit {
-			if nil == gae.rangeFetchChannel {
-				gae.rangeFetchChannel = make(chan *rangeChunk, 10)
-			}
-			for i := 0; i < int(gae_cfg.ConcurrentRangeFetcher); i++ {
-				go gae.rangeFetch(req, i, endpos+1+i*int(gae_cfg.FetchLimitSize), limit)
-			}
-			//write response after launch goroutines
-			httpres.Write(conn.LocalRawConn)
-			responsedChunks := make(map[int]*rangeChunk)
-			stopedWorker := uint32(0)
-			gae.range_expected_pos = endpos + 1
-			for {
-				select {
-				case chunk := <-gae.rangeFetchChannel:
-					if nil != chunk {
-						if chunk.start < 0 {
-							stopedWorker = stopedWorker + 1
-						} else {
-							responsedChunks[chunk.start] = chunk
-						}
+			if gae_cfg.ConcurrentRangeFetcher > 1 {
+				gae.concurrentRrangeFetch(req, httpres, limit, endpos)
+			} else {
+				httpres.Write(conn.LocalRawConn)
+				for endpos < length-1 {
+					startpos = endpos + 1
+					endpos = endpos + int(gae_cfg.FetchLimitSize)
+					if endpos >= length-1 {
+						endpos = length - 1
 					}
-					for {
-						if chunk, exist := responsedChunks[gae.range_expected_pos]; exist {
-							_, err := conn.LocalRawConn.Write(chunk.content)
-							delete(responsedChunks, gae.range_expected_pos)
+					rangeHeader := fmt.Sprintf("bytes=%d-%d", startpos, endpos)
+					req.SetHeader("Range", rangeHeader)
+					err, rangeres := gae.requestEvent(gae.client, nil, req)
+					//try again
+					if nil != err {
+						err, rangeres = gae.requestEvent(gae.client, nil, req)
+					}
+					if nil != err {
+						return httpres, err
+					}
+					rangeHttpRes := rangeres.(*event.HTTPResponseEvent)
+					if rangeHttpRes.Status == 302 {
+						location := rangeHttpRes.GetHeader("Location")
+						xrange := rangeHttpRes.GetHeader("X-Range")
+						log.Printf("########Session[%d]X-Range=%s, Location= %s\n", req.GetHash(), xrange, location)
+						if len(location) > 0 && len(xrange) > 0 {
+							req.Url = location
+							req.SetHeader("Range", rangeHeader)
+							err, rangeres = gae.requestEvent(gae.client, nil, req)
 							if nil != err {
-								log.Printf("????????????????????????????%v\n", err)
-								conn.LocalRawConn.Close()
-								gae.Close()
-								//return err
-							} else {
-								gae.range_expected_pos = gae.range_expected_pos + len(chunk.content)
+								err, rangeres = gae.requestEvent(gae.client, nil, req)
 							}
-
-						} else {
-							break
+							if nil != err {
+								return httpres, err
+							}
 						}
 					}
-
-					if stopedWorker >= gae_cfg.ConcurrentRangeFetcher {
-						if len(responsedChunks) > 0 {
-							log.Printf("Session[%d]Rest %d unwrite chunks.\n", req.GetHash(), len(responsedChunks))
-						}
-						break
+					_, err = conn.LocalRawConn.Write(rangeres.(*event.HTTPResponseEvent).Content.Bytes())
+					rangeres.(*event.HTTPResponseEvent).Content.Reset()
+					rangeres = nil
+					if nil != err {
+						return httpres, err
 					}
 				}
 			}
@@ -428,6 +504,7 @@ func (gae *GAEHttpConnection) Request(conn *SessionConnection, ev event.Event) (
 	if gae.over_tunnel {
 		return gae.requestOverTunnel(conn, ev)
 	}
+	gae.initHttpClient()
 	if ev.GetType() == event.HTTP_REQUEST_EVENT_TYPE {
 		httpreq := ev.(*event.HTTPRequestEvent)
 		if strings.EqualFold(httpreq.Method, "CONNECT") {
@@ -448,6 +525,7 @@ func (gae *GAEHttpConnection) Request(conn *SessionConnection, ev event.Event) (
 			conn.Type = HTTPS_TUNNEL
 			return nil, nil
 		} else {
+
 			if httpreq.Content.Len() == 0 {
 				body := make([]byte, httpreq.RawReq.ContentLength)
 				io.ReadFull(httpreq.RawReq.Body, body)
@@ -478,7 +556,7 @@ func (gae *GAEHttpConnection) Request(conn *SessionConnection, ev event.Event) (
 			log.Printf("Session[%d]Request %s\n", httpreq.GetHash(), util.GetURLString(httpreq.RawReq, true))
 			//httpreq.SetHeader("Connection", "Close")
 			httpreq.RemoveHeader("Proxy-Connection")
-			err, res = gae.requestEvent(conn, ev)
+			err, res = gae.requestEvent(gae.client, conn, ev)
 			if nil != err {
 				return
 			}
@@ -486,11 +564,10 @@ func (gae *GAEHttpConnection) Request(conn *SessionConnection, ev event.Event) (
 			httpresev := res.(*event.HTTPResponseEvent)
 			if httpresev.Status == 403 {
 				log.Printf("ERROR:Session[%d]Request %s %s is forbidon\n", httpreq.GetHash(), httpreq.Method, httpreq.RawReq.Host)
-				log.Printf("ERROR:Session[%d]Refer : %s\n", httpreq.GetHash(), httpreq.RawReq.Referer())
 			}
 			httpres, err := gae.handleHttpRes(conn, httpreq, httpresev, rangeHeader)
 			//if !httpres.IsKeepAlive(){
-			if conn.Type == HTTPS_TUNNEL || !util.IsResponseKeepAlive(httpres) || !util.IsRequestKeepAlive(httpreq.RawReq) {
+			if nil != err || !util.IsResponseKeepAlive(httpres) || !util.IsRequestKeepAlive(httpreq.RawReq) {
 				conn.LocalRawConn.Close()
 				conn.State = STATE_SESSION_CLOSE
 			}
@@ -498,7 +575,7 @@ func (gae *GAEHttpConnection) Request(conn *SessionConnection, ev event.Event) (
 			return err, nil
 		}
 	}
-	return gae.requestEvent(conn, ev)
+	return gae.requestEvent(gae.client, conn, ev)
 }
 
 type GAE struct {
@@ -536,6 +613,7 @@ func (manager *GAE) RecycleRemoteConnection(conn RemoteConnection) {
 	default:
 		// Free list full, just carry on.
 	}
+	total_gae_conn_num = total_gae_conn_num - 1
 }
 
 func (manager *GAE) GetRemoteConnection(ev event.Event, attrs map[string]string) (RemoteConnection, error) {
@@ -558,6 +636,7 @@ func (manager *GAE) GetRemoteConnection(ev event.Event, attrs map[string]string)
 	} else {
 		b.(*GAEHttpConnection).over_tunnel = false
 	}
+	total_gae_conn_num = total_gae_conn_num + 1
 	return b, nil
 }
 
@@ -678,6 +757,7 @@ func (manager *GAE) Init() error {
 	for _, au := range manager.auths.ArrayValues() {
 		auth := au.(*GAEAuth)
 		conn := new(GAEHttpConnection)
+
 		conn.auth = *auth
 		conn.manager = manager
 		err := conn.Auth()
@@ -693,6 +773,7 @@ func (manager *GAE) Init() error {
 		}
 		auth.token = conn.authToken
 		conn.auth.token = conn.authToken
+		total_gae_conn_num = total_gae_conn_num + 1
 		manager.RecycleRemoteConnection(conn)
 	}
 	return nil

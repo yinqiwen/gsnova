@@ -81,4 +81,5 @@ func Init() {
 	RegistEvent(&UserLoginEvent{})
 	RegistEvent(&RSocketAcceptedEvent{})
 	RegistEvent(&AdminResponseEvent{})
+	RegistEvent(&RequestAppIDEvent{})
 }

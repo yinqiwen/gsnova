@@ -140,6 +140,11 @@ func (conn *SSHConnection) Request(sess *SessionConnection, ev event.Event) (err
 func (conn *SSHConnection) GetConnectionManager() RemoteConnectionManager {
 	return conn.manager
 }
+
+func (conn *SSHConnection) IsDisconnected() bool {
+   return false
+}
+
 func (conn *SSHConnection) Close() error {
 	if nil != conn.proxy_conn {
 		conn.proxy_conn.Close()

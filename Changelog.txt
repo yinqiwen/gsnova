@@ -1,13 +1,13 @@
 GSnova Changelog
 ===================
-Changes in version 0.17.3(2012.10.23)
+Changes in version 0.18.1(2012.11.03)
 -------------------------------------------
 ** Features
-   * [SPAC]:Set 'Default' Proxy to 'Auto'.
-   * [Hosts]:Record 'CRLF' attribute in DNS cache for the sites DNS poisoned.
+   * Add socks support for default listening port '48100'
    
 ** Improvement
-   * 
+   * Bug fix
+   * Replace CRLF chars
 
 Changes in version 0.17.2(2012.10.23)
 -------------------------------------------

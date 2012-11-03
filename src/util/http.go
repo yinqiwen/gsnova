@@ -6,7 +6,6 @@ import (
 	"errors"
 	"io"
 	"io/ioutil"
-	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -53,7 +52,7 @@ func FetchLateastContent(urlstr string, proxy_port string, cmp time.Time, force 
 			t, err := time.Parse(time.RFC1123, last_mod_date)
 			if nil == err && t.Before(cmp) {
 				resp.Body.Close()
-				log.Printf("###########%v, %v for %s\n", t, cmp, urlstr)
+				//log.Printf("###########%v, %v for %s\n", t, cmp, urlstr)
 				return []byte{}, last_mod_date, nil
 			}
 		}

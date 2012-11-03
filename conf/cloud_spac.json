@@ -1,8 +1,7 @@
 [
   {
     "URL": ["*.google.*/imgres*"],
-    "Proxy":  ["Direct", "Default"],
-    "Attr":  ["CRLF"]
+    "Proxy": ["Default"]
   },
   {
     "Host" : ["*.ytimg.com*", "*.google.com(.*)?","*.googleusercontent.com*", "*.gstatic.com", "*.googleapis.com*", "*.googlecode.com"],
@@ -13,9 +12,8 @@
     "Proxy":["GoogleHttps", "Direct", "Default"]
   },
   {
-    "Host" : ["*.c.youtube.com", "*.golang.org"],
-    "Proxy": ["Direct", "Default"],
-    "Attr":  ["CRLF"]
+    "Host" : ["*.golang.org"],
+    "Proxy": ["Direct"]
   },
   {
     "Host" : ["*.blogspot.*", "*.appspot.com", "golang.org"],
@@ -30,6 +28,11 @@
     "Protocol" : "http",
     "Host": ["twitter.com", "facebook.com"],
     "Attr":  ["RedirectHttps"]
+  },
+  {
+    "Protocol" : "https",
+    "Host": ["twitter.com"],
+    "Proxy": ["Default"]
   },
   {
     "Filter" : ["!IsBlockedByGFW"],

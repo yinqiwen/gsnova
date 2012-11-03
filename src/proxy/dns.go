@@ -2,10 +2,6 @@ package proxy
 
 import (
 	"github.com/yinqiwen/godns"
-	//	"common"
-	//	"encoding/json"
-	//	"io"
-	//	"os"
 	"net"
 	"sync"
 	"time"
@@ -64,12 +60,10 @@ func setDNSCacheBlocked(domainport, hostport string) {
 
 func isTCPAddressBlocked(domain, ip, port string) bool {
 	addr := net.JoinHostPort(ip, port)
-	//start := time.Now().UnixNano()
 	c, err := net.DialTimeout("tcp", addr, time.Duration(blockVerifyTimeout)*time.Second)
 	if nil != err {
 		return true
 	}
-	//end := time.Now().UnixNano()
 	c.Close()
 	return false
 }

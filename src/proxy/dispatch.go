@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"misc/socks"
 	"net"
 	"net/http"
 	"strings"
@@ -31,7 +32,7 @@ const (
 	GOOGLE_HTTPS_DIRECT_NAME = "GoogleHttpsDirect"
 	FORWARD_NAME             = "Forward"
 	SSH_NAME                 = "SSH"
-	AUTO_NAME                 = "Auto"
+	AUTO_NAME                = "Auto"
 	DIRECT_NAME              = "Direct"
 	DEFAULT_NAME             = "Default"
 
@@ -46,9 +47,12 @@ const (
 	MODE_XMPP    = "xmpp"
 )
 
+var total_proxy_conn_num uint32
+
 type RemoteConnection interface {
 	Request(conn *SessionConnection, ev event.Event) (err error, res event.Event)
 	GetConnectionManager() RemoteConnectionManager
+	IsDisconnected() bool
 	Close() error
 }
 
@@ -154,13 +158,31 @@ func (session *SessionConnection) process() error {
 		session.State = STATE_SESSION_CLOSE
 	}
 
+	readRequest := func() (*http.Request, error) {
+		var zero time.Time
+		for {
+			session.LocalRawConn.SetReadDeadline(time.Now().Add(1 * time.Second))
+			if _, err := session.LocalBufferConn.Peek(1); nil == err {
+				session.LocalRawConn.SetReadDeadline(zero)
+				req, e := http.ReadRequest(session.LocalBufferConn)
+				return req, e
+			} else {
+				if neterr, ok := err.(net.Error); ok && neterr.Timeout() {
+					if nil != session.RemoteConn && session.RemoteConn.IsDisconnected() {
+						return nil, io.EOF
+					}
+					continue
+				}
+				return nil, err
+			}
+		}
+		return nil, nil
+	}
+
 	switch session.State {
 	case STATE_RECV_HTTP:
-		session.LocalRawConn.SetReadDeadline(time.Now().Add(common.KeepAliveTimeout * time.Second))
-		req, err := http.ReadRequest(session.LocalBufferConn)
+		req, err := readRequest()
 		if nil == err {
-			var zero time.Time
-			session.LocalRawConn.SetReadDeadline(zero)
 			var rev event.HTTPRequestEvent
 			rev.FromRequest(req)
 			rev.SetHash(session.SessionID)
@@ -168,10 +190,10 @@ func (session *SessionConnection) process() error {
 		}
 		if nil != err {
 			operr, ok := err.(*net.OpError)
-			if err != io.EOF || (ok && (operr.Timeout() || operr.Temporary())) {
+			if ok && (operr.Timeout() || operr.Temporary()) {
 				err = nil
 			}
-			if err != nil {
+			if err != nil && err != io.EOF {
 				log.Printf("Session[%d]Failed to read http request:%v\n", session.SessionID, err)
 			}
 			close_session()
@@ -201,9 +223,31 @@ func (session *SessionConnection) process() error {
 	return nil
 }
 
+type ForwardSocksDialer struct {
+}
+
+func (f *ForwardSocksDialer) DialTCP(n string, laddr *net.TCPAddr, raddr string) (net.Conn, error) {
+	conn, err := net.Dial("tcp", net.JoinHostPort("127.0.0.1", common.ProxyPort))
+	if nil == err {
+		_, port, _ := net.SplitHostPort(raddr)
+		if port != "80" {
+			//log.Printf("##########Socks Connect remote:%s\n", raddr)
+			req := fmt.Sprintf("CONNECT %s HTTP/1.1\r\nHost: %s\r\nProxy-Connection: Keep-Alive\r\n\r\n", raddr, raddr)
+			conn.Write([]byte(req))
+			tmp := make([]byte, 1024)
+			conn.Read(tmp)
+		}
+	}
+	return conn, err
+}
+
 func HandleConn(sessionId uint32, conn net.Conn) {
+	total_proxy_conn_num = total_proxy_conn_num + 1
+	defer func() {
+		total_proxy_conn_num = total_proxy_conn_num - 1
+	}()
 	bufreader := bufio.NewReader(conn)
-	b, err := bufreader.Peek(7)
+	b, err := bufreader.Peek(1)
 	if nil != err {
 		if err != io.EOF {
 			log.Printf("Failed to peek data:%s\n", err.Error())
@@ -211,18 +255,29 @@ func HandleConn(sessionId uint32, conn net.Conn) {
 		conn.Close()
 		return
 	}
+	if b[0] == byte(4) || b[0] == byte(5) {
+		socks.ServConn(bufreader, conn.(*net.TCPConn), &ForwardSocksDialer{})
+		return
+	}
+	b, err = bufreader.Peek(7)
+	if nil != err {
+		if err != io.EOF {
+			log.Printf("Failed to peek data:%s\n", err.Error())
+		}
+		conn.Close()
+		return
+	}
+
 	session := newSessionConnection(sessionId, conn, bufreader)
 	if strings.EqualFold(string(b), "Connect") {
 		session.Type = HTTPS_TUNNEL
-	} else if b[0] == byte(4) || b[0] == byte(5) {
-		session.Type = SOCKS_TUNNEL
 	} else {
 		session.Type = HTTP_TUNNEL
 	}
 	for session.State != STATE_SESSION_CLOSE {
 		err := session.process()
 		if nil != err {
-			return
+			break
 		}
 	}
 	if nil != session.RemoteConn {

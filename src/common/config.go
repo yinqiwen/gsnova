@@ -4,7 +4,7 @@ import (
 	"log"
 	"net"
 	"net/url"
-	"time"
+//	"time"
 	"util"
 )
 
@@ -23,9 +23,9 @@ func InitConfig() error {
 		}
 	}
 
-	if timeout, exist := Cfg.GetIntProperty("LocalServer", "KeepAliveTimeout"); exist {
-		KeepAliveTimeout = time.Duration(timeout)
-	}
+//	if timeout, exist := Cfg.GetIntProperty("LocalServer", "KeepAliveTimeout"); exist {
+//		KeepAliveTimeout = time.Duration(timeout)
+//	}
 	if addr, exist := Cfg.GetProperty("LocalProxy", "Proxy"); exist {
 		LocalProxy, _ = url.Parse(addr)
 	}

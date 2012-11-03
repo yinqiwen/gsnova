@@ -33,6 +33,7 @@ var connTimeoutSecs time.Duration
 var httpGoogleManager *Google
 var httpsGoogleManager *Google
 var google_enable bool
+var total_google_conn_num uint32
 
 type GoogleConnection struct {
 	http_client        net.Conn
@@ -46,6 +47,22 @@ type GoogleConnection struct {
 	simple_url         bool
 }
 
+func (conn *GoogleConnection) IsDisconnected() bool {
+	if nil == conn.http_client {
+		return false
+	}
+	conn.http_client.SetReadDeadline(time.Now())
+	one := make([]byte, 1)
+	if _, err := conn.http_client.Read(one); err == io.EOF {
+		conn.Close()
+		return true
+	} else {
+		var zero time.Time
+		conn.http_client.SetReadDeadline(zero)
+	}
+	return false
+}
+
 func (conn *GoogleConnection) Close() error {
 	if nil != conn.http_client {
 		conn.http_client.Close()
@@ -57,6 +74,7 @@ func (conn *GoogleConnection) Close() error {
 	}
 	return nil
 }
+
 
 func isLocalGoogleProxy() bool {
 	proxyInfo, exist := common.Cfg.GetProperty("LocalProxy", "Proxy")
@@ -288,10 +306,12 @@ func (google *GoogleConnection) Request(conn *SessionConnection, ev event.Event)
 			log.Printf("Session[%d]Request %s\n", req.GetHash(), util.GetURLString(req.RawReq, true))
 			err := google.writeHttpRequest(req.RawReq)
 			if nil != err {
+			    google.Close()
 				return err, nil
 			}
 			resp, err := http.ReadResponse(google.http_client_reader, req.RawReq)
 			if err != nil {
+			    google.Close()
 				return err, nil
 			}
 			err = resp.Write(conn.LocalRawConn)
@@ -327,6 +347,7 @@ func (manager *Google) RecycleRemoteConnection(conn RemoteConnection) {
 	default:
 		// Free list full, just carry on.
 	}
+	total_google_conn_num = total_google_conn_num- 1
 }
 
 func (manager *Google) GetRemoteConnection(ev event.Event, attrs map[string]string) (RemoteConnection, error) {
@@ -343,12 +364,12 @@ func (manager *Google) GetRemoteConnection(ev event.Event, attrs map[string]stri
 		//b.auth = 
 	} // Read next message from the net.
 	b.Close()
-	//log.Printf("##############%v\n", attrs)
 	if containsAttr(attrs, ATTR_DIRECT) {
 		b.(*GoogleConnection).simple_url = true
 	} else {
 		b.(*GoogleConnection).simple_url = false
 	}
+	total_google_conn_num = total_google_conn_num + 1
 	return b, nil
 }
 

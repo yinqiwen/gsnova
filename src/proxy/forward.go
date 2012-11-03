@@ -18,7 +18,9 @@ import (
 	"util"
 )
 
-var inject_crlf = []byte("\r\n")
+var CRLFs = []byte("\r\r\r\r\r\r\r\n\r\r\r\r\r")
+
+var total_forwaed_conn_num uint32
 
 type ForwardConnection struct {
 	forward_conn         net.Conn
@@ -33,6 +35,22 @@ type ForwardConnection struct {
 	range_fetch_raw_addr string
 	range_expected_pos   int
 	range_fetch_error    error
+}
+
+func (conn *ForwardConnection) IsDisconnected() bool {
+	if nil == conn.forward_conn {
+		return false
+	}
+	conn.forward_conn.SetReadDeadline(time.Now())
+	one := make([]byte, 1)
+	if _, err := conn.forward_conn.Read(one); err == io.EOF {
+		conn.Close()
+		return true
+	} else {
+		var zero time.Time
+		conn.forward_conn.SetReadDeadline(zero)
+	}
+	return false
 }
 
 func (conn *ForwardConnection) Close() error {
@@ -66,7 +84,12 @@ func createDirectForwardConn(hostport string) (net.Conn, error) {
 func (conn *ForwardConnection) dialRemote(addr string, lookup_trusted_dns bool) (net.Conn, error) {
 	timeout := 5 * time.Second
 	if lookup_trusted_dns {
-		addr, _ = lookupAvailableAddress(addr)
+		if newaddr, success := lookupAvailableAddress(addr); !success {
+			return nil, fmt.Errorf("No available IP found for %s", addr)
+		} else {
+			log.Printf("Found %s for %s\n", newaddr, addr)
+			addr = newaddr
+		}
 	} else {
 		if ip, v, exist := getDNSCacheIP(addr); exist {
 			if len(ip) > 0 {
@@ -202,10 +225,13 @@ func (auto *ForwardConnection) rangeFetch(hash uint32, resp *http.Response, req 
 		log.Printf("Session[%d]Range resonse is %s\n", hash, tmp.String())
 	}
 
-	rangeFetchChannel := make(chan *rangeChunk, 10)
+	rangeFetchChannel := make(chan *rangeChunk)
 	if nil == auto.range_fetch_conns {
 		auto.range_fetch_conns = make([]net.Conn, hostRangeConcurrentFether)
 	}
+	defer func() {
+		close(rangeFetchChannel)
+	}()
 	log.Printf("Session[%d]Start %d range chunk %s from %s\n", hash, hostRangeConcurrentFether, contentRange, req.Host)
 	auto.range_fetch_error = nil
 	for i := 0; i < int(hostRangeConcurrentFether); i++ {
@@ -245,7 +271,6 @@ func (auto *ForwardConnection) rangeFetch(hash uint32, resp *http.Response, req 
 				if nil != err {
 					log.Printf("????????????????????????????%v\n", err)
 					auto.Close()
-					//return err
 				} else {
 					auto.range_expected_pos = auto.range_expected_pos + len(chunk.content)
 				}
@@ -320,9 +345,9 @@ func (auto *ForwardConnection) rangeFetchWorker(req *http.Request, hash uint32, 
 		if auto.range_fetch_error != nil {
 			break
 		}
-		//close_func()
-		if startpos-auto.range_expected_pos >= 1024*1024 {
-			time.Sleep(500 * time.Millisecond)
+		close_func()
+		if startpos-auto.range_expected_pos >= 2*1024*1024 {
+			time.Sleep(10 * time.Millisecond)
 			close_func()
 			continue
 		}
@@ -338,7 +363,7 @@ func (auto *ForwardConnection) rangeFetchWorker(req *http.Request, hash uint32, 
 		}
 		clonereq.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", startpos, endpos))
 		if auto.manager.inject_crlf {
-			auto.range_fetch_conns[index].Write(inject_crlf)
+			auto.range_fetch_conns[index].Write(CRLFs)
 		}
 
 		err = clonereq.Write(auto.range_fetch_conns[index])
@@ -388,6 +413,7 @@ func (auto *ForwardConnection) rangeFetchWorker(req *http.Request, hash uint32, 
 	}
 	//end
 	ch <- &rangeChunk{start: -1}
+
 	return nil
 }
 
@@ -400,8 +426,8 @@ func (auto *ForwardConnection) Request(conn *SessionConnection, ev event.Event) 
 		}
 		auto.forwardChan <- int(n)
 	}
-	auto.closed = false
 L:
+	auto.closed = false
 	switch ev.GetType() {
 	case event.HTTP_REQUEST_EVENT_TYPE:
 		req := ev.(*event.HTTPRequestEvent)
@@ -438,7 +464,7 @@ L:
 			log.Printf("Session[%d]Request %s\n", req.GetHash(), util.GetURLString(req.RawReq, true))
 			if auto.manager.inject_crlf {
 				log.Printf("Session[%d]Inject CRLF for %s", ev.GetHash(), req.RawReq.Host)
-				auto.forward_conn.Write(inject_crlf)
+				auto.forward_conn.Write(CRLFs)
 			}
 			rangeInjdected := false
 			rangeHeader := req.RawReq.Header.Get("Range")
@@ -473,8 +499,8 @@ L:
 			}
 			resp, err := http.ReadResponse(auto.buf_forward_conn, req.RawReq)
 			if nil != err && (!auto.manager.inject_crlf && !auto.try_inject_crlf) {
-			    auto.try_inject_crlf = true
-			    auto.Close()
+				auto.try_inject_crlf = true
+				auto.Close()
 				goto L
 			}
 			if err != nil {
@@ -534,7 +560,7 @@ func (manager *Forward) GetArg() string {
 	return manager.target
 }
 func (manager *Forward) RecycleRemoteConnection(conn RemoteConnection) {
-
+	total_forwaed_conn_num = total_forwaed_conn_num - 1
 }
 
 func (manager *Forward) GetRemoteConnection(ev event.Event, attrs map[string]string) (RemoteConnection, error) {
@@ -544,5 +570,6 @@ func (manager *Forward) GetRemoteConnection(ev event.Event, attrs map[string]str
 	if containsAttr(attrs, ATTR_CRLF_INJECT) {
 		manager.inject_crlf = true
 	}
+	total_forwaed_conn_num = total_forwaed_conn_num + 1
 	return g, nil
 }

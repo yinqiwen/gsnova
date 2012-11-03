@@ -40,11 +40,6 @@ func InitSelfWebServer() {
 		w.Header().Set("Connection", "close")
 		http.FileServer(http.Dir(common.Home+"/web")).ServeHTTP(w, r)
 	})
-	//	http.Handle("/favicon.ico", http.FileServer(http.Dir(common.Home+"/web")))
-	//	http.Handle("/share.html", http.FileServer(http.Dir(common.Home+"/web")))
-	//	http.Handle("/css/", http.FileServer(http.Dir(common.Home+"/web")))
-	//	http.Handle("/scripts/", http.FileServer(http.Dir(common.Home+"/web")))
-	//	http.Handle("/images/", http.FileServer(http.Dir(common.Home+"/web")))
 	http.HandleFunc("/pac/gfwlist", func(w http.ResponseWriter, r *http.Request) {
 		r.URL.Path = "/spac/snova-gfwlist.pac"
 		w.Header().Set("Connection", "close")
@@ -88,7 +83,6 @@ func exitHandler(w http.ResponseWriter, req *http.Request) {
 }
 
 func shareHandler(w http.ResponseWriter, req *http.Request) {
-	//log.Printf("Request args is %v\n", req.URL.Query())
 	req.ParseForm()
 	log.Printf("Request from is %v\n", req.Form)
 	w.Header().Set("Connection", "close")
@@ -109,12 +103,17 @@ func shareHandler(w http.ResponseWriter, req *http.Request) {
 }
 
 func statHandler(w http.ResponseWriter, req *http.Request) {
+	runtime.GC()
 	var stat runtime.MemStats
 	runtime.ReadMemStats(&stat)
 	var buf bytes.Buffer
 	buf.WriteString(fmt.Sprintf("HostMappingSize: %d\n", len(hostMapping)))
 	buf.WriteString(fmt.Sprintf("DNSCacheSize: %d\n", len(dnsCache)))
 	buf.WriteString(fmt.Sprintf("NumGoroutine: %d\n", runtime.NumGoroutine()))
+	buf.WriteString(fmt.Sprintf("NumProxyConn: %d\n", total_proxy_conn_num))
+	buf.WriteString(fmt.Sprintf("NumGAEConn: %d\n", total_gae_conn_num))
+	buf.WriteString(fmt.Sprintf("NumGoogleConn: %d\n", total_google_conn_num))
+	buf.WriteString(fmt.Sprintf("NumForwardConn: %d\n", total_forwaed_conn_num))
 	buf.WriteString(fmt.Sprintf("GOMAXPROCS: %d\n", runtime.GOMAXPROCS(runtime.NumCPU())))
 	if content, err := json.MarshalIndent(&stat, "", " "); nil == err {
 		buf.Write(content)
