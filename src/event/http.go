@@ -66,7 +66,7 @@ func (req *HTTPErrorEvent) GetVersion() uint32 {
 
 type HTTPMessageEvent struct {
 	Headers []*util.NameValuePair
-	Content bytes.Buffer
+	Content *bytes.Buffer
 	EventHeader
 }
 
@@ -170,7 +170,8 @@ func (msg *HTTPMessageEvent) DoDecode(buffer *bytes.Buffer) error {
 		pair := util.NameValuePair{string(headerName), string(headerValue)}
 		msg.Headers = append(msg.Headers, &pair)
 	}
-	err = DecodeByteBufferValue(buffer, &msg.Content)
+	msg.Content = util.GetBuffer()
+	err = DecodeByteBufferValue(buffer, msg.Content)
 	if err != nil {
 		return err
 	}
@@ -217,6 +218,7 @@ func (req *HTTPRequestEvent) DeepClone() *HTTPRequestEvent {
 		nv.Value = v.Value
 		ret.HTTPMessageEvent.Headers[i] = nv
 	}
+	ret.HTTPMessageEvent.Content = util.GetBuffer()
 	ret.HTTPMessageEvent.Content.Write(req.HTTPMessageEvent.Content.Bytes())
 	return ret
 }
@@ -239,7 +241,7 @@ func (req *HTTPRequestEvent) Decode(buffer *bytes.Buffer) (err error) {
 }
 
 func (req *HTTPRequestEvent) ToRequest() *http.Request {
-	raw, err := http.NewRequest(req.Method, req.Url, &(req.Content))
+	raw, err := http.NewRequest(req.Method, req.Url, (req.Content))
 	if err != nil {
 		return nil
 	}
@@ -280,6 +282,7 @@ func (req *HTTPRequestEvent) FromRequest(raw *http.Request) {
 	//	   req.Url = scheme + raw.Host + raw.RequestURI
 	//	}
 	req.AddHeader("Host", raw.Host)
+	req.Content = util.GetBuffer()
 }
 
 func (req *HTTPRequestEvent) GetType() uint32 {
@@ -349,7 +352,7 @@ func (res *HTTPResponseEvent) ToResponse() *http.Response {
 		}
 	}
 	if raw.ContentLength > 0 {
-		raw.Body = ioutil.NopCloser(&res.Content)
+		raw.Body = ioutil.NopCloser(res.Content)
 	}
 	return raw
 }

@@ -256,8 +256,8 @@ func (gae *GAEHttpConnection) requestEvent(client *http.Client, conn *SessionCon
 			log.Printf("Session[%d]Invalid response:%d\n", ev.GetHash(), response.StatusCode)
 			return fmt.Errorf("Invalid response:%d", response.StatusCode), nil
 		} else {
-			var buf bytes.Buffer
-			n, err := io.Copy(&buf, response.Body)
+			buf := util.GetBuffer()
+			n, err := io.Copy(buf, response.Body)
 			if int64(n) < response.ContentLength {
 				return fmt.Errorf("No sufficient space in body."), nil
 			}
@@ -265,13 +265,14 @@ func (gae *GAEHttpConnection) requestEvent(client *http.Client, conn *SessionCon
 				return err, nil
 			}
 			response.Body.Close()
-			if !tags.Decode(&buf) {
+			if !tags.Decode(buf) {
 				return fmt.Errorf("Failed to decode event tag"), nil
 			}
-			err, res = event.DecodeEvent(&buf)
+			err, res = event.DecodeEvent(buf)
 			if nil == err {
 				res = event.ExtractEvent(res)
 			}
+			util.RecycleBuffer(buf)
 			return err, res
 		}
 	}
@@ -281,6 +282,7 @@ func (gae *GAEHttpConnection) requestEvent(client *http.Client, conn *SessionCon
 
 func (gae *GAEHttpConnection) rangeFetch(req *event.HTTPRequestEvent, index, startpos, limit int, ch chan *rangeChunk) {
 	clonereq := req.DeepClone()
+	defer util.RecycleBuffer(clonereq.Content)
 	client := gae.createHttpClient()
 	for startpos < limit-1 && !gae.closed {
 		if startpos-gae.range_expected_pos >= 2*1024*1024 {
@@ -332,8 +334,8 @@ func (gae *GAEHttpConnection) rangeFetch(req *event.HTTPRequestEvent, index, sta
 		}
 		chunk := &rangeChunk{}
 		chunk.start = startpos
-		chunk.content = rangeHttpRes.Content.Bytes()
-		rangeHttpRes.Content.Reset()
+		chunk.content = (rangeHttpRes.Content)
+		//rangeHttpRes.Content.Reset()
 		rangeHttpRes = nil
 		ch <- chunk
 		startpos = startpos + int(gae_cfg.FetchLimitSize*gae_cfg.ConcurrentRangeFetcher)
@@ -360,13 +362,14 @@ func (gae *GAEHttpConnection) concurrentRrangeFetch(req *event.HTTPRequestEvent,
 
 	try_write_chunk := func(chunk *rangeChunk) (bool, error) {
 		if chunk.start == gae.range_expected_pos {
-			_, err := gae.sess.LocalRawConn.Write(chunk.content)
+			_, err := gae.sess.LocalRawConn.Write(chunk.content.Bytes())
 			if nil != err {
 				log.Printf("????????????????????????????%v\n", err)
 				gae.sess.LocalRawConn.Close()
 				gae.Close()
 			}
-			gae.range_expected_pos = gae.range_expected_pos + len(chunk.content)
+			gae.range_expected_pos = gae.range_expected_pos + chunk.content.Len()
+			util.RecycleBuffer(chunk.content)
 			return true, err
 		}
 		return false, nil
@@ -390,15 +393,16 @@ func (gae *GAEHttpConnection) concurrentRrangeFetch(req *event.HTTPRequestEvent,
 			}
 			for {
 				if chunk, exist := responsedChunks[gae.range_expected_pos]; exist {
-					_, err := gae.sess.LocalRawConn.Write(chunk.content)
+					_, err := gae.sess.LocalRawConn.Write(chunk.content.Bytes())
 					delete(responsedChunks, chunk.start)
+					util.RecycleBuffer(chunk.content)
 					if nil != err {
 						log.Printf("????????????????????????????%v\n", err)
 						gae.sess.LocalRawConn.Close()
 						gae.Close()
 						//return err
 					} else {
-						gae.range_expected_pos = gae.range_expected_pos + len(chunk.content)
+						gae.range_expected_pos = gae.range_expected_pos + chunk.content.Len()
 					}
 					chunk = nil
 				} else {
@@ -525,7 +529,6 @@ func (gae *GAEHttpConnection) Request(conn *SessionConnection, ev event.Event) (
 			conn.Type = HTTPS_TUNNEL
 			return nil, nil
 		} else {
-
 			if httpreq.Content.Len() == 0 {
 				body := make([]byte, httpreq.RawReq.ContentLength)
 				io.ReadFull(httpreq.RawReq.Body, body)

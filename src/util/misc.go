@@ -1,6 +1,7 @@
 package util
 
 import (
+	"bytes"
 	"crypto/dsa"
 	"fmt"
 	"math/big"
@@ -12,6 +13,31 @@ import (
 	"strconv"
 	"strings"
 )
+
+var freeList = make(chan *bytes.Buffer, 100)
+var serverChan = make(chan *bytes.Buffer)
+
+func GetBuffer() *bytes.Buffer {
+	var b *bytes.Buffer
+	// Grab a buffer if available; allocate if not.
+	select {
+	case b = <-freeList:
+		b.Reset()
+	default:
+		// None free, so allocate a new one.
+		b = new(bytes.Buffer)
+	}
+	return b
+}
+
+func RecycleBuffer(b *bytes.Buffer) {
+	select {
+	case freeList <- b:
+		// Buffer on free list; nothing more to do.
+	default:
+		// Free list full, just carry on.
+	}
+}
 
 type dsaPrivateKey struct {
 	Version       int

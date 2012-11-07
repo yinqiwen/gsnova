@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"bytes"
 	"util"
 )
 
@@ -56,7 +57,8 @@ func hostPatternMatched(patterns []*regexp.Regexp, host string) bool {
 
 type rangeChunk struct {
 	start   int
-	content []byte
+	//content []byte
+	content *bytes.Buffer
 }
 
 type rangeReader struct {

@@ -76,32 +76,25 @@ func createDirectForwardConn(hostport string) (net.Conn, error) {
 		conn, err = net.DialTimeout("tcp", addr, 4*time.Second)
 	}
 	if nil != err {
-		setDNSCacheBlocked(hostport, addr)
+		expireBlockVerifyCache(addr)
 	}
 	return conn, err
 }
 
 func (conn *ForwardConnection) dialRemote(addr string, lookup_trusted_dns bool) (net.Conn, error) {
 	timeout := 5 * time.Second
+	if !lookup_trusted_dns {
+		if exist := getDomainCRLFAttr(addr); exist {
+			conn.try_inject_crlf = true
+			lookup_trusted_dns = true
+		}
+	}
 	if lookup_trusted_dns {
 		if newaddr, success := lookupAvailableAddress(addr); !success {
 			return nil, fmt.Errorf("No available IP found for %s", addr)
 		} else {
 			log.Printf("Found %s for %s\n", newaddr, addr)
 			addr = newaddr
-		}
-	} else {
-		if ip, v, exist := getDNSCacheIP(addr); exist {
-			if len(ip) > 0 {
-				_, port, _ := net.SplitHostPort(addr)
-				addr = net.JoinHostPort(ip, port)
-				conn.manager.inject_crlf = v.InjectCRLF
-				if v.InjectCRLF {
-					conn.try_inject_crlf = true
-				}
-			} else {
-				return nil, fmt.Errorf("No reachable host for %s", addr)
-			}
 		}
 	}
 	c, err := net.DialTimeout("tcp", addr, timeout)
@@ -258,19 +251,20 @@ func (auto *ForwardConnection) rangeFetch(hash uint32, resp *http.Response, req 
 					stopedWorker = stopedWorker + 1
 				} else {
 					responsedChunks[chunk.start] = chunk
+					//log.Printf("Session[%d]Recv chunk with startpos=%d \n", hash, chunk.start)
 				}
 			}
 		}
 		for {
 			if chunk, exist := responsedChunks[auto.range_expected_pos]; exist {
-				_, err := localConn.Write(chunk.content)
-				delete(responsedChunks, auto.range_expected_pos)
+				_, err := localConn.Write(chunk.content.Bytes())
 				if nil != err {
 					log.Printf("????????????????????????????%v\n", err)
 					auto.Close()
-				} else {
-					auto.range_expected_pos = auto.range_expected_pos + len(chunk.content)
 				}
+				util.RecycleBuffer(chunk.content)
+				delete(responsedChunks, auto.range_expected_pos)
+				auto.range_expected_pos = auto.range_expected_pos + chunk.content.Len()
 			} else {
 				if common.DebugEnable {
 					log.Printf("Session[%d]Expected %d\n", hash, auto.range_expected_pos)
@@ -337,6 +331,7 @@ func (auto *ForwardConnection) rangeFetchWorker(req *http.Request, hash uint32, 
 		retry_count = retry_count + 1
 		close_func()
 	}
+	defer close_func()
 	close_func()
 	for startpos < limit-1 && !auto.closed && retry_count <= retry_limit {
 		if auto.range_fetch_error != nil {
@@ -392,11 +387,14 @@ func (auto *ForwardConnection) rangeFetchWorker(req *http.Request, hash uint32, 
 		}
 		chunk := &rangeChunk{}
 		chunk.start = startpos
-		chunk.content = make([]byte, resp.ContentLength)
+		//chunk.content = make([]byte, resp.ContentLength)
+		chunk.content = util.GetBuffer()
 		log.Printf("Session[%d]Fetch[%d] start fetch %d bytes chunk[%d:%d-%d]from %s.", hash, index, resp.ContentLength, startpos, endpos, limit, clonereq.Host)
-		if n, er := io.ReadFull(resp.Body, chunk.content); nil != er || n != int(endpos-startpos+1) {
+
+		if n, er := io.Copy(chunk.content, resp.Body); nil != er || n != int64(endpos-startpos+1) {
 			log.Printf("[ERROR]Session[%d]Read rrror response %v with %d bytes for reason:%v\n", hash, resp, n, er)
 			retry_cb()
+			util.RecycleBuffer(chunk.content)
 			continue
 		}
 		resp.Body.Close()
@@ -410,7 +408,11 @@ func (auto *ForwardConnection) rangeFetchWorker(req *http.Request, hash uint32, 
 	}
 	//end
 	ch <- &rangeChunk{start: -1}
-
+	if !auto.closed {
+		log.Printf("Session[%d]Fetch[%d] close successfully", hash, index)
+	} else {
+		log.Printf("Session[%d]Fetch[%d] close abnormally", hash, index)
+	}
 	return nil
 }
 
@@ -506,7 +508,7 @@ L:
 			}
 
 			if auto.try_inject_crlf {
-				setDNSCacheCRLFAttr(addr)
+				setDomainCRLFAttr(addr)
 			}
 
 			responsed := false

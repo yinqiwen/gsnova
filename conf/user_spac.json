@@ -1,16 +1,21 @@
 [
   {
+    "Host" : ["o-o---preferred*.c.youtube.com"],
+    "Proxy": ["GoogleHttps", "Direct", "Default"],  
+    "Attr":  ["Direct"] 
+  },
+  {
     "Host" : ["*.c.youtube.com"],
     "Proxy": ["Default"],
     "Attr":  ["CRLF"]
   },
   {
     "Protocol":"https",
-    "Host" : ["Target https domain patterns for socks5 proxy"],
+    "Host" : ["Target https domain patterns for proxy"],
     "Proxy":["socks://127.0.0.1:7070"]
   },
   {
-    "Host" : ["Target domain patterns for 3rd http proxy"],
+    "Host" : ["Target domain patterns for proxy"],
     "Proxy":["http://127.0.0.1:8080"]
   },
   {

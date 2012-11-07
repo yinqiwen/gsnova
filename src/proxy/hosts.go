@@ -115,7 +115,7 @@ func lookupAvailableAddress(hostport string) (string, bool) {
 	if !exist {
 		v, exist = hostMapping[host]
 	}
-	if exist && !isTCPAddressBlocked(host, v, port) {
+	if exist && !isTCPAddressBlocked(v, port) {
 		return net.JoinHostPort(v, port), true
 	}
 	return hostport, false

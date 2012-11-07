@@ -108,7 +108,7 @@ func statHandler(w http.ResponseWriter, req *http.Request) {
 	runtime.ReadMemStats(&stat)
 	var buf bytes.Buffer
 	buf.WriteString(fmt.Sprintf("HostMappingSize: %d\n", len(hostMapping)))
-	buf.WriteString(fmt.Sprintf("DNSCacheSize: %d\n", len(dnsCache)))
+	buf.WriteString(fmt.Sprintf("BlockVerifyCacheSize: %d\n", len(blockVerifyCache)))
 	buf.WriteString(fmt.Sprintf("NumGoroutine: %d\n", runtime.NumGoroutine()))
 	buf.WriteString(fmt.Sprintf("NumProxyConn: %d\n", total_proxy_conn_num))
 	buf.WriteString(fmt.Sprintf("NumGAEConn: %d\n", total_gae_conn_num))
