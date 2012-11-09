@@ -488,8 +488,7 @@ func (gae *GAEHttpConnection) handleHttpRes(conn *SessionConnection, req *event.
 						}
 					}
 					_, err = conn.LocalRawConn.Write(rangeres.(*event.HTTPResponseEvent).Content.Bytes())
-					rangeres.(*event.HTTPResponseEvent).Content.Reset()
-					rangeres = nil
+					util.RecycleBuffer(rangeres.(*event.HTTPResponseEvent).Content)
 					if nil != err {
 						return httpres, err
 					}

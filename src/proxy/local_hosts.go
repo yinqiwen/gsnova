@@ -77,21 +77,21 @@ func getLocalHostMapping(host string) (string, bool) {
 	return host, false
 }
 
-func getLocalHostPortMapping(addr string) (string, string) {
-	l, err := url.Parse(addr)
-	if nil != err {
-		return addr, "80"
-	}
-	v := strings.Split(l.Host, ":")
-	if len(v) == 2 {
-		return v[0], v[1]
-	}
-	h, _ := getLocalHostMapping(l.Host)
-	if strings.EqualFold(l.Scheme, "https") {
-		return h, "443"
-	}
-	return h, "80"
-}
+//func getLocalHostPortMapping(addr string) (string) {
+//	l, err := url.Parse(addr)
+//	if nil != err {
+//		return addr, "80"
+//	}
+//	v := strings.Split(l.Host, ":")
+//	if len(v) == 2 {
+//		return v[0], v[1]
+//	}
+//	h, _ := getLocalHostMapping(l.Host)
+//	if strings.EqualFold(l.Scheme, "https") {
+//		return net.JoinHostPort(h, "443")
+//	}
+//	return net.JoinHostPort(h, "80")
+//}
 
 func getLocalUrlMapping(addr string) string {
 	l, err := url.Parse(addr)
@@ -109,6 +109,8 @@ func getLocalUrlMapping(addr string) string {
 		} else {
 			l.Host = net.JoinHostPort(l.Host, "80")
 		}
+        //l.Host,_ = lookupAvailableAddress(l.Host)
 	}
+	
 	return l.String()
 }

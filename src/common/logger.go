@@ -4,14 +4,18 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"io"
 )
 
-type FileConsoleWriter struct {
+var logWriter *MultiWriter
+
+type MultiWriter struct {
 	path string
 	file *os.File
+	writers []io.Writer
 }
 
-func (writer *FileConsoleWriter) Write(p []byte) (n int, err error) {
+func (writer *MultiWriter) Write(p []byte) (n int, err error) {
 	fmt.Print(string(p))
 	if nil != writer.file {
 		writer.file.Write(p)
@@ -24,11 +28,14 @@ func (writer *FileConsoleWriter) Write(p []byte) (n int, err error) {
 			writer.file, _ = os.OpenFile(writer.path, os.O_CREATE|os.O_APPEND, 0755)
 		}
 	}
+	for _, writer := range writer.writers{
+	   writer.Write(p)
+	}
 	return len(p), nil
 }
 
-func initLogWriter(path string) *FileConsoleWriter {
-	writer := new(FileConsoleWriter)
+func initLogWriter(path string) *MultiWriter {
+	writer := new(MultiWriter)
 	writer.path = path
 	file, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND, 0755)
 	//fmt.Printf("file is %s\n", path)
@@ -37,7 +44,12 @@ func initLogWriter(path string) *FileConsoleWriter {
 	} else {
 		writer.file = file
 	}
+	logWriter = writer
 	return writer
+}
+
+func AddLogWriter(writer io.Writer){
+   logWriter.writers = append(logWriter.writers, writer)
 }
 
 func InitLogger() {

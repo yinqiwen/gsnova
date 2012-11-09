@@ -106,6 +106,7 @@ func main() {
 			util.OpenBrowser("http://localhost:" + common.ProxyPort + "/")
 		}()
 	}
-
 	startLocalProxyServer(addr)
+	//launchSystemTray()
+
 }

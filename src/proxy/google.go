@@ -75,7 +75,6 @@ func (conn *GoogleConnection) Close() error {
 	return nil
 }
 
-
 func isLocalGoogleProxy() bool {
 	proxyInfo, exist := common.Cfg.GetProperty("LocalProxy", "Proxy")
 	if exist {
@@ -130,13 +129,21 @@ func (conn *GoogleConnection) initHttpsClient() {
 		}
 		conn.overProxy = true
 	} else {
-		addr, _ := getLocalHostMapping(googleHttpsHost)
+		get_google_hostport := func() string {
+			addr, _ := getLocalHostMapping(googleHttpsHost)
+			addr = net.JoinHostPort(addr, "443")
+			if !preferIP {
+				addr, _ = lookupAvailableAddress(addr)
+			}
+			return addr
+		}
 		var err error
-		conn.https_client, err = net.DialTimeout("tcp", net.JoinHostPort(addr, "443"), connTimeoutSecs)
+		addr := get_google_hostport()
+		conn.https_client, err = net.DialTimeout("tcp", addr, connTimeoutSecs)
 		//try again
 		if nil != err {
-			addr, _ = getLocalHostMapping(googleHttpsHost)
-			conn.https_client, err = net.DialTimeout("tcp", net.JoinHostPort(addr, "443"), connTimeoutSecs)
+		    addr = get_google_hostport()
+			conn.https_client, err = net.DialTimeout("tcp", addr, connTimeoutSecs)
 		}
 		if nil != err {
 			log.Printf("Failed to dial address:%s for reason:%s\n", addr, err.Error())
@@ -197,12 +204,20 @@ func (conn *GoogleConnection) initHttpClient(proxyAddr string) {
 		var err error
 		conn.overProxy = false
 		if conn.manager == httpGoogleManager {
-			addr, _ := getLocalHostMapping(googleHttpHost)
-			conn.http_client, err = net.DialTimeout("tcp", net.JoinHostPort(addr, "80"), connTimeoutSecs)
+			get_google_hostport := func() string {
+				addr, _ := getLocalHostMapping(googleHttpHost)
+				addr = net.JoinHostPort(addr, "80")
+				if !preferIP {
+					addr, _ = lookupAvailableAddress(addr)
+				}
+				return addr
+			}
+			addr := get_google_hostport()
+			conn.http_client, err = net.DialTimeout("tcp", addr, connTimeoutSecs)
 			if nil != err {
 				conn.Close()
-				addr, _ = getLocalHostMapping(googleHttpHost)
-				conn.http_client, err = net.DialTimeout("tcp", net.JoinHostPort(addr, "80"), connTimeoutSecs)
+				addr = get_google_hostport()
+				conn.http_client, err = net.DialTimeout("tcp", addr, connTimeoutSecs)
 			}
 			if nil != err {
 				conn.Close()
@@ -210,12 +225,20 @@ func (conn *GoogleConnection) initHttpClient(proxyAddr string) {
 				return
 			}
 		} else {
-			addr, _ := getLocalHostMapping(googleHttpsHost)
-			conn.http_client, err = net.DialTimeout("tcp", net.JoinHostPort(addr, "443"), connTimeoutSecs)
+			get_google_hostport := func() string {
+				addr, _ := getLocalHostMapping(googleHttpsHost)
+				addr = net.JoinHostPort(addr, "443")
+				if !preferIP {
+					//addr, _ = lookupAvailableAddress(addr)
+				}
+				return addr
+			}
+			addr := get_google_hostport()
+			conn.http_client, err = net.DialTimeout("tcp", addr, connTimeoutSecs)
 			if nil != err {
 				conn.Close()
-				addr, _ = getLocalHostMapping(googleHttpsHost)
-				conn.http_client, err = net.DialTimeout("tcp", net.JoinHostPort(addr, "443"), connTimeoutSecs)
+				addr = get_google_hostport()
+				conn.http_client, err = net.DialTimeout("tcp", addr, connTimeoutSecs)
 			}
 			if nil != err {
 				log.Printf("Failed to dial address:%s for reason:%s\n", addr, err.Error())
@@ -306,12 +329,12 @@ func (google *GoogleConnection) Request(conn *SessionConnection, ev event.Event)
 			log.Printf("Session[%d]Request %s\n", req.GetHash(), util.GetURLString(req.RawReq, true))
 			err := google.writeHttpRequest(req.RawReq)
 			if nil != err {
-			    google.Close()
+				google.Close()
 				return err, nil
 			}
 			resp, err := http.ReadResponse(google.http_client_reader, req.RawReq)
 			if err != nil {
-			    google.Close()
+				google.Close()
 				return err, nil
 			}
 			err = resp.Write(conn.LocalRawConn)
@@ -347,7 +370,7 @@ func (manager *Google) RecycleRemoteConnection(conn RemoteConnection) {
 	default:
 		// Free list full, just carry on.
 	}
-	total_google_conn_num = total_google_conn_num- 1
+	total_google_conn_num = total_google_conn_num - 1
 }
 
 func (manager *Google) GetRemoteConnection(ev event.Event, attrs map[string]string) (RemoteConnection, error) {

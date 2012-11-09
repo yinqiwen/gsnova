@@ -276,6 +276,9 @@ func (auto *ForwardConnection) rangeFetch(hash uint32, resp *http.Response, req 
 			if len(responsedChunks) > 0 {
 				log.Printf("Session[%d]Rest %d unwrite chunks while expectedPos=%d \n", hash, len(responsedChunks), auto.range_expected_pos)
 			}
+			for _, chunk := range responsedChunks{
+			   util.RecycleBuffer(chunk.content)
+			}
 			break
 		}
 	}

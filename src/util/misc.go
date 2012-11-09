@@ -14,7 +14,7 @@ import (
 	"strings"
 )
 
-var freeList = make(chan *bytes.Buffer, 10)
+var freeList = make(chan *bytes.Buffer, 20)
 var serverChan = make(chan *bytes.Buffer)
 
 func GetBuffer() *bytes.Buffer {
