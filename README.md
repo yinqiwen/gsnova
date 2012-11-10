@@ -4,7 +4,7 @@
 --------
 >目前支持Appengine（Google），Cloudfoudry/Openshift/Heroku/Dotcloud/Jelastic等PaaS平台。任选一个部署即可。
 * Google AppEngine  
-  用户需要先在[Google Appengine](http://appengine.google.com/)上注册帐号并创建appid。下载snova-gae-gserver-[version].zip，解压。windows用户直接执行deployer.exe，Linux/Mac用户需在命令行下执行python main.py，按部署工具提示进行部署。   
+  用户需要先在[Google Appengine](http://appengine.google.com)上注册帐号并创建appid。下载snova-gae-gserver-[version].zip，解压。windows用户直接执行deployer.exe，Linux/Mac用户需在命令行下执行python main.py，按部署工具提示进行部署。   
 * Cloudfoudry/Openshift/Heroku/Dotcloud/Jelastic   
   下载snova-c4-server-[version].war。按照[部署说明](http://code.google.com/p/snova/w/list)部署。注意各个PaaS平台部署方式均不一致。  
 
