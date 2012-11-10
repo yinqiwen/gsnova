@@ -1,4 +1,5 @@
-#!/bin/sh
+#!/usr/bin/env bash
+
 VERSION="0.18.2"
 
 #this part is copied from ANT's script
@@ -21,12 +22,14 @@ fi
 build_product()
 {
    export GOPATH="$GSNOVA_DIR"
+   go get -u github.com/yinqiwen/godns
    cd src
-   rm common/constants.go
+   mv common/constants.go{,.bak}
    echo "package common" >> common/constants.go
    echo "var Version string = \"$VERSION\"" >> common/constants.go
    echo "var Product string = \"$1\"" >> common/constants.go
    go install -v ...
+   mv common/constants.go{.bak,}
 }
 
 build_dist()
@@ -38,10 +41,10 @@ build_dist()
    fi  
    
    cd $GSNOVA_DIR
-   DIST_DIR="$1"-"$VERSION"
-   mkdir -p $GSNOVA_DIR/$DIST_DIR/cert
-   mkdir -p $GSNOVA_DIR/$DIST_DIR/spac
-   mkdir -p $GSNOVA_DIR/$DIST_DIR/hosts
+   DIST_DIR=$GSNOVA_DIR/${1}-${VERSION}
+   mkdir -p $DIST_DIR/cert
+   mkdir -p $DIST_DIR/spac
+   mkdir -p $DIST_DIR/hosts
    
    OS="`go env GOOS`"
    ARCH="`go env GOARCH`"
@@ -50,17 +53,27 @@ build_dist()
    if [ "$OS" = "windows" ]; then
       exename="$1".exe
    fi
-   cp $GSNOVA_DIR/README $GSNOVA_DIR/$DIST_DIR
-   cp $GSNOVA_DIR/*.txt $GSNOVA_DIR/$DIST_DIR
-   cp $GSNOVA_DIR/bin/main "$GSNOVA_DIR/$DIST_DIR/$exename"
-   cp $GSNOVA_DIR/conf/"$1".conf $GSNOVA_DIR/$DIST_DIR
-   cp $GSNOVA_DIR/conf/*_hosts.conf $GSNOVA_DIR/$DIST_DIR/hosts
-   cp $GSNOVA_DIR/conf/Fake* $GSNOVA_DIR/$DIST_DIR/cert
-   cp $GSNOVA_DIR/conf/*_spac.json $GSNOVA_DIR/$DIST_DIR/spac
-   cp $GSNOVA_DIR/conf/user-gfwlist.txt $GSNOVA_DIR/$DIST_DIR/spac
-   cp -r $GSNOVA_DIR/web $GSNOVA_DIR/$DIST_DIR
-   zip -r "$1"_"$VERSION"_"$OS"_"$ARCH".zip $DIST_DIR/*
-   rm -rf $GSNOVA_DIR/$DIST_DIR
+   cp $GSNOVA_DIR/README.md $DIST_DIR
+   cp $GSNOVA_DIR/*.txt $DIST_DIR
+   cp $GSNOVA_DIR/bin/main $DIST_DIR/$exename
+   cp $GSNOVA_DIR/conf/*_hosts.conf $DIST_DIR/hosts
+   cp $GSNOVA_DIR/conf/Fake* $DIST_DIR/cert
+   cp $GSNOVA_DIR/conf/*_spac.json $DIST_DIR/spac
+   cp $GSNOVA_DIR/conf/user-gfwlist.txt $DIST_DIR/spac
+   cp -R $GSNOVA_DIR/web $DIST_DIR
+   if [ "$OS" = "windows" ]; then
+      cp $GSNOVA_DIR/conf/"$1".conf $DIST_DIR
+      zip -r "$1"_"$VERSION"_"$OS"_"$ARCH".zip ${1}-${VERSION}/*
+   else
+      cp $GSNOVA_DIR/conf/"$1".conf $DIST_DIR/.conf
+      chmod 744 $DIST_DIR/gsnova
+      chmod 600 $DIST_DIR/.conf
+      chmod 644 $DIST_DIR/*.txt
+      chmod 644 $DIST_DIR/{cert,hosts,spac}/*
+      chmod 644 $DIST_DIR/web/*.* $DIST_DIR/web/{css,images,scripts}/*
+      tar czf ${1}_${VERSION}_${OS}_${ARCH}.tar.gz ${1}-${VERSION}
+   fi
+   rm -rf $DIST_DIR $GSNOVA_DIR/{bin,pkg}
 }
 
 main()
