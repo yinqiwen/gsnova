@@ -27,6 +27,7 @@ var repoUrls []string
 var hostMapping = make(map[string]string)
 
 var hostsEnable int
+var cacheDNSResult bool
 var trustedDNS = []string{}
 var useHttpDNS = []*regexp.Regexp{}
 
@@ -165,6 +166,9 @@ func InitHosts() error {
 	}
 	if fetcher, exist := common.Cfg.GetIntProperty("Hosts", "RangeConcurrentFetcher"); exist {
 		hostRangeConcurrentFether = uint32(fetcher)
+	}
+	if enable, exist := common.Cfg.GetIntProperty("Hosts", "CacheDNSResult"); exist {
+		cacheDNSResult = (enable != 0)
 	}
 
 	if pattern, exist := common.Cfg.GetProperty("Hosts", "ExceptCloudHosts"); exist {

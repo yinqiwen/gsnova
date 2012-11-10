@@ -6,7 +6,7 @@
   },
   {
     "Host" : ["*.c.youtube.com"],
-    "Proxy": ["Default"],
+    "Proxy": ["Direct", "Default"],
     "Attr":  ["CRLF"]
   },
   {

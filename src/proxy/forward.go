@@ -393,7 +393,7 @@ func (auto *ForwardConnection) rangeFetchWorker(req *http.Request, hash uint32, 
 		//chunk.content = make([]byte, resp.ContentLength)
 		chunk.content = util.GetBuffer()
 		log.Printf("Session[%d]Fetch[%d] start fetch %d bytes chunk[%d:%d-%d]from %s.", hash, index, resp.ContentLength, startpos, endpos, limit, clonereq.Host)
-
+        auto.range_fetch_conns[index].SetReadDeadline(time.Now().Add(120 * time.Second))
 		if n, er := io.Copy(chunk.content, resp.Body); nil != er || n != int64(endpos-startpos+1) {
 			log.Printf("[ERROR]Session[%d]Read rrror response %v with %d bytes for reason:%v\n", hash, resp, n, er)
 			retry_cb()

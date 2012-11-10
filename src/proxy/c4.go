@@ -97,13 +97,25 @@ func http_remote_loop(remote string, index int) {
 		read <- login
 		logined = true
 	}
+
+	domain := remote
+	path := "/invoke"
+	rs := strings.SplitN(remote, "/", 2)
+	if len(rs) == 2 {
+		domain = rs[0]
+		if strings.HasSuffix(rs[1], "/") {
+			path = "/" + rs[1] + "invoke"
+		} else {
+			path = "/" + rs[1] + "/invoke"
+		}
+	}
 	for {
 		select {
 		case <-tick.C:
 			req := &http.Request{
 				Method:        "POST",
-				URL:           &url.URL{Scheme: "http", Host: remote, Path: "/invoke"},
-				Host:          remote,
+				URL:           &url.URL{Scheme: "http", Host: domain, Path: path},
+				Host:          domain,
 				Header:        make(http.Header),
 				Body:          ioutil.NopCloser(buf),
 				ContentLength: int64(buf.Len()),
@@ -262,7 +274,7 @@ type C4HttpConnection struct {
 }
 
 func (conn *C4HttpConnection) IsDisconnected() bool {
-   return false
+	return false
 }
 
 func (c4 *C4HttpConnection) Close() error {
