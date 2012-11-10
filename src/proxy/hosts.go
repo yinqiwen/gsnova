@@ -27,7 +27,7 @@ var repoUrls []string
 var hostMapping = make(map[string]string)
 
 var hostsEnable int
-var cacheDNSResult bool
+var cacheDNSResult = true
 var trustedDNS = []string{}
 var useHttpDNS = []*regexp.Regexp{}
 

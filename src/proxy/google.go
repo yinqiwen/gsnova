@@ -142,7 +142,7 @@ func (conn *GoogleConnection) initHttpsClient() {
 		conn.https_client, err = net.DialTimeout("tcp", addr, connTimeoutSecs)
 		//try again
 		if nil != err {
-		    addr = get_google_hostport()
+			addr = get_google_hostport()
 			conn.https_client, err = net.DialTimeout("tcp", addr, connTimeoutSecs)
 		}
 		if nil != err {
@@ -327,6 +327,9 @@ func (google *GoogleConnection) Request(conn *SessionConnection, ev event.Event)
 				return errors.New("No google proxy reachable."), nil
 			}
 			log.Printf("Session[%d]Request %s\n", req.GetHash(), util.GetURLString(req.RawReq, true))
+			if google.manager.GetName() == GOOGLE_HTTP {
+				google.http_client.Write(CRLFs)
+			}
 			err := google.writeHttpRequest(req.RawReq)
 			if nil != err {
 				google.Close()
@@ -411,11 +414,12 @@ func InitGoogle() error {
 	if prefer, exist := common.Cfg.GetBoolProperty("Google", "PreferIP"); exist {
 		preferIP = prefer
 	}
-	googleHttpHost = GOOGLE_HTTP_IP
 	if preferIP {
 		googleHttpsHost = GOOGLE_HTTPS_IP
+		googleHttpHost = GOOGLE_HTTP_IP
 	} else {
 		googleHttpsHost = GOOGLE_HTTPS
+		googleHttpHost = GOOGLE_HTTP
 	}
 	if tmp, exist := common.Cfg.GetIntProperty("Google", "ConnectTimeout"); exist {
 		connTimeoutSecs = time.Duration(tmp) * time.Millisecond

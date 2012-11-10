@@ -89,7 +89,7 @@ type GAEHttpConnection struct {
 }
 
 func (conn *GAEHttpConnection) IsDisconnected() bool {
-   return false
+	return false
 }
 
 func (gae *GAEHttpConnection) Close() error {
@@ -246,6 +246,12 @@ func (gae *GAEHttpConnection) requestEvent(client *http.Client, conn *SessionCon
 	req.Close = false
 	req.Header.Set("Connection", "keep-alive")
 	req.Header.Set("Content-Type", "image/jpeg")
+	if proxyInfo, exist := common.Cfg.GetProperty("LocalProxy", "Proxy"); exist {
+		if strings.HasPrefix(proxyInfo, "http://") && strings.Contains(proxyInfo, "Google")  {
+			req.Method = string(CRLFs) + "POST"
+		}
+	}
+
 	var response *http.Response
 	response, err = client.Do(req)
 	if nil != err {
