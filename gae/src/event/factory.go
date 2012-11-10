@@ -83,4 +83,5 @@ func Init() {
 	RegistEvent(&AdminResponseEvent{})
 	RegistEvent(&SocketReadEvent{})
 	RegistEvent(&SocketConnectWithDataEvent{})
+	RegistEvent(&RequestAppIDEvent{})
 }

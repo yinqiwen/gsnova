@@ -22,7 +22,7 @@ import socket
 import wsgiref.util
 
 def get_email():
-	print '==================Snova(Go)Deployer v0.17.2==================='
+	print '==================Snova(Go)Deployer v0.18.2==================='
 	n = raw_input('Specify google email account first? (y/n, default n):')
 	if n == 'y' or n == 'Y':
 		email = raw_input("Email: ").strip()
@@ -65,3 +65,5 @@ if __name__ == '__main__':
 		sys.exit(0)
 		#sys.argv = sys.argv + deploy_args
 	execfile(appcfg_script_path, globals())
+
+	
