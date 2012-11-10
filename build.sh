@@ -61,13 +61,12 @@ build_dist()
    cp $GSNOVA_DIR/conf/*_spac.json $DIST_DIR/spac
    cp $GSNOVA_DIR/conf/user-gfwlist.txt $DIST_DIR/spac
    cp -R $GSNOVA_DIR/web $DIST_DIR
+   cp $GSNOVA_DIR/conf/"$1".conf $DIST_DIR
    if [ "$OS" = "windows" ]; then
-      cp $GSNOVA_DIR/conf/"$1".conf $DIST_DIR
       zip -r "$1"_"$VERSION"_"$OS"_"$ARCH".zip ${1}-${VERSION}/*
    else
-      cp $GSNOVA_DIR/conf/"$1".conf $DIST_DIR/.conf
       chmod 744 $DIST_DIR/gsnova
-      chmod 600 $DIST_DIR/.conf
+      chmod 600 $DIST_DIR/gsnova.conf
       chmod 644 $DIST_DIR/*.txt
       chmod 644 $DIST_DIR/{cert,hosts,spac}/*
       chmod 644 $DIST_DIR/web/*.* $DIST_DIR/web/{css,images,scripts}/*
