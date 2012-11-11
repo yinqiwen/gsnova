@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 	"util"
 )
 
@@ -27,13 +28,15 @@ var repoUrls []string
 var hostMapping = make(map[string]string)
 
 var hostsEnable int
-var cacheDNSResult = true
 var trustedDNS = []string{}
 var useHttpDNS = []*regexp.Regexp{}
 
 var exceptHosts = []*regexp.Regexp{}
 
 var hostRangeFetchLimitSize = uint32(256000)
+
+//range fetch timeout secs
+var rangeFetchTimeoutSecs = 90 * time.Second
 var hostInjectRangePatterns = []*regexp.Regexp{}
 var hostRangeConcurrentFether = uint32(5)
 
@@ -167,8 +170,8 @@ func InitHosts() error {
 	if fetcher, exist := common.Cfg.GetIntProperty("Hosts", "RangeConcurrentFetcher"); exist {
 		hostRangeConcurrentFether = uint32(fetcher)
 	}
-	if enable, exist := common.Cfg.GetIntProperty("Hosts", "CacheDNSResult"); exist {
-		cacheDNSResult = (enable != 0)
+	if secs, exist := common.Cfg.GetIntProperty("Hosts", "RangeFetchTimeout"); exist {
+		rangeFetchTimeoutSecs = time.Duration(secs) * time.Second
 	}
 
 	if pattern, exist := common.Cfg.GetProperty("Hosts", "ExceptCloudHosts"); exist {

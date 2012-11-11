@@ -5,11 +5,13 @@ GSNOVA_DIR=`dirname $0 | sed -e "s#^\\([^/]\\)#${PWD}/\\1#"` # sed makes absolut
 build_product()
 {
    export GOPATH="$GSNOVA_DIR"
+   go get -u github.com/yinqiwen/godns
    cd src
    rm common/constants.go
    echo "package common" >> common/constants.go
    echo "var Version string = \"$VERSION\"" >> common/constants.go
    echo "var Product string = \"$1\"" >> common/constants.go
+   
    go install -v ...
 }
 
@@ -43,7 +45,16 @@ build_dist()
    cp $GSNOVA_DIR/conf/*_spac.json $GSNOVA_DIR/$DIST_DIR/spac
    cp $GSNOVA_DIR/conf/user-gfwlist.txt $GSNOVA_DIR/$DIST_DIR/spac
    cp -r $GSNOVA_DIR/web $GSNOVA_DIR/$DIST_DIR
-   zip -r "$1"_"$VERSION"_"$OS"_"$ARCH".zip $DIST_DIR/*
+   if [ "$OS" = "windows" ]; then
+      zip -r "$1"_"$VERSION"_"$OS"_"$ARCH".zip ${1}-${VERSION}/*
+   else
+      chmod 744 $DIST_DIR/gsnova
+      chmod 600 $DIST_DIR/gsnova.conf
+      chmod 644 $DIST_DIR/*.txt
+      chmod 644 $DIST_DIR/{cert,hosts,spac}/*
+      chmod 644 $DIST_DIR/web/*.* $DIST_DIR/web/{css,images,scripts}/*
+      tar czf ${1}_${VERSION}_${OS}_${ARCH}.tar.gz ${1}-${VERSION}
+   fi
    rm -rf $GSNOVA_DIR/$DIST_DIR
 }
 

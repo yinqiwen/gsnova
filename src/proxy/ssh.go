@@ -142,7 +142,7 @@ func (conn *SSHConnection) GetConnectionManager() RemoteConnectionManager {
 }
 
 func (conn *SSHConnection) IsDisconnected() bool {
-   return false
+	return false
 }
 
 func (conn *SSHConnection) Close() error {
@@ -162,8 +162,8 @@ func (ssh *SSH) RecycleRemoteConnection(conn RemoteConnection) {
 
 func (ssh *SSH) GetRemoteConnection(ev event.Event, attrs map[string]string) (RemoteConnection, error) {
 	c := ssh.selector.Select()
-	if nil == c{
-	   return nil, errors.New("SSH not available now.")
+	if nil == c {
+		return nil, errors.New("SSH not available now.")
 	}
 	conn := &SSHConnection{manager: ssh,
 		ssh_conn: c.(*SSHRawConnection)}
@@ -188,7 +188,7 @@ func (conn *SSHRawConnection) RemoteResolve(name string) ([]net.IP, error) {
 		options := &godns.LookupOptions{
 			DNSServers:  godns.GoogleDNSServers,
 			Net:         "tcp",
-			Cache:       true,
+			CacheTTL:    godns.DNS_CACHE_TTL_SELF,
 			DialTimeout: dial,
 		}
 		return godns.LookupIP(name, options)
@@ -269,7 +269,7 @@ func InitSSH() error {
 			return nil
 		}
 	}
-    ssh_enable = true
+	ssh_enable = true
 	log.Println("Init SSH.")
 	if enable, exist := common.Cfg.GetIntProperty("SSH", "UseGlobalProxy"); exist {
 		sshUseGlobalProxy = (enable != 0)

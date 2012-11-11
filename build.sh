@@ -24,12 +24,13 @@ build_product()
    export GOPATH="$GSNOVA_DIR"
    go get -u github.com/yinqiwen/godns
    cd src
-   mv common/constants.go{,.bak}
+   #mv common/constants.go{,.bak}
+   rm common/constants.go
    echo "package common" >> common/constants.go
    echo "var Version string = \"$VERSION\"" >> common/constants.go
    echo "var Product string = \"$1\"" >> common/constants.go
    go install -v ...
-   mv common/constants.go{.bak,}
+   #mv common/constants.go{.bak,}
 }
 
 build_dist()
