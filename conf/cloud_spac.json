@@ -4,6 +4,11 @@
     "Proxy": ["Default"]
   },
   {
+    "Host" : ["feedproxy.google.com"],
+    "Proxy":["Direct", "Default"],
+    "Attr":  ["CRLF"]
+  },
+  {
     "Host" : ["*.ytimg.com*", "*.google.com(.*)?","*.googleusercontent.com*", "*.gstatic.com", "*.googleapis.com*", "*.googlecode.com"],
     "Proxy":["GoogleHttps", "Direct", "Default"]
   },

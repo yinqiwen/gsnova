@@ -1,10 +1,5 @@
 [
   {
-    "Host" : ["o-o---preferred*.c.youtube.com"],
-    "Proxy": ["GoogleHttps", "Direct", "Default"],  
-    "Attr":  ["Direct"] 
-  },
-  {
     "Host" : ["*.c.youtube.com"],
     "Proxy": ["Direct", "Default"],
     "Attr":  ["CRLF"]
