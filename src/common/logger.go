@@ -18,7 +18,10 @@ type MultiWriter struct {
 func (writer *MultiWriter) Write(p []byte) (n int, err error) {
 	fmt.Print(string(p))
 	if nil != writer.file {
-		writer.file.Write(p)
+		_, err := writer.file.Write(p)
+		if nil != err{
+		   fmt.Printf("Failed to write logfile for reason:%v\n", err)
+		}
 		fi, err := writer.file.Stat()
 		//5MB
 		if nil == err && fi.Size() >= 1*1024*1024 {
