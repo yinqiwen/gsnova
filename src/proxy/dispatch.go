@@ -40,6 +40,7 @@ const (
 	ATTR_CRLF_INJECT    = "CRLF"
 	ATTR_DIRECT         = "Direct"
 	ATTR_TUNNEL         = "Tunnel"
+	ATTR_RANGE         = "Range"
 
 	MODE_HTTP    = "http"
 	MODE_HTTPS   = "httpS"

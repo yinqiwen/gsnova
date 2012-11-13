@@ -76,6 +76,7 @@ type GAEHttpConnection struct {
 	auth               GAEAuth
 	support_tunnel     bool
 	over_tunnel        bool
+	inject_range       bool
 	authToken          string
 	sess               *SessionConnection
 	client             *http.Client
@@ -247,7 +248,7 @@ func (gae *GAEHttpConnection) requestEvent(client *http.Client, conn *SessionCon
 	req.Header.Set("Connection", "keep-alive")
 	req.Header.Set("Content-Type", "image/jpeg")
 	if proxyInfo, exist := common.Cfg.GetProperty("LocalProxy", "Proxy"); exist {
-		if strings.HasPrefix(proxyInfo, "http://") && strings.Contains(proxyInfo, "Google")  {
+		if strings.HasPrefix(proxyInfo, "http://") && strings.Contains(proxyInfo, "Google") {
 			req.Method = string(CRLFs) + "POST"
 		}
 	}
@@ -557,7 +558,7 @@ func (gae *GAEHttpConnection) Request(conn *SessionConnection, ev event.Event) (
 				}
 			} else {
 				//inject range header
-				if hostPatternMatched(gae_cfg.InjectRange, httpreq.RawReq.Host) {
+				if hostPatternMatched(gae_cfg.InjectRange, httpreq.RawReq.Host) || gae.inject_range {
 					httpreq.SetHeader("Range", "bytes=0-"+strconv.Itoa(int(gae_cfg.FetchLimitSize-1)))
 				}
 			}
@@ -622,6 +623,7 @@ func (manager *GAE) RecycleRemoteConnection(conn RemoteConnection) {
 		// Free list full, just carry on.
 	}
 	total_gae_conn_num = total_gae_conn_num - 1
+	conn.(*GAEHttpConnection).inject_range = false
 }
 
 func (manager *GAE) GetRemoteConnection(ev event.Event, attrs map[string]string) (RemoteConnection, error) {
@@ -643,6 +645,9 @@ func (manager *GAE) GetRemoteConnection(ev event.Event, attrs map[string]string)
 		b.(*GAEHttpConnection).over_tunnel = true && b.(*GAEHttpConnection).support_tunnel
 	} else {
 		b.(*GAEHttpConnection).over_tunnel = false
+	}
+	if containsAttr(attrs, ATTR_RANGE) {
+		b.(*GAEHttpConnection).inject_range = true
 	}
 	total_gae_conn_num = total_gae_conn_num + 1
 	return b, nil
