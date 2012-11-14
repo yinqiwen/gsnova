@@ -28,7 +28,7 @@ func (writer *MultiWriter) Write(p []byte) (n int, err error) {
 			os.Remove(writer.path + ".1")
 			writer.file.Close()
 			os.Rename(writer.path, writer.path+".1")
-			writer.file, _ = os.OpenFile(writer.path, os.O_CREATE|os.O_APPEND, 0755)
+			writer.file, _ = os.OpenFile(writer.path, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
 		}
 	}
 	for _, writer := range writer.writers{
@@ -40,7 +40,7 @@ func (writer *MultiWriter) Write(p []byte) (n int, err error) {
 func initLogWriter(path string) *MultiWriter {
 	writer := new(MultiWriter)
 	writer.path = path
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND, 0755)
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
 	//fmt.Printf("file is %s\n", path)
 	if err != nil {
 		fmt.Println(err)
