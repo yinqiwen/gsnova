@@ -32,7 +32,7 @@
     [GAE]   
     Enable=1   
     WorkerNode[0]=myappid1 
-    WorkerNode[0]=myappid2
+    WorkerNode[1]=myappid2
 
 注意暂时https的站点通过GAE代理是伪造证书方式实现的，若需要屏蔽浏览器警告，需要将conf目录下的Fake-ACRoot-Certificate.cer导入到浏览器中。
 此Proxy实现在SPAC中名称为GAE
@@ -48,7 +48,7 @@
     [C4]   
     Enable=1   
     WorkerNode[0]=myapp1.cloudfoundry.com
-    WorkerNode[0]=myapp2.cloudfoundry.com
+    WorkerNode[1]=myapp2.cloudfoundry.com
 
 此Proxy实现在SPAC中名称为C4
 

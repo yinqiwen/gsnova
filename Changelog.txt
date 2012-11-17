@@ -1,5 +1,14 @@
 GSnova Changelog
 ===================
+Changes in version 0.18.4(2012.11.17)
+-------------------------------------------
+** Features
+   * Modify some default spac rules
+   * Add "Range" as attribute for SPAC's proxy
+   
+** Improvement
+   * Bug fix
+
 Changes in version 0.18.3(2012.11.10)
 -------------------------------------------
 ** Features
