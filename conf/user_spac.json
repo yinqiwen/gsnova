@@ -1,8 +1,8 @@
 [
   {
-    "Host" : ["*.c.youtube.com"],
+    "Host" : ["*.c.youtube.com", "av.vimeo.com"],
     "Proxy": ["Direct", "Default"],
-    "Attr":  ["CRLF"]
+    "Attr":  ["CRLF", "Range"]
   },
   {
     "Protocol":"https",

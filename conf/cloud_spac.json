@@ -1,37 +1,28 @@
 [
   {
-    "URL": ["*.google.*/imgres*"],
-    "Proxy": ["Default"]
-  },
-  {
-    "Host" : ["feedproxy.google.com"],
-    "Proxy":["Direct", "Default"],
-    "Attr":  ["CRLF"]
-  },
-  {
     "Host" : ["*.ytimg.com*", "*.google.com(.*)?","*.googleusercontent.com*", "*.gstatic.com", "*.googleapis.com*", "*.googlecode.com"],
-    "Proxy":["GoogleHttps", "Direct", "Default"]
+    "Proxy":["Google", "Direct", "Default"]
   },
   {
-    "Host" : ["*.doubleclick.net*", "*.google-analytics.com*", "www.blogger.com", "*.google.co.*"],
-    "Proxy":["GoogleHttps", "Direct", "Default"]
+    "Host" : ["*.doubleclick.net*", "*.google-analytics.com*", "*.blogger.com", "*.google.co.*"],
+    "Proxy":["Google", "Direct", "Default"]
   },
   {
     "Host" : ["*.golang.org"],
-    "Proxy": ["Direct"]
+    "Proxy": ["Direct", "Default"]
   },
   {
     "Host" : ["*.blogspot.*", "*.appspot.com", "golang.org"],
-    "Proxy": ["GoogleHttps", "Direct", "Default"]
+    "Proxy": ["Google", "Direct", "Default"]
   },
   {
     "Host" : ["*.youtube.com"],
-    "Proxy": ["GoogleHttps", "Direct", "Default"],
-    "Attr":  ["Direct"]
+    "Proxy": ["Google", "Direct", "Default"],
+    "Attr":  ["Direct", "Default"]
   },
   {
     "Protocol" : "http",
-    "Host": ["twitter.com", "facebook.com"],
+    "Host": ["twitter.com", "www.facebook.com"],
     "Attr":  ["RedirectHttps"]
   },
   {

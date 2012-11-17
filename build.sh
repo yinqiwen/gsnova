@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-VERSION="0.18.2"
+VERSION="0.18.4"
 
 #this part is copied from ANT's script
 # OS specific support.  $var _must_ be set to either true or false.
@@ -69,11 +69,13 @@ build_dist()
       chmod 744 $DIST_DIR/gsnova
       chmod 600 $DIST_DIR/gsnova.conf
       chmod 644 $DIST_DIR/*.txt
-      chmod 644 $DIST_DIR/{cert,hosts,spac}/*
-      chmod 644 $DIST_DIR/web/*.* $DIST_DIR/web/{css,images,scripts}/*
+      chmod -R 644 $DIST_DIR/cert/*
+      chmod -R 644 $DIST_DIR/hosts/*
+      chmod -R 644 $DIST_DIR/spac/*
+      #chmod -R 644 $DIST_DIR/web/*
       tar czf ${1}_${VERSION}_${OS}_${ARCH}.tar.gz ${1}-${VERSION}
    fi
-   rm -rf $DIST_DIR $GSNOVA_DIR/{bin,pkg}
+   rm -rf $DIST_DIR
 }
 
 main()

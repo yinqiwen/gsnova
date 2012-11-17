@@ -121,7 +121,8 @@ func (session *SessionConnection) processHttpEvent(ev *event.HTTPRequestEvent) e
 		rmanager := session.RemoteConn.GetConnectionManager()
 		matched := false
 		for _, proxy := range proxies {
-			if rmanager.GetName() == proxy.GetName() {
+		    proxyName := adjustProxyName(proxy.GetName(), session.Type == HTTPS_TUNNEL)
+			if rmanager.GetName() == proxyName {
 				matched = true
 				break
 			}

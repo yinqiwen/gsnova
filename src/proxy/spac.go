@@ -334,8 +334,8 @@ func loadIPRangeFile(ipRepo string) {
 	hf := common.Home + "spac/" + "iprange.zip"
 	_, err := os.Stat(hf)
 	if nil != err {
-	    var zero time.Time
-		body, _, err := util.FetchLateastContent(ipRepo, common.ProxyPort,zero, true)
+		var zero time.Time
+		body, _, err := util.FetchLateastContent(ipRepo, common.ProxyPort, zero, true)
 		if err != nil {
 			log.Printf("Failed to fetch ip range file from %s for reason:%v\n", ipRepo, err)
 			return
@@ -355,7 +355,7 @@ func generatePACFromGFWList(url string) {
 	time.Sleep(5 * time.Second)
 	log.Printf("Generate PAC from  gfwlist %s\n", url)
 	load_gfwlist_rule()
-	gfwlist_txt := common.Home+"spac/snova-gfwlist.txt"
+	gfwlist_txt := common.Home + "spac/snova-gfwlist.txt"
 	var file_ts time.Time
 	if fi, err := os.Stat(gfwlist_txt); nil == err {
 		file_ts = fi.ModTime()
@@ -448,6 +448,17 @@ func selectProxyByRequest(req *http.Request, host, port string, isHttpsConn bool
 	return proxyNames, attrs
 }
 
+func adjustProxyName(name string, isHttpsConn bool) string {
+	if strings.EqualFold(name, GOOGLE_NAME) {
+		if isHttpsConn {
+			return GOOGLE_HTTPS_NAME
+		} else {
+			return GOOGLE_HTTP_NAME
+		}
+	}
+	return name
+}
+
 func SelectProxy(req *http.Request, conn net.Conn, isHttpsConn bool) ([]RemoteConnectionManager, map[string]string) {
 	host := req.Host
 	port := "80"
@@ -482,6 +493,7 @@ func SelectProxy(req *http.Request, conn net.Conn, isHttpsConn bool) ([]RemoteCo
 		if strings.EqualFold(proxyName, DEFAULT_NAME) {
 			proxyName = spac.defaultRule
 		}
+		proxyName = adjustProxyName(proxyName, isHttpsConn)
 		switch proxyName {
 		case GAE_NAME, C4_NAME, SSH_NAME:
 			if v, ok := registedRemoteConnManager[proxyName]; ok {
@@ -489,7 +501,7 @@ func SelectProxy(req *http.Request, conn net.Conn, isHttpsConn bool) ([]RemoteCo
 			} else {
 				log.Printf("No proxy:%s defined for %s\n", proxyName, host)
 			}
-		case GOOGLE_NAME, GOOGLE_HTTP_NAME:
+		case GOOGLE_HTTP_NAME:
 			if google_enable {
 				proxyManagers = append(proxyManagers, httpGoogleManager)
 			}

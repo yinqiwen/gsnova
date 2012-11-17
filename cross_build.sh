@@ -1,5 +1,5 @@
 #!/bin/sh
-VERSION="0.18.2"
+VERSION="0.18.4"
 
 GSNOVA_DIR=`dirname $0 | sed -e "s#^\\([^/]\\)#${PWD}/\\1#"` # sed makes absolute
 build_product()
@@ -36,7 +36,7 @@ build_dist()
    if [ "$OS" = "windows" ]; then
       exename="$1".exe
    fi
-   cp $GSNOVA_DIR/README $GSNOVA_DIR/$DIST_DIR
+   cp $GSNOVA_DIR/README.md $GSNOVA_DIR/$DIST_DIR
    cp $GSNOVA_DIR/*.txt $GSNOVA_DIR/$DIST_DIR
    cp $GSNOVA_DIR/bin/"$OS"_$ARCH/main* $GSNOVA_DIR/$DIST_DIR/$exename
    cp $GSNOVA_DIR/conf/"$1".conf $GSNOVA_DIR/$DIST_DIR
@@ -51,8 +51,10 @@ build_dist()
       chmod 744 $DIST_DIR/gsnova
       chmod 600 $DIST_DIR/gsnova.conf
       chmod 644 $DIST_DIR/*.txt
-      chmod 644 $DIST_DIR/{cert,hosts,spac}/*
-      chmod 644 $DIST_DIR/web/*.* $DIST_DIR/web/{css,images,scripts}/*
+      chmod -R 744 $DIST_DIR/cert/*
+      chmod -R 744 $DIST_DIR/hosts/*
+      chmod -R 744 $DIST_DIR/spac/*
+      chmod -R 744 $DIST_DIR/web/*
       tar czf ${1}_${VERSION}_${OS}_${ARCH}.tar.gz ${1}-${VERSION}
    fi
    rm -rf $GSNOVA_DIR/$DIST_DIR

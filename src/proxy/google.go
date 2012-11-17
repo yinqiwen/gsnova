@@ -118,13 +118,11 @@ func (conn *GoogleConnection) initHttpsClient() {
 		if nil != err {
 			log.Printf("Failed to connect address:%s:443 for reason:%s\n", addr, err.Error())
 			conn.https_client.Close()
-			conn.https_client = nil
 			return
 		}
 		if res.StatusCode != 200 {
 			log.Printf("Failed to connect address:%s:443 for response code:%d\n", addr, res.StatusCode)
 			conn.https_client.Close()
-			conn.https_client = nil
 			return
 		}
 		conn.overProxy = true
@@ -340,6 +338,12 @@ func (google *GoogleConnection) Request(conn *SessionConnection, ev event.Event)
 				google.Close()
 				return err, nil
 			}
+//			if resp.StatusCode >= 300 {
+//				log.Printf("Session[%d]Request %s receive error response %s\n", req.GetHash(), util.GetURLString(req.RawReq, true), resp.Status)
+//			}
+//			if resp.StatusCode == 502{
+//			   return fmt.Errorf("Invalid 502 response for request."), nil
+//			}
 			err = resp.Write(conn.LocalRawConn)
 			if nil == err {
 				err = resp.Body.Close()
@@ -421,6 +425,7 @@ func InitGoogle() error {
 		googleHttpsHost = GOOGLE_HTTPS
 		googleHttpHost = GOOGLE_HTTP
 	}
+	connTimeoutSecs = 1500
 	if tmp, exist := common.Cfg.GetIntProperty("Google", "ConnectTimeout"); exist {
 		connTimeoutSecs = time.Duration(tmp) * time.Millisecond
 	}
@@ -432,6 +437,6 @@ func InitGoogle() error {
 func newGoogle(name string) *Google {
 	manager := new(Google)
 	manager.name = name
-	manager.idle_conns = make(chan RemoteConnection, 20)
+	manager.idle_conns = make(chan RemoteConnection, 50)
 	return manager
 }
