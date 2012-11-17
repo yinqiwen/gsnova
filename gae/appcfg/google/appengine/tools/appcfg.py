@@ -4317,11 +4317,11 @@ def main(argv):
   try:
     result = AppCfgApp(argv).Run()
     if result:
-      sys.exit(result)
-      print '####', result
+      #sys.exit(result)
+      print 'Failed to execute appcfg:', result
   except KeyboardInterrupt:
     StatusUpdate('Interrupted.')
-    sys.exit(1)
+    #sys.exit(1)
 
 
 if __name__ == '__main__':

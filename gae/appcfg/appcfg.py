@@ -141,7 +141,7 @@ def _google_create_connection(address, timeout=None):
   msg = "getaddrinfo returns an empty list"
   host, port = address
   import socket
-  google_hosts = ["www.google.co.jp","www.google.co.kr", "www.google.com.hk","maps.google.com","www.google.com.tw"]
+  google_hosts = ["www.google.com.hk","maps.google.com","www.google.co.jp","www.google.co.kr", "www.google.com.tw"]
   for google_host in google_hosts:
     host = google_host
     for res in socket.getaddrinfo(host, port, 0, socket.SOCK_STREAM):
@@ -154,7 +154,7 @@ def _google_create_connection(address, timeout=None):
         sock.settimeout(None)  
         return sock
       except socket.error, msg:
-        print socket.error, msg
+        print "[WARN]Failed to connect " + host, socket.error, msg
         if sock is not None:
           sock.close()
 

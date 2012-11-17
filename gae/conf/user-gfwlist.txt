@@ -1,0 +1,6 @@
+!User configed rules
+
+golang.org
+*.google.com.*
+*.google.com
+*.googlecode.com

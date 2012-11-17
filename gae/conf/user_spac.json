@@ -1,0 +1,20 @@
+[
+  {
+    "Host" : ["*.c.youtube.com", "av.vimeo.com"],
+    "Proxy": ["Direct", "Default"],
+    "Attr":  ["CRLF", "Range"]
+  },
+  {
+    "Protocol":"https",
+    "Host" : ["Target https domain patterns for proxy"],
+    "Proxy":["socks://127.0.0.1:7070"]
+  },
+  {
+    "Host" : ["Target domain patterns for proxy"],
+    "Proxy":["http://127.0.0.1:8080"]
+  },
+  {
+    "Host" : ["Configure direct access sites, like *.qq.com*"],
+    "Proxy":["Direct"]
+  }
+]
