@@ -227,7 +227,7 @@ func (conn *GoogleConnection) initHttpClient(proxyAddr string) {
 				addr, _ := getLocalHostMapping(googleHttpsHost)
 				addr = net.JoinHostPort(addr, "443")
 				if !preferIP {
-					//addr, _ = lookupAvailableAddress(addr)
+					addr, _ = lookupAvailableAddress(addr)
 				}
 				return addr
 			}
@@ -293,6 +293,7 @@ func (google *GoogleConnection) Request(conn *SessionConnection, ev event.Event)
 		local.Close()
 		remote.Close()
 	}
+	L:
 	switch ev.GetType() {
 	case event.HTTP_REQUEST_EVENT_TYPE:
 		req := ev.(*event.HTTPRequestEvent)
@@ -333,17 +334,23 @@ func (google *GoogleConnection) Request(conn *SessionConnection, ev event.Event)
 				google.Close()
 				return err, nil
 			}
+			google.http_client.SetReadDeadline(time.Now().Add(10 * time.Second))
 			resp, err := http.ReadResponse(google.http_client_reader, req.RawReq)
 			if err != nil {
-				google.Close()
+			    google.Close()
+				if neterr, ok := err.(net.Error); ok && neterr.Timeout() {
+				    log.Printf("Read Google connection timeout, retry.\n")
+					goto L
+				}
 				return err, nil
 			}
-//			if resp.StatusCode >= 300 {
-//				log.Printf("Session[%d]Request %s receive error response %s\n", req.GetHash(), util.GetURLString(req.RawReq, true), resp.Status)
-//			}
-//			if resp.StatusCode == 502{
-//			   return fmt.Errorf("Invalid 502 response for request."), nil
-//			}
+			google.http_client.SetReadDeadline(time.Time{})
+			//			if resp.StatusCode >= 300 {
+			//				log.Printf("Session[%d]Request %s receive error response %s\n", req.GetHash(), util.GetURLString(req.RawReq, true), resp.Status)
+			//			}
+			//			if resp.StatusCode == 502{
+			//			   return fmt.Errorf("Invalid 502 response for request."), nil
+			//			}
 			err = resp.Write(conn.LocalRawConn)
 			if nil == err {
 				err = resp.Body.Close()
