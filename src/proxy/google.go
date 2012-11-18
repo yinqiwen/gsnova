@@ -293,7 +293,7 @@ func (google *GoogleConnection) Request(conn *SessionConnection, ev event.Event)
 		local.Close()
 		remote.Close()
 	}
-	L:
+//L:
 	switch ev.GetType() {
 	case event.HTTP_REQUEST_EVENT_TYPE:
 		req := ev.(*event.HTTPRequestEvent)
@@ -334,17 +334,17 @@ func (google *GoogleConnection) Request(conn *SessionConnection, ev event.Event)
 				google.Close()
 				return err, nil
 			}
-			google.http_client.SetReadDeadline(time.Now().Add(10 * time.Second))
+			//google.http_client.SetReadDeadline(time.Now().Add(10 * time.Second))
 			resp, err := http.ReadResponse(google.http_client_reader, req.RawReq)
 			if err != nil {
-			    google.Close()
-				if neterr, ok := err.(net.Error); ok && neterr.Timeout() {
-				    log.Printf("Read Google connection timeout, retry.\n")
-					goto L
-				}
+				google.Close()
+				//				if neterr, ok := err.(net.Error); ok && neterr.Timeout() {
+				//				    log.Printf("Read Google connection timeout, retry.\n")
+				//					goto L
+				//				}
 				return err, nil
 			}
-			google.http_client.SetReadDeadline(time.Time{})
+			//google.http_client.SetReadDeadline(time.Time{})
 			//			if resp.StatusCode >= 300 {
 			//				log.Printf("Session[%d]Request %s receive error response %s\n", req.GetHash(), util.GetURLString(req.RawReq, true), resp.Status)
 			//			}

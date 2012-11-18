@@ -14,6 +14,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 	"util"
 )
@@ -33,8 +34,9 @@ var logined bool
 var userToken string
 var externIP string
 var sessions map[uint32]*localProxySession = make(map[uint32]*localProxySession)
-
 var readChanMap map[string][]chan event.Event = make(map[string][]chan event.Event)
+
+var aliveSessionNum = int32(0)
 
 func getRequestChan(server string, ev event.Event) chan event.Event {
 	index := int(ev.GetHash()) % len(readChanMap[server])
@@ -112,6 +114,9 @@ func http_remote_loop(remote string, index int) {
 	for {
 		select {
 		case <-tick.C:
+			if buf.Len() == 0 && aliveSessionNum == 0 {
+				continue
+			}
 			req := &http.Request{
 				Method:        "POST",
 				URL:           &url.URL{Scheme: "http", Host: domain, Path: path},
@@ -352,12 +357,13 @@ type C4 struct {
 }
 
 func (manager *C4) RecycleRemoteConnection(conn RemoteConnection) {
-	//do nothing
+	atomic.AddInt32(&aliveSessionNum, -1)
 }
 
 func (manager *C4) GetRemoteConnection(ev event.Event, attrs map[string]string) (RemoteConnection, error) {
 	conn := &C4HttpConnection{}
 	conn.manager = manager
+	atomic.AddInt32(&aliveSessionNum, 1)
 	return conn, nil
 }
 
