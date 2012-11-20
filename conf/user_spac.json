@@ -1,7 +1,7 @@
 [
   {
     "Host" : ["*.c.youtube.com", "av.vimeo.com"],
-    "Proxy": ["Direct", "Default"],
+    "Proxy": ["Default"],
     "Attr":  ["CRLF", "Range"]
   },
   {

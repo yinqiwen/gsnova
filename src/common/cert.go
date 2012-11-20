@@ -109,8 +109,8 @@ func getTLSCert(host string) (tls.Certificate, error) {
 	cBytes := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: crt.Raw})
 	kBytes := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(priv)})
 	log.Printf("Write %s & %s\n", cf, kf)
-	ioutil.WriteFile(cf, cBytes, 755)
-	ioutil.WriteFile(kf, kBytes, 755)
+	ioutil.WriteFile(cf, cBytes, 0755)
+	ioutil.WriteFile(kf, kBytes, 0755)
 	tls_cer, err = tls.X509KeyPair(cBytes, kBytes)
 	if nil == err {
 		cachedCertificates[host] = tls_cer
