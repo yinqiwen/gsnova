@@ -112,6 +112,7 @@ func statHandler(w http.ResponseWriter, req *http.Request) {
 	buf.WriteString(fmt.Sprintf("NumGoroutine: %d\n", runtime.NumGoroutine()))
 	buf.WriteString(fmt.Sprintf("NumProxyConn: %d\n", total_proxy_conn_num))
 	buf.WriteString(fmt.Sprintf("NumGAEConn: %d\n", total_gae_conn_num))
+	buf.WriteString(fmt.Sprintf("NumC4Conn: %d\n", total_c4_conn_num))
 	buf.WriteString(fmt.Sprintf("NumGoogleConn: %d\n", total_google_conn_num))
 	buf.WriteString(fmt.Sprintf("NumForwardConn: %d\n", total_forwaed_conn_num))
 	buf.WriteString(fmt.Sprintf("GOMAXPROCS: %d\n", runtime.GOMAXPROCS(runtime.NumCPU())))

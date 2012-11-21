@@ -25,9 +25,9 @@ func (gae *GAEHttpConnection) tunnel_write(conn *SessionConnection) {
 func (gae *GAEHttpConnection) tunnel_read(conn *SessionConnection) {
 	wait := 1 * time.Second
 	for !gae.closed {
-		read := &event.SocketReadEvent{Timeout: 25}
+		read := &event.SocketReadEvent{Timeout: 25, MaxRead: 256 * 1024}
 		read.SetHash(conn.SessionID)
-		err, res := gae.requestEvent(gae.client,conn, read)
+		err, res := gae.requestEvent(gae.client, conn, read)
 		if nil == err {
 			wait = 1 * time.Second
 			gae.handleTunnelResponse(conn, res)

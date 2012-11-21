@@ -31,7 +31,6 @@ type SocketConnectWithDataEvent struct {
 	Content []byte
 	Addr    string
 	Net     string
-	Timeout uint32
 	EventHeader
 }
 
@@ -39,14 +38,11 @@ func (req *SocketConnectWithDataEvent) Encode(buffer *bytes.Buffer) {
 	EncodeBytesValue(buffer, req.Content)
 	EncodeStringValue(buffer, req.Addr)
 	EncodeStringValue(buffer, req.Net)
-	EncodeUInt32Value(buffer, req.Timeout)
 }
 func (req *SocketConnectWithDataEvent) Decode(buffer *bytes.Buffer) (err error) {
 	if req.Content, err = DecodeBytesValue(buffer); nil == err {
 		if req.Addr, err = DecodeStringValue(buffer); nil == err {
-			if req.Net, err = DecodeStringValue(buffer); nil == err {
-				req.Timeout, err = DecodeUInt32Value(buffer)
-			}
+			req.Net, err = DecodeStringValue(buffer)
 		}
 	}
 	return

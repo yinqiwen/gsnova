@@ -19,55 +19,145 @@ import (
 	"util"
 )
 
-const (
-	SESSION_INITED                   uint32 = 1
-	SESSION_WAITING_CONNECT_RESPONSE uint32 = 2
-	SESSION_WAITING_RESPONSE         uint32 = 3
-	SESSION_TRANSACTION_COMPELETE    uint32 = 4
-	SESSION_PROCEEDING               uint32 = 5
-	SESSION_COMPLETED                uint32 = 6
-	SESSION_DELETING                 uint32 = 7
-)
+const ()
 
 var c4_enable bool
 var logined bool
 var userToken string
-var externIP string
-var sessions map[uint32]*localProxySession = make(map[uint32]*localProxySession)
-var readChanMap map[string][]chan event.Event = make(map[string][]chan event.Event)
 
-var aliveSessionNum = int32(0)
+var total_c4_conn_num = int32(0)
 
-func getRequestChan(server string, ev event.Event) chan event.Event {
-	index := int(ev.GetHash()) % len(readChanMap[server])
-	return readChanMap[server][index]
+type C4Config struct {
+	Compressor     uint32
+	Encrypter      uint32
+	UA             string
+	ConnectionMode string
+	ReadTimeout    uint32
+	MaxReadBytes   uint32
 }
 
-type localProxySession struct {
-	closed        bool
-	id            uint32
-	server        string
-	remote_addr   string
-	localConn     *SessionConnection
-	writeBackChan chan event.Event
+var c4_cfg *C4Config
+
+type C4HttpConnection struct {
+	sess               *SessionConnection
+	tunnelChannel      chan event.Event
+	tunnel_remote_addr string
+	server             string
+	closed             bool
+	manager            *C4
 }
 
-func (sess *localProxySession) loop() {
-	tick := time.NewTicker(10 * time.Millisecond)
-	for !sess.closed {
-		select {
-		case <-tick.C:
-			break
-		case ev := <-sess.writeBackChan:
-			if nil == ev {
-				return
+func (conn *C4HttpConnection) IsDisconnected() bool {
+	return conn.closed
+}
+
+func (c4 *C4HttpConnection) Close() error {
+	if !c4.closed {
+		c4.closed = true
+		closeEv := &event.SocketConnectionEvent{}
+		closeEv.Status = event.TCP_CONN_CLOSED
+		closeEv.SetHash(c4.sess.SessionID)
+		c4.offerRequestEvent(closeEv)
+	}
+	return nil
+}
+
+func (c4 *C4HttpConnection) requestEvent(ev event.Event, isPull bool) error {
+	buf := new(bytes.Buffer)
+	event.EncodeEvent(buf, ev)
+	domain := c4.server
+	pathstr := "invoke2"
+	path := "/" + pathstr
+	rs := strings.SplitN(c4.server, "/", 2)
+	if len(rs) == 2 {
+		domain = rs[0]
+		if strings.HasSuffix(rs[1], "/") {
+			path = "/" + rs[1] + pathstr
+		} else {
+			path = "/" + rs[1] + pathstr
+		}
+	}
+	req := &http.Request{
+		Method:        "POST",
+		URL:           &url.URL{Scheme: "http", Host: domain, Path: path},
+		Host:          domain,
+		Header:        make(http.Header),
+		Body:          ioutil.NopCloser(buf),
+		ContentLength: int64(buf.Len()),
+	}
+	role := "pull"
+	if !isPull {
+		role = "push"
+	}
+	//log.Printf("%s\n", fmt.Sprintf("%s_%d_%d", role, c4_cfg.ReadTimeout, c4_cfg.MaxReadBytes))
+	req.Header.Set("C4MiscInfo", fmt.Sprintf("%s_%d_%d", role, c4_cfg.ReadTimeout, c4_cfg.MaxReadBytes))
+
+	req.Header.Set("UserToken", userToken)
+	req.Header.Set("Connection", "keep-alive")
+	req.Header.Set("Content-Type", "application/octet-stream")
+	if len(c4_cfg.UA) > 0 {
+		req.Header.Set("User-Agent", c4_cfg.UA)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		log.Println(err.Error())
+		return err
+	}
+	if resp.StatusCode != 200 {
+		log.Printf("Unexpected response %s for %s\n", resp.Status, c4.server)
+		return fmt.Errorf("Invalid response with status:%d", resp.StatusCode)
+	}
+	// write http response response to conn
+	//io.Copy(conn, resp.Body)
+	if resp.ContentLength > 0 {
+		content := make([]byte, resp.ContentLength)
+		n, err := io.ReadFull(resp.Body, content)
+		if int64(n) != resp.ContentLength || nil != err {
+			log.Printf("Failed to read data from body %d or %v", n, err)
+			return fmt.Errorf("Read response failed %v", err)
+		} else {
+			buf = bytes.NewBuffer(content)
+			for buf.Len() > 0 {
+				err, ev := event.DecodeEvent(buf)
+				if nil == err {
+					ev = event.ExtractEvent(ev)
+					c4.handleTunnelResponse(c4.sess, ev)
+				} else {
+					log.Printf("[ERROR]Decode event failed %v", err)
+				}
 			}
-			processRecvEvent(ev, sess.server)
+		}
+	}
+	buf.Reset()
+	resp.Body.Close()
+	return nil
+}
+
+func (c4 *C4HttpConnection) tunnel_write(conn *SessionConnection) {
+	for !c4.closed {
+		select {
+		case ev := <-c4.tunnelChannel:
+			c4.requestEvent(ev, false)
 		}
 	}
 }
 
-func (sess *localProxySession) requestEvent(ev event.Event) {
+func (c4 *C4HttpConnection) tunnel_read(conn *SessionConnection) {
+	wait := 1 * time.Second
+	for !c4.closed {
+		read := &event.SocketReadEvent{Timeout: c4_cfg.ReadTimeout, MaxRead: c4_cfg.MaxReadBytes}
+		read.SetHash(conn.SessionID)
+		err := c4.requestEvent(read, true)
+		if nil == err {
+			wait = 1 * time.Second
+		} else {
+			time.Sleep(wait)
+			wait = 2 * wait
+		}
+	}
+}
+
+func (c4 *C4HttpConnection) offerRequestEvent(ev event.Event) {
 	switch ev.GetType() {
 	case event.EVENT_TCP_CHUNK_TYPE:
 		var compress event.CompressEventV2
@@ -80,179 +170,35 @@ func (sess *localProxySession) requestEvent(ev event.Event) {
 	encrypt.SetHash(ev.GetHash())
 	encrypt.EncryptType = c4_cfg.Encrypter
 	encrypt.Ev = ev
-	//log.Printf("[%d]Block enter with chan len:%d\n", sess.id, len(evch))
-	getRequestChan(sess.server, ev) <- &encrypt
-	//log.Printf("[%d]Block exit\n", sess.id)
+	c4.tunnelChannel <- &encrypt
 }
 
-func http_remote_loop(remote string, index int) {
-	baseDuration := time.Duration(c4_cfg.MinWritePeriod) * time.Millisecond
-	tick := time.NewTicker(baseDuration)
-	//    tickerMap[remote] = tick
-	buf := new(bytes.Buffer)
-	//bufMap[remote] = buf
-	read := make(chan event.Event, 4096)
-	readChanMap[remote][index] = read
-	if !logined {
-		login := &event.UserLoginEvent{}
-		login.User = userToken
-		read <- login
-		logined = true
-	}
-
-	domain := remote
-	path := "/invoke"
-	rs := strings.SplitN(remote, "/", 2)
-	if len(rs) == 2 {
-		domain = rs[0]
-		if strings.HasSuffix(rs[1], "/") {
-			path = "/" + rs[1] + "invoke"
-		} else {
-			path = "/" + rs[1] + "/invoke"
-		}
-	}
-	for {
-		select {
-		case <-tick.C:
-			if buf.Len() == 0 && aliveSessionNum == 0 {
-				continue
-			}
-			req := &http.Request{
-				Method:        "POST",
-				URL:           &url.URL{Scheme: "http", Host: domain, Path: path},
-				Host:          domain,
-				Header:        make(http.Header),
-				Body:          ioutil.NopCloser(buf),
-				ContentLength: int64(buf.Len()),
-			}
-			req.Header.Set("UserToken", userToken)
-			//req.Header.Set("Connection", "close")
-			req.Header.Set("Connection", "keep-alive")
-			req.Header.Set("FetcherIndex", fmt.Sprintf("%d:%d", index, c4_cfg.ConnectionPoolSize))
-			//req.Header.Set("Keep-Alive", "timeout=60, max=100")
-			req.Header.Set("Content-Type", "application/octet-stream")
-			if len(c4_cfg.UA) > 0 {
-				req.Header.Set("User-Agent", c4_cfg.UA)
-			}
-			resp, err := http.DefaultClient.Do(req)
-			if err != nil {
-				log.Println(err.Error())
-				continue
-			}
-			if resp.StatusCode != 200 {
-				log.Printf("Unexpected response %s for %s\n", resp.Status, remote)
-				continue
-			}
-
-			// write http response response to conn
-			//io.Copy(conn, resp.Body)
-			if resp.ContentLength > 0 {
-				content := make([]byte, resp.ContentLength)
-				n, err := io.ReadFull(resp.Body, content)
-				if int64(n) != resp.ContentLength || nil != err {
-					log.Printf("Failed to read data from body %d or %v", n, err)
-					continue
-				} else {
-					go handleRecvBody(bytes.NewBuffer(content), remote, index)
-				}
-			}
-			buf.Reset()
-			resp.Body.Close()
-		case b := <-read:
-			event.EncodeEvent(buf, b)
-		}
+func (c4 *C4HttpConnection) doCloseTunnel() {
+	if nil != c4.tunnelChannel {
+		closeEv := &event.SocketConnectionEvent{}
+		closeEv.Status = event.TCP_CONN_CLOSED
+		closeEv.SetHash(c4.sess.SessionID)
+		c4.offerRequestEvent(closeEv)
 	}
 }
 
-func handleRecvBody(buf *bytes.Buffer, server string, index int) {
-	//log.Printf("Handle content:%d\n", buf.Len())
-	for buf.Len() > 0 {
-		err, ev := event.DecodeEvent(buf)
-		if nil == err {
-			//processRecvEvent(ev, server)
-			sess, err := getSession(ev.GetHash())
-			if nil == err {
-				sess.writeBackChan <- ev
-			} else {
-				ev = event.ExtractEvent(ev)
-				if ev.GetHash() != 0 && ev.GetType() != event.EVENT_TCP_CONNECTION_TYPE {
-					log.Printf("No session:%d found for %T\n", ev.GetHash(), ev)
-					closeEv := &event.SocketConnectionEvent{}
-					closeEv.Status = event.TCP_CONN_CLOSED
-					closeEv.SetHash(ev.GetHash())
-					readChanMap[server][index] <- closeEv
-				}
-			}
-		}
-	}
-	buf.Reset()
-}
-
-func getSession(id uint32) (*localProxySession, error) {
-	handler, ok := sessions[id]
-	if !ok {
-		return nil, errors.New("Not exist session")
-	}
-	return handler, nil
-}
-
-func getCreateSession(ev *event.HTTPRequestEvent, server string) *localProxySession {
-	handler, ok := sessions[ev.GetHash()]
-	if !ok {
-		handler = &(localProxySession{})
-		handler.server = server
-		handler.closed = false
-		handler.writeBackChan = make(chan event.Event, 4096)
-		sessions[ev.GetHash()] = handler
-		go handler.loop()
-	}
-
-	return handler
-}
-
-func deleteSessionEntry(id uint32) {
-	handler, ok := sessions[id]
-	if ok {
-		handler.closed = true
-		//close(handler.writeBackChan)
-		handler.localConn.LocalRawConn.Close()
-		delete(sessions, id)
-	}
-}
-
-func processRecvEvent(ev event.Event, server string) error {
-	ev = event.ExtractEvent(ev)
-	//log.Printf("Start process event %T", ev)
-	handler, err := getSession(ev.GetHash())
-	if nil != err {
-
-		return nil
-	}
-	//log.Printf("Recv event type:%T\n", ev)
+func (c4 *C4HttpConnection) handleTunnelResponse(conn *SessionConnection, ev event.Event) error {
 	switch ev.GetType() {
 	case event.EVENT_TCP_CONNECTION_TYPE:
 		cev := ev.(*event.SocketConnectionEvent)
-		//		log.Printf("Status %d\n", cev.Status)
 		if cev.Status == event.TCP_CONN_CLOSED {
-			if cev.Addr == handler.remote_addr {
-				log.Printf("[%d]Close session for %s\n", ev.GetHash(), cev.Addr)
-				deleteSessionEntry(ev.GetHash())
+			log.Printf("Session[%d]Remote %s connection closed, current proxy addr:%s\n", conn.SessionID, cev.Addr, c4.tunnel_remote_addr)
+			if c4.tunnel_remote_addr == cev.Addr {
+				conn.Close()
 			}
 		}
 	case event.EVENT_TCP_CHUNK_TYPE:
 		chunk := ev.(*event.TCPChunkEvent)
-		//log.Printf("[%d]Write Chunk:%d with %d bytes", ev.GetHash(), chunk.Sequence, len(chunk.Content))
-		n, err := handler.localConn.LocalRawConn.Write(chunk.Content)
+		log.Printf("Session[%d]Handle TCP chunk:%d with %d bytes\n", conn.SessionID, chunk.Sequence, len(chunk.Content))
+		_, err := conn.LocalRawConn.Write(chunk.Content)
 		if nil != err {
 			log.Printf("[%d]Failed to write  data to local client:%v.\n", ev.GetHash(), err)
-			deleteSessionEntry(ev.GetHash())
-			closeEv := &event.SocketConnectionEvent{}
-			closeEv.Status = event.TCP_CONN_CLOSED
-			closeEv.SetHash(ev.GetHash())
-			getRequestChan(server, ev) <- closeEv
-		}
-		if nil == err && n != len(chunk.Content) {
-			log.Printf("[%d]=================less data=======.\n", ev.GetHash())
+			conn.Close()
 		}
 	default:
 		log.Printf("Unexpected event type:%d\n", ev.GetType())
@@ -260,93 +206,69 @@ func processRecvEvent(ev event.Event, server string) error {
 	return nil
 }
 
-type C4Config struct {
-	Compressor             uint32
-	Encrypter              uint32
-	UA                     string
-	ConnectionMode         string
-	ConnectionPoolSize     uint32
-	MinWritePeriod         uint32
-	RSocketPort            uint32
-	RSocketHeartBeatPeriod uint32
-}
-
-var c4_cfg *C4Config
-
-type C4HttpConnection struct {
-	lastSessionId uint32
-	manager       *C4
-}
-
-func (conn *C4HttpConnection) IsDisconnected() bool {
-	return false
-}
-
-func (c4 *C4HttpConnection) Close() error {
-	session, err := getSession(c4.lastSessionId)
-	if nil == err {
-		closeEv := &event.SocketConnectionEvent{}
-		closeEv.Status = event.TCP_CONN_CLOSED
-		closeEv.SetHash(c4.lastSessionId)
-		session.requestEvent(closeEv)
-		deleteSessionEntry(c4.lastSessionId)
+func (c4 *C4HttpConnection) requestOverTunnel(conn *SessionConnection, ev event.Event) (err error, res event.Event) {
+	if nil == c4.tunnelChannel {
+		c4.tunnelChannel = make(chan event.Event)
+		go c4.tunnel_write(conn)
+		go c4.tunnel_read(conn)
 	}
-	return nil
+	if len(c4.server) == 0 {
+		c4.server = c4.manager.servers.Select().(string)
+	}
+	switch ev.GetType() {
+	case event.HTTP_REQUEST_EVENT_TYPE:
+		req := ev.(*event.HTTPRequestEvent)
+		default_port := "80"
+		if strings.EqualFold(req.RawReq.Method, "CONNECT") {
+			conn.State = STATE_RECV_HTTP_CHUNK
+			default_port = "443"
+		} else {
+			conn.State = STATE_RECV_HTTP
+		}
+		log.Printf("Session[%d]Request %s\n", req.GetHash(), util.GetURLString(req.RawReq, true))
+		if nil != err {
+			log.Printf("Session[%d]Failed to encode request to bytes", req.GetHash())
+			return
+		}
+		remote_addr := req.RawReq.Host
+		if !strings.Contains(remote_addr, ":") {
+			remote_addr = net.JoinHostPort(req.RawReq.Host, default_port)
+		}
+		if strings.Contains(req.Url, "http://") {
+			req.Url = req.Url[7+len(req.RawReq.Host):]
+		}
+		c4.tunnel_remote_addr = remote_addr
+		c4.offerRequestEvent(req)
+
+		if req.RawReq.ContentLength > 0 {
+			rest := req.RawReq.ContentLength
+			tmpbuf := make([]byte, 8192)
+			for rest > 0 {
+				n, err := req.RawReq.Body.Read(tmpbuf)
+				if nil == err {
+					rest = rest - int64(n)
+					chunk := &event.TCPChunkEvent{Content: tmpbuf[0:n]}
+					chunk.SetHash(req.GetHash())
+					c4.offerRequestEvent(chunk)
+				} else {
+					break
+				}
+			}
+		}
+		req.RawReq.Body.Close()
+	case event.HTTP_CHUNK_EVENT_TYPE:
+		chunk := ev.(*event.HTTPChunkEvent)
+		tcp_chunk := &event.TCPChunkEvent{Content: chunk.Content}
+		tcp_chunk.SetHash(ev.GetHash())
+		c4.offerRequestEvent(tcp_chunk)
+		conn.State = STATE_RECV_HTTP_CHUNK
+	}
+	return nil, nil
 }
 
 func (c4 *C4HttpConnection) Request(conn *SessionConnection, ev event.Event) (err error, res event.Event) {
-	if nil != ev {
-		c4.lastSessionId = ev.GetHash()
-		switch ev.GetType() {
-		case event.HTTP_REQUEST_EVENT_TYPE:
-			req := ev.(*event.HTTPRequestEvent)
-			handler := getCreateSession(req, c4.manager.servers.Select().(string))
-			handler.remote_addr = req.RawReq.Host
-			if !strings.Contains(handler.remote_addr, ":") {
-				handler.remote_addr = handler.remote_addr + ":80"
-			}
-			handler.localConn = conn
-			if strings.EqualFold(req.RawReq.Method, "CONNECT") {
-				conn.State = STATE_RECV_HTTP_CHUNK
-			} else {
-				conn.State = STATE_RECV_HTTP
-				proxyURL, _ := url.Parse(req.Url)
-				req.Url = proxyURL.RequestURI()
-			}
-			log.Printf("Session[%d]Request %s\n", req.GetHash(), util.GetURLString(req.RawReq, true))
-			handler.requestEvent(req)
-			if conn.State == STATE_RECV_HTTP {
-				if req.RawReq.ContentLength > 0 {
-					rest := req.RawReq.ContentLength
-					tmpbuf := make([]byte, 8192)
-					for rest > 0 {
-						n, err := req.RawReq.Body.Read(tmpbuf)
-						if nil == err {
-							rest = rest - int64(n)
-							chunk := &event.TCPChunkEvent{Content: tmpbuf[0:n]}
-							chunk.SetHash(req.GetHash())
-							handler.requestEvent(chunk)
-						} else {
-							break
-						}
-					}
-				}
-				req.RawReq.Body.Close()
-			}
-		case event.HTTP_CHUNK_EVENT_TYPE:
-			handler, err := getSession(ev.GetHash())
-			if nil != err {
-				return err, nil
-			}
-			chunk := ev.(*event.HTTPChunkEvent)
-			tcp_chunk := &event.TCPChunkEvent{Content: chunk.Content}
-			tcp_chunk.SetHash(ev.GetHash())
-			handler.requestEvent(tcp_chunk)
-			conn.State = STATE_RECV_HTTP_CHUNK
-		}
-	}
-
-	return nil, nil
+	c4.sess = conn
+	return c4.requestOverTunnel(conn, ev)
 }
 func (c4 *C4HttpConnection) GetConnectionManager() RemoteConnectionManager {
 	return c4.manager
@@ -357,13 +279,22 @@ type C4 struct {
 }
 
 func (manager *C4) RecycleRemoteConnection(conn RemoteConnection) {
-	atomic.AddInt32(&aliveSessionNum, -1)
+	atomic.AddInt32(&total_c4_conn_num, -1)
+}
+
+func (manager *C4) loginC4(server string) {
+	conn := &C4HttpConnection{}
+	conn.manager = manager
+	conn.server = server
+	login := &event.UserLoginEvent{}
+	login.User = userToken
+	conn.requestEvent(login, false)
 }
 
 func (manager *C4) GetRemoteConnection(ev event.Event, attrs map[string]string) (RemoteConnection, error) {
 	conn := &C4HttpConnection{}
 	conn.manager = manager
-	atomic.AddInt32(&aliveSessionNum, 1)
+	atomic.AddInt32(&total_c4_conn_num, 1)
 	return conn, nil
 }
 
@@ -389,14 +320,15 @@ func initC4Config() {
 			c4_cfg.Compressor = event.ENCRYPTER_NONE
 		}
 	}
-	c4_cfg.ConnectionPoolSize = 2
-	if poosize, exist := common.Cfg.GetIntProperty("C4", "ConnectionPoolSize"); exist {
-		c4_cfg.ConnectionPoolSize = uint32(poosize)
+
+	c4_cfg.ReadTimeout = 25
+	if period, exist := common.Cfg.GetIntProperty("C4", "ReadTimeout"); exist {
+		c4_cfg.ReadTimeout = uint32(period)
 	}
 
-	c4_cfg.MinWritePeriod = 500
-	if period, exist := common.Cfg.GetIntProperty("C4", "HTTPMinWritePeriod"); exist {
-		c4_cfg.MinWritePeriod = uint32(period)
+	c4_cfg.MaxReadBytes = 256 * 1024
+	if period, exist := common.Cfg.GetIntProperty("C4", "MaxReadBytes"); exist {
+		c4_cfg.MaxReadBytes = uint32(period)
 	}
 
 	c4_cfg.ConnectionMode = MODE_HTTP
@@ -427,16 +359,8 @@ func (manager *C4) Init() error {
 			break
 		}
 		manager.servers.Add(v)
-		readChanMap[v] = make([]chan event.Event, c4_cfg.ConnectionPoolSize)
-		for i := 0; i < int(c4_cfg.ConnectionPoolSize); i++ {
-			readChanMap[v][i] = make(chan event.Event, 1024)
-		}
-		if strings.EqualFold(c4_cfg.ConnectionMode, MODE_HTTP) {
-			for i := 0; i < int(c4_cfg.ConnectionPoolSize); i++ {
-				go http_remote_loop(v, i)
-			}
-		}
 		index = index + 1
+		manager.loginC4(v)
 	}
 	if index == 0 {
 		return errors.New("No configed C4 server.")

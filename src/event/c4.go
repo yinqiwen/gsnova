@@ -6,14 +6,17 @@ import (
 
 type SocketReadEvent struct {
 	Timeout uint32
+	MaxRead uint32
 	EventHeader
 }
 
 func (req *SocketReadEvent) Encode(buffer *bytes.Buffer) {
 	EncodeUInt32Value(buffer, req.Timeout)
+	EncodeUInt32Value(buffer, req.MaxRead)
 }
 func (req *SocketReadEvent) Decode(buffer *bytes.Buffer) (err error) {
 	req.Timeout, err = DecodeUInt32Value(buffer)
+	req.MaxRead, err = DecodeUInt32Value(buffer)
 	return
 }
 
