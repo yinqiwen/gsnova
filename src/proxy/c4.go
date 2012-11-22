@@ -3,6 +3,7 @@ package proxy
 import (
 	"bytes"
 	"common"
+	"encoding/binary"
 	"errors"
 	"event"
 	"fmt"
@@ -53,11 +54,11 @@ func (conn *C4HttpConnection) IsDisconnected() bool {
 
 func (c4 *C4HttpConnection) Close() error {
 	if !c4.closed {
-		c4.closed = true
 		closeEv := &event.SocketConnectionEvent{}
 		closeEv.Status = event.TCP_CONN_CLOSED
 		closeEv.SetHash(c4.sess.SessionID)
 		c4.offerRequestEvent(closeEv)
+		c4.closed = true
 	}
 	return nil
 }
@@ -104,11 +105,23 @@ func (c4 *C4HttpConnection) requestEvent(ev event.Event, isPull bool) error {
 		return err
 	}
 	if resp.StatusCode != 200 {
-		log.Printf("Unexpected response %s for %s\n", resp.Status, c4.server)
+		log.Printf("Session[%d]Role:%s unexpected response %s for %s\n", ev.GetHash(), role, resp.Status, c4.server)
 		return fmt.Errorf("Invalid response with status:%d", resp.StatusCode)
 	}
 	// write http response response to conn
-	//io.Copy(conn, resp.Body)
+
+	handle_buffer := func(buffer *bytes.Buffer) {
+		for buffer.Len() > 0 {
+			err, ev := event.DecodeEvent(buffer)
+			if nil == err {
+				ev = event.ExtractEvent(ev)
+				c4.handleTunnelResponse(c4.sess, ev)
+			} else {
+				log.Printf("[ERROR]Decode event failed %v", err)
+			}
+		}
+	}
+
 	if resp.ContentLength > 0 {
 		content := make([]byte, resp.ContentLength)
 		n, err := io.ReadFull(resp.Body, content)
@@ -117,13 +130,33 @@ func (c4 *C4HttpConnection) requestEvent(ev event.Event, isPull bool) error {
 			return fmt.Errorf("Read response failed %v", err)
 		} else {
 			buf = bytes.NewBuffer(content)
-			for buf.Len() > 0 {
-				err, ev := event.DecodeEvent(buf)
-				if nil == err {
-					ev = event.ExtractEvent(ev)
-					c4.handleTunnelResponse(c4.sess, ev)
+			handle_buffer(buf)
+		}
+	} else {
+		if len(resp.TransferEncoding) > 0 {
+			var chunkLen int32
+			chunkLen = -1
+			chunk := make([]byte, 65536)
+			var buffer bytes.Buffer
+			for {
+				n, err := resp.Body.Read(chunk)
+				if nil != err {
+					break
+				}
+				buffer.Write(chunk[0:n])
+				if chunkLen < 0 && buffer.Len() >= 4 {
+					err = binary.Read(&buffer, binary.BigEndian, &chunkLen)
+					if nil != err {
+						log.Printf("#################%v\n", err)
+					}
+				}
+				if chunkLen > 0 && buffer.Len() >= int(chunkLen) {
+					content := buffer.Next(int(chunkLen))
+					tmp := bytes.NewBuffer(content)
+					handle_buffer(tmp)
+					chunkLen = -1
 				} else {
-					log.Printf("[ERROR]Decode event failed %v", err)
+					//log.Printf("#################Not ready %d:%d\n", chunkLen, buffer.Len())
 				}
 			}
 		}
@@ -140,6 +173,7 @@ func (c4 *C4HttpConnection) tunnel_write(conn *SessionConnection) {
 			c4.requestEvent(ev, false)
 		}
 	}
+	log.Printf("Session[%d]close write tunnel.\n", conn.SessionID)
 }
 
 func (c4 *C4HttpConnection) tunnel_read(conn *SessionConnection) {
@@ -155,6 +189,7 @@ func (c4 *C4HttpConnection) tunnel_read(conn *SessionConnection) {
 			wait = 2 * wait
 		}
 	}
+	log.Printf("Session[%d]close read tunnel.\n", conn.SessionID)
 }
 
 func (c4 *C4HttpConnection) offerRequestEvent(ev event.Event) {
@@ -190,6 +225,7 @@ func (c4 *C4HttpConnection) handleTunnelResponse(conn *SessionConnection, ev eve
 			log.Printf("Session[%d]Remote %s connection closed, current proxy addr:%s\n", conn.SessionID, cev.Addr, c4.tunnel_remote_addr)
 			if c4.tunnel_remote_addr == cev.Addr {
 				conn.Close()
+				c4.Close()
 			}
 		}
 	case event.EVENT_TCP_CHUNK_TYPE:
@@ -199,6 +235,7 @@ func (c4 *C4HttpConnection) handleTunnelResponse(conn *SessionConnection, ev eve
 		if nil != err {
 			log.Printf("[%d]Failed to write  data to local client:%v.\n", ev.GetHash(), err)
 			conn.Close()
+			c4.Close()
 		}
 	default:
 		log.Printf("Unexpected event type:%d\n", ev.GetType())
@@ -207,14 +244,15 @@ func (c4 *C4HttpConnection) handleTunnelResponse(conn *SessionConnection, ev eve
 }
 
 func (c4 *C4HttpConnection) requestOverTunnel(conn *SessionConnection, ev event.Event) (err error, res event.Event) {
+	if len(c4.server) == 0 {
+		c4.server = c4.manager.servers.Select().(string)
+	}
 	if nil == c4.tunnelChannel {
 		c4.tunnelChannel = make(chan event.Event)
 		go c4.tunnel_write(conn)
 		go c4.tunnel_read(conn)
 	}
-	if len(c4.server) == 0 {
-		c4.server = c4.manager.servers.Select().(string)
-	}
+
 	switch ev.GetType() {
 	case event.HTTP_REQUEST_EVENT_TYPE:
 		req := ev.(*event.HTTPRequestEvent)
