@@ -127,7 +127,7 @@ func (conn *GAEHttpConnection) createHttpClient() *http.Client {
 	}
 	proxyInfo, exist := common.Cfg.GetProperty("LocalProxy", "Proxy")
 	if exist {
-		proxy := getLocalUrlMapping(proxyInfo)
+		
 		if strings.HasPrefix(proxyInfo, "https") {
 			dial = sslDial
 		}
@@ -136,6 +136,7 @@ func (conn *GAEHttpConnection) createHttpClient() *http.Client {
 				if nil != conn.proxyURL {
 					return conn.proxyURL, nil
 				}
+				proxy := getLocalUrlMapping(proxyInfo)
 				proxyURL, err := url.Parse(proxy)
 				if err != nil || proxyURL.Scheme == "" {
 					if u, err := url.Parse("http://" + proxy); err == nil {
