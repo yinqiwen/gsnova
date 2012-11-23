@@ -89,7 +89,7 @@ func (c4 *C4HttpConnection) requestEvent(ev event.Event, isPull bool) error {
 	role := "pull"
 	if !isPull {
 		role = "push"
-	}
+	} 
 	//log.Printf("%s\n", fmt.Sprintf("%s_%d_%d", role, c4_cfg.ReadTimeout, c4_cfg.MaxReadBytes))
 	req.Header.Set("C4MiscInfo", fmt.Sprintf("%s_%d_%d", role, c4_cfg.ReadTimeout, c4_cfg.MaxReadBytes))
 
@@ -112,12 +112,13 @@ func (c4 *C4HttpConnection) requestEvent(ev event.Event, isPull bool) error {
 
 	handle_buffer := func(buffer *bytes.Buffer) {
 		for buffer.Len() > 0 {
-			err, ev := event.DecodeEvent(buffer)
+			err, evv := event.DecodeEvent(buffer)
 			if nil == err {
-				ev = event.ExtractEvent(ev)
-				c4.handleTunnelResponse(c4.sess, ev)
+				evv = event.ExtractEvent(evv)
+				c4.handleTunnelResponse(c4.sess, evv)
 			} else {
-				log.Printf("[ERROR]Decode event failed %v", err)
+				log.Printf("Session[%d][ERROR]Decode event failed %v for role:%s", ev.GetHash(), err, role)
+				break
 			}
 		}
 	}
@@ -129,14 +130,25 @@ func (c4 *C4HttpConnection) requestEvent(ev event.Event, isPull bool) error {
 			log.Printf("Failed to read data from body %d or %v", n, err)
 			return fmt.Errorf("Read response failed %v", err)
 		} else {
-			buf = bytes.NewBuffer(content)
-			handle_buffer(buf)
+			//log.Printf("Session[%d]###### recv no TransferEncoding with %d  %v\n", ev.GetHash(), resp.ContentLength, resp.Header)
+			if len(resp.Header.Get("C4LenHeader")) > 0 {
+				buf = bytes.NewBuffer(content)
+				for buf.Len() > 0 {
+					var chunkLen int32
+					binary.Read(buf, binary.BigEndian, &chunkLen)
+					c := buf.Next(int(chunkLen))
+					handle_buffer(bytes.NewBuffer(c))
+				}
+			} else {
+				buf = bytes.NewBuffer(content)
+				handle_buffer(buf)
+			}
 		}
 	} else {
 		if len(resp.TransferEncoding) > 0 {
 			var chunkLen int32
 			chunkLen = -1
-			chunk := make([]byte, 65536)
+			chunk := make([]byte, c4_cfg.MaxReadBytes+100)
 			var buffer bytes.Buffer
 			for {
 				n, err := resp.Body.Read(chunk)
@@ -144,19 +156,23 @@ func (c4 *C4HttpConnection) requestEvent(ev event.Event, isPull bool) error {
 					break
 				}
 				buffer.Write(chunk[0:n])
-				if chunkLen < 0 && buffer.Len() >= 4 {
-					err = binary.Read(&buffer, binary.BigEndian, &chunkLen)
-					if nil != err {
-						log.Printf("#################%v\n", err)
+				for {
+					if chunkLen < 0 && buffer.Len() >= 4 {
+						err = binary.Read(&buffer, binary.BigEndian, &chunkLen)
+						if nil != err {
+							log.Printf("#################%v\n", err)
+							break
+						}
 					}
-				}
-				if chunkLen > 0 && buffer.Len() >= int(chunkLen) {
-					content := buffer.Next(int(chunkLen))
-					tmp := bytes.NewBuffer(content)
-					handle_buffer(tmp)
-					chunkLen = -1
-				} else {
-					//log.Printf("#################Not ready %d:%d\n", chunkLen, buffer.Len())
+					if chunkLen >= 0 && buffer.Len() >= int(chunkLen) {
+						content := buffer.Next(int(chunkLen))
+						tmp := bytes.NewBuffer(content)
+						handle_buffer(tmp)
+						buffer.Truncate(buffer.Len())
+						chunkLen = -1
+					} else {
+						break
+					}
 				}
 			}
 		}

@@ -1,5 +1,13 @@
 [
   {
+    "URL" : ["www.google.*/imgres"],
+    "Proxy":["Direct", "Default"]
+  },
+  {
+    "Host" : ["feedproxy.google.com"],
+    "Proxy":["Google", "Default"]
+  },
+  {
     "Host" : ["*.ytimg.com*", "*.google.com(.*)?","*.googleusercontent.com*", "*.gstatic.com", "*.googleapis.com*", "*.googlecode.com"],
     "Proxy":["GoogleHttps", "Direct", "Default"]
   },
@@ -13,12 +21,12 @@
   },
   {
     "Host" : ["*.blogspot.*", "*.appspot.com", "golang.org"],
-    "Proxy": ["GoogleHttps", "Direct", "Default"]
+    "Proxy": ["GoogleHttps", "Default"]
   },
   {
     "Host" : ["*.youtube.com"],
-    "Proxy": ["GoogleHttps", "Direct", "Default"],
-    "Attr":  ["Direct", "Default"]
+    "Proxy": ["GoogleHttps", "Default"],
+    "Attr":  ["Direct", "CRLF"]
   },
   {
     "Protocol" : "http",

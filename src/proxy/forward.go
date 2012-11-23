@@ -18,7 +18,7 @@ import (
 	"util"
 )
 
-var CRLFs = []byte("\r\r\r\r\r\r\r\n\r\r\r\r\r")
+var CRLFs = []byte("\r\r\r\r\r\r\r\r\r\r\r\r\r\r\r\r\r\r\r\r\r\r\r\r\r\r\r\r\r\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n")
 
 var total_forwaed_conn_num uint32
 

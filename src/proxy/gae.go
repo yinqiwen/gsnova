@@ -111,7 +111,7 @@ func (conn *GAEHttpConnection) createHttpClient() *http.Client {
 	tlcfg.InsecureSkipVerify = true
 
 	dial := func(n, addr string) (net.Conn, error) {
-		conn, err := net.DialTimeout(n, addr, 5*time.Second)
+		conn, err := net.DialTimeout(n, addr, connTimeoutSecs)
 		if err != nil {
 			return nil, err
 		}
@@ -119,7 +119,7 @@ func (conn *GAEHttpConnection) createHttpClient() *http.Client {
 	}
 
 	sslDial := func(n, addr string) (net.Conn, error) {
-		conn, err := net.DialTimeout(n, addr, 5*time.Second)
+		conn, err := net.DialTimeout(n, addr, connTimeoutSecs)
 		if err != nil {
 			return nil, err
 		}
@@ -200,7 +200,6 @@ func (conn *GAEHttpConnection) Auth() error {
 }
 
 func (gae *GAEHttpConnection) requestEvent(client *http.Client, conn *SessionConnection, ev event.Event) (err error, res event.Event) {
-	//gae.initHttpClient()
 	auth := &gae.auth
 	domain := auth.appid + ".appspot.com"
 	if strings.Contains(auth.appid, ".") {
@@ -777,6 +776,7 @@ func (manager *GAE) Init() error {
 		if nil != err {
 			conn.Close()
 			//try again
+			log.Printf("Failed first to auth appid:%s\n", err.Error())
 			err = conn.Auth()
 		}
 		if nil != err {

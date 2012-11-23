@@ -418,7 +418,6 @@ func InitGoogle() error {
 		}
 	}
 	log.Println("Init Google.")
-	connTimeoutSecs = 5000 * time.Millisecond
 	if tmp, exist := common.Cfg.GetIntProperty("Google", "UseGlobalProxy"); exist {
 		useGlobalProxy = tmp == 1
 	}
@@ -432,7 +431,7 @@ func InitGoogle() error {
 		googleHttpsHost = GOOGLE_HTTPS
 		googleHttpHost = GOOGLE_HTTP
 	}
-	connTimeoutSecs = 1500
+	connTimeoutSecs = 1500 * time.Millisecond
 	if tmp, exist := common.Cfg.GetIntProperty("Google", "ConnectTimeout"); exist {
 		connTimeoutSecs = time.Duration(tmp) * time.Millisecond
 	}

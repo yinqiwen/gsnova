@@ -173,6 +173,13 @@ func InitHosts() error {
 	if secs, exist := common.Cfg.GetIntProperty("Hosts", "RangeFetchTimeout"); exist {
 		rangeFetchTimeoutSecs = time.Duration(secs) * time.Second
 	}
+	if crlfs, exist := common.Cfg.GetProperty("Hosts", "CRLF"); exist {
+		log.Printf("##########%s#############\n", crlfs)
+		crlfs = strings.Replace(crlfs, "\\r", "\r\r", -1)
+		crlfs = strings.Replace(crlfs, "\\n", "\n\n", -1)
+		log.Printf("##########%s#############\n", crlfs)
+		CRLFs = []byte(crlfs)
+	}
 
 	if pattern, exist := common.Cfg.GetProperty("Hosts", "ExceptCloudHosts"); exist {
 		exceptHosts = initHostMatchRegex(pattern)

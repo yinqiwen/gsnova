@@ -63,6 +63,27 @@ func isTCPAddressBlocked(ip, port string) bool {
 	return false
 }
 
+func trustedDNSLookup(host string) (string, bool) {
+	net := "tcp"
+	//for DNSEncrypt
+	if len(trustedDNS) > 0 && trustedDNS[0] == "127.0.0.1" {
+		net = "udp"
+	}
+	options := &godns.LookupOptions{
+		DNSServers: trustedDNS,
+		Net:        net,
+		CacheTTL:   godns.DNS_CACHE_TTL_SELF,
+		OnlyIPv4:   true}
+	if ips, err := godns.LookupIP(host, options); nil == err {
+		for _, ip := range ips {
+			if nil != ip.To4() {
+				return ip.String(), true
+			}
+		}
+	}
+	return host, false
+}
+
 func trustedDNSQuery(host string, port string) (string, bool) {
 	net := "tcp"
 	//for DNSEncrypt

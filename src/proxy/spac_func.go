@@ -51,11 +51,11 @@ func isHostInCN(req *http.Request) bool {
 		host, _, _ = net.SplitHostPort(host)
 	}
 	//consider use trusted DNS
-	ips, err := net.LookupHost(host)
-	if nil != err || len(ips) == 0 {
+	ip, ok := trustedDNSLookup(host)
+	if !ok {
 		return false
 	}
-	ret := strings.EqualFold(ipfunc.FindCountry(ips[0]), "CN")
+	ret := strings.EqualFold(ipfunc.FindCountry(ip), "CN")
 	//	if ret {
 	//	   log.Printf("Find country for host:%s is CN\n", host)
 	//	}

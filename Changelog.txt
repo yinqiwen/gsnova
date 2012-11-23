@@ -1,5 +1,14 @@
 GSnova Changelog
 ===================
+Changes in version 0.19.0(2012.11.23)
+-------------------------------------------
+** Features
+   * [C4]:Refactor server&client, much faster now
+   
+** Improvement
+   * Bug fix
+   * Change default host & spac setting
+
 Changes in version 0.18.4(2012.11.17)
 -------------------------------------------
 ** Features
