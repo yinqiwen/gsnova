@@ -1,6 +1,6 @@
 [
   {
-    "Host" : ["*.c.youtube.com", "av.vimeo.com"],
+    "Host" : ["*.c.youtube.com", "av.vimeo.com", "av.voanews.com"],
     "Proxy": ["Default"],
     "Attr":  ["CRLF", "Range"]
   },

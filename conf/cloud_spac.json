@@ -24,11 +24,6 @@
     "Proxy": ["GoogleHttps", "Default"]
   },
   {
-    "Host" : ["*.youtube.com"],
-    "Proxy": ["GoogleHttps", "Default"],
-    "Attr":  ["Direct", "CRLF"]
-  },
-  {
     "Protocol" : "http",
     "Host": ["twitter.com", "www.facebook.com"],
     "Attr":  ["RedirectHttps"]

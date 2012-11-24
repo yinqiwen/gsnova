@@ -1,6 +1,7 @@
 !User configed rules
 
 golang.org
+www.voachinese.com
 *.google.com.*
 *.google.com
 *.googlecode.com
