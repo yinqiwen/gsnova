@@ -89,7 +89,7 @@ func (c4 *C4HttpConnection) requestEvent(ev event.Event, isPull bool) error {
 	role := "pull"
 	if !isPull {
 		role = "push"
-	} 
+	}
 	//log.Printf("%s\n", fmt.Sprintf("%s_%d_%d", role, c4_cfg.ReadTimeout, c4_cfg.MaxReadBytes))
 	req.Header.Set("C4MiscInfo", fmt.Sprintf("%s_%d_%d", role, c4_cfg.ReadTimeout, c4_cfg.MaxReadBytes))
 
@@ -110,17 +110,20 @@ func (c4 *C4HttpConnection) requestEvent(ev event.Event, isPull bool) error {
 	}
 	// write http response response to conn
 
-	handle_buffer := func(buffer *bytes.Buffer) {
+	handle_buffer := func(buffer *bytes.Buffer) bool {
 		for buffer.Len() > 0 {
 			err, evv := event.DecodeEvent(buffer)
 			if nil == err {
 				evv = event.ExtractEvent(evv)
-				c4.handleTunnelResponse(c4.sess, evv)
+				if nil != c4.handleTunnelResponse(c4.sess, evv) {
+					return false
+				}
 			} else {
 				log.Printf("Session[%d][ERROR]Decode event failed %v for role:%s", ev.GetHash(), err, role)
-				break
+				return false
 			}
 		}
+		return true
 	}
 
 	if resp.ContentLength > 0 {
@@ -150,6 +153,7 @@ func (c4 *C4HttpConnection) requestEvent(ev event.Event, isPull bool) error {
 			chunkLen = -1
 			chunk := make([]byte, c4_cfg.MaxReadBytes+100)
 			var buffer bytes.Buffer
+
 			for {
 				n, err := resp.Body.Read(chunk)
 				if nil != err {
@@ -167,7 +171,9 @@ func (c4 *C4HttpConnection) requestEvent(ev event.Event, isPull bool) error {
 					if chunkLen >= 0 && buffer.Len() >= int(chunkLen) {
 						content := buffer.Next(int(chunkLen))
 						tmp := bytes.NewBuffer(content)
-						handle_buffer(tmp)
+						if !handle_buffer(tmp) {
+							goto R
+						}
 						buffer.Truncate(buffer.Len())
 						chunkLen = -1
 					} else {
@@ -177,6 +183,7 @@ func (c4 *C4HttpConnection) requestEvent(ev event.Event, isPull bool) error {
 			}
 		}
 	}
+R:
 	buf.Reset()
 	resp.Body.Close()
 	return nil
@@ -252,6 +259,7 @@ func (c4 *C4HttpConnection) handleTunnelResponse(conn *SessionConnection, ev eve
 			log.Printf("[%d]Failed to write  data to local client:%v.\n", ev.GetHash(), err)
 			conn.Close()
 			c4.Close()
+			return err
 		}
 	default:
 		log.Printf("Unexpected event type:%d\n", ev.GetType())

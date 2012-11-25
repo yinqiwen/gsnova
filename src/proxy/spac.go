@@ -360,11 +360,17 @@ func generatePACFromGFWList(url string) {
 	if fi, err := os.Stat(gfwlist_txt); nil == err {
 		file_ts = fi.ModTime()
 	}
+	hf := common.Home + "spac/snova-gfwlist.pac"
 	body, last_mod_date, err := util.FetchLateastContent(url, common.ProxyPort, file_ts, false)
-	if nil == err && len(body) > 0 {
-		content, _ := base64.StdEncoding.DecodeString(string(body))
-		ioutil.WriteFile(gfwlist_txt, content, 0666)
-		hf := common.Home + "spac/snova-gfwlist.pac"
+	if nil == err {
+		content := []byte{}
+		if len(body) > 0 {
+			content, _ = base64.StdEncoding.DecodeString(string(body))
+			ioutil.WriteFile(gfwlist_txt, content, 0666)
+		} else {
+			content, _ = ioutil.ReadFile(gfwlist_txt)
+		}
+
 		file_content := generatePAC(url, last_mod_date, string(content))
 		ioutil.WriteFile(hf, []byte(file_content), 0666)
 		load_gfwlist_rule()
