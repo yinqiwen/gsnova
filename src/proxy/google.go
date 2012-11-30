@@ -326,9 +326,9 @@ func (google *GoogleConnection) Request(conn *SessionConnection, ev event.Event)
 				return errors.New("No google proxy reachable."), nil
 			}
 			log.Printf("Session[%d]Request %s\n", req.GetHash(), util.GetURLString(req.RawReq, true))
-			if google.manager.GetName() == GOOGLE_HTTP {
-				google.http_client.Write(CRLFs)
-			}
+			//if google.manager.GetName() == GOOGLE_HTTP {
+			//	google.http_client.Write(CRLFs)
+			//}
 			err := google.writeHttpRequest(req.RawReq)
 			if nil != err {
 				google.Close()

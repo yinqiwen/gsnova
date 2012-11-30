@@ -5,6 +5,7 @@ import (
 	"bufio"
 	"bytes"
 	"log"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -63,8 +64,46 @@ func (h *IPRangeHolder) FindCountry(ip string) string {
 	return ""
 }
 
-func Parse(name string, file_name string) (*IPRangeHolder, error) {
+func ParseApnic(name string) (*IPRangeHolder, error) {
+	var file *os.File
+	var err error
+	if file, err = os.Open(name); err != nil {
+		return nil, err
+	}
+	reader := bufio.NewReader(file)
+	var buffer bytes.Buffer
+	var (
+		part   []byte
+		prefix bool
+	)
+	holder := new(IPRangeHolder)
+	for {
+		if part, prefix, err = reader.ReadLine(); err != nil {
+			break
+		}
+		buffer.Write(part)
+		if !prefix {
+			line := buffer.String()
+			buffer.Reset()
+			sp := strings.Split(line, "|")
+			if len(sp) >= 6 {
+				if sp[1] == "CN" && sp[2] == "ipv4" {
+					startip, _ := util.IPv42Int(sp[3])
+					ipcount, _ := strconv.ParseUint(sp[4], 10, 32)
+					tmp := &IPRange{uint64(startip), uint64(startip) + uint64(ipcount-1), sp[1]}
+					holder.ranges = append(holder.ranges, tmp)
+				}
+			}
+		}
+	}
+	file.Close()
+	holder.sort()
+	return holder, nil
+}
+
+func ParseWipmania(name string) (*IPRangeHolder, error) {
 	// Open a zip archive for reading.
+	file_name := "worldip.en.txt"
 	r, err := zip.OpenReader(name)
 	if err != nil {
 		log.Printf("Failed to open ip range file for reason:%v", err)

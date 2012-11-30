@@ -4,7 +4,7 @@
     "Proxy":["Direct", "Default"]
   },
   {
-    "Host" : ["feedproxy.google.com"],
+    "Host" : ["feedproxy.google.com", "picasa.google.com"],
     "Proxy":["Google", "Default"]
   },
   {

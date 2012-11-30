@@ -127,7 +127,7 @@ func (conn *GAEHttpConnection) createHttpClient() *http.Client {
 	}
 	proxyInfo, exist := common.Cfg.GetProperty("LocalProxy", "Proxy")
 	if exist {
-		
+
 		if strings.HasPrefix(proxyInfo, "https") {
 			dial = sslDial
 		}
@@ -639,7 +639,7 @@ func (manager *GAE) GetRemoteConnection(ev event.Event, attrs map[string]string)
 		gae.authToken = gae.auth.token
 		gae.manager = manager
 		b = gae
-		//b.auth = 
+		//b.auth =
 	} // Read next message from the net.
 	if containsAttr(attrs, ATTR_TUNNEL) {
 		b.(*GAEHttpConnection).over_tunnel = true && b.(*GAEHttpConnection).support_tunnel
@@ -738,6 +738,7 @@ func (manager *GAE) Init() error {
 	initGAEConfig()
 	manager.idle_conns = make(chan RemoteConnection, gae_cfg.ConnectionPoolSize)
 	manager.auths = new(util.ListSelector)
+	authArray := make([]*GAEAuth, 0)
 	index := 0
 	for {
 		v, exist := common.Cfg.GetProperty("GAE", "WorkerNode["+strconv.Itoa(index)+"]")
@@ -748,7 +749,8 @@ func (manager *GAE) Init() error {
 		if err := auth.parse(v); nil != err {
 			return err
 		}
-		manager.auths.Add(&auth)
+		//manager.auths.Add(&auth)
+		authArray = append(authArray, &auth)
 		index = index + 1
 	}
 	//no appid found, fetch shared from master
@@ -764,11 +766,11 @@ func (manager *GAE) Init() error {
 			auth.appid = appid
 			auth.user = ANONYMOUSE
 			auth.passwd = ANONYMOUSE
-			manager.auths.Add(&auth)
+			authArray = append(authArray, &auth)
+			//manager.auths.Add(&auth)
 		}
 	}
-	for _, au := range manager.auths.ArrayValues() {
-		auth := au.(*GAEAuth)
+	for _, auth := range authArray {
 		conn := new(GAEHttpConnection)
 
 		conn.auth = *auth
@@ -782,13 +784,17 @@ func (manager *GAE) Init() error {
 		}
 		if nil != err {
 			log.Printf("Failed to auth appid:%s\n", err.Error())
-			gae_enable = false
-			return err
+			continue
 		}
 		auth.token = conn.authToken
 		conn.auth.token = conn.authToken
 		total_gae_conn_num = total_gae_conn_num + 1
 		manager.RecycleRemoteConnection(conn)
+		manager.auths.Add(auth)
+	}
+	if manager.auths.Size() == 0 {
+		gae_enable = false
+		return fmt.Errorf("[ERROR]No valid appid found.")
 	}
 	return nil
 }

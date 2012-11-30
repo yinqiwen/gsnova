@@ -331,7 +331,7 @@ func loadIPRangeFile(ipRepo string) {
 		return
 	}
 	time.Sleep(5 * time.Second)
-	hf := common.Home + "spac/" + "iprange.zip"
+	hf := common.Home + "spac/" + "iprange.txt"
 	_, err := os.Stat(hf)
 	if nil != err {
 		var zero time.Time
@@ -419,7 +419,7 @@ func InitSpac() {
 	if addr, exist := common.Cfg.GetProperty("SPAC", "CloudRule"); exist {
 		go fetchCloudSpacScript(addr)
 	}
-	if url, exist := common.Cfg.GetProperty("Hosts", "IPRangeRepo"); exist {
+	if url, exist := common.Cfg.GetProperty("SPAC", "IPRangeRepo"); exist {
 		go loadIPRangeFile(strings.TrimSpace(url))
 	}
 

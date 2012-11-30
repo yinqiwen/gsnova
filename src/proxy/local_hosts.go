@@ -7,12 +7,19 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 	"util"
 )
 
+type regexHost struct {
+	regex    *regexp.Regexp
+	selector *util.ListSelector
+}
+
 var mapping map[string]*util.ListSelector = make(map[string]*util.ListSelector)
+var regexMappingArray = make([]*regexHost, 0)
 
 func loadLocalHostMapping(file string) error {
 	ini, err := util.LoadIniFile(file)
@@ -22,10 +29,22 @@ func loadLocalHostMapping(file string) error {
 	props, exist := ini.GetTagProperties("")
 	if exist {
 		for k, v := range props {
-			mapping[k] = &util.ListSelector{}
+			selector := &util.ListSelector{}
 			hs := strings.Split(v, "|")
 			for _, h := range hs {
-				mapping[k].Add(h)
+				selector.Add(h)
+			}
+			if strings.Contains(k, "*") {
+				rh := new(regexHost)
+				var err error
+				if rh.regex, err = util.PrepareRegexp(k, true); nil != err {
+					log.Printf("[ERROR]Invalid regex host pattern:%s for reason:%v\n", k, err)
+					continue
+				}
+				rh.selector = selector
+				regexMappingArray = append(regexMappingArray, rh)
+			} else {
+				mapping[k] = selector
 			}
 		}
 	}
@@ -64,14 +83,22 @@ func isEntry(k string) bool {
 }
 
 func getLocalHostMapping(host string) (string, bool) {
-	h, exist := mapping[host]
-	if exist {
-		t := h.Select().(string)
+	selectHost := func(s *util.ListSelector) (string, bool) {
+		t := s.Select().(string)
 		if isEntry(t) {
 			t, _ = getLocalHostMapping(t)
 			return t, true
-		} else {
-			return t, true
+		}
+		return t, true
+	}
+
+	h, exist := mapping[host]
+	if exist {
+		return selectHost(h)
+	}
+	for _, v := range regexMappingArray {
+		if v.regex.MatchString(host) {
+			return selectHost(v.selector)
 		}
 	}
 	return host, false
@@ -93,8 +120,8 @@ func getLocalUrlMapping(addr string) string {
 		} else {
 			l.Host = net.JoinHostPort(l.Host, "80")
 		}
-        l.Host,_ = lookupAvailableAddress(l.Host)
+		l.Host, _ = lookupAvailableAddress(l.Host)
 	}
-	
+
 	return l.String()
 }

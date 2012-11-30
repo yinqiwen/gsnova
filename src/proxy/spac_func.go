@@ -6,8 +6,6 @@ import (
 	"net"
 	"net/http"
 	"strings"
-	//"common"
-//	"log"
 )
 
 var gfwList *gfwlist.GFWList
@@ -24,7 +22,7 @@ func init_gfwlist_func(rule string) {
 }
 
 func init_iprange_func(file string) {
-	ipfunc, _ = iprange.Parse(file, "worldip.en.txt")
+	ipfunc, _ = iprange.ParseApnic(file)
 }
 
 func invokeFilter(name string, req *http.Request) bool {
@@ -51,7 +49,16 @@ func isHostInCN(req *http.Request) bool {
 		host, _, _ = net.SplitHostPort(host)
 	}
 	//consider use trusted DNS
-	ip, ok := trustedDNSLookup(host)
+	var ip string
+	var ok bool
+	if strings.HasSuffix(host, ".cn") {
+		return true
+	} else {
+		ip, ok = trustedDNSLookup(host)
+		if ips, err := net.LookupHost(host); nil == err {
+			ip = ips[0]
+		}
+	}
 	if !ok {
 		return false
 	}

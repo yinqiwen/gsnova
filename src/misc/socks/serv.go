@@ -23,7 +23,7 @@ func ServConn(local_reader *bufio.Reader, local *net.TCPConn, dialer Dialer) err
 	defer connections.Done()
 
 	// SOCKS does not include a length in the header, so take
-	// a punt that each request will be readable in one go.	
+	// a punt that each request will be readable in one go.
 	buf := make([]byte, 256)
 	n, err := local_reader.Read(buf)
 	if err != nil || n < 2 {
@@ -39,7 +39,7 @@ func ServConn(local_reader *bufio.Reader, local *net.TCPConn, dialer Dialer) err
 			port := binary.BigEndian.Uint16(buf[2:4])
 			ipb := buf[4:8]
 			ip := net.IP(buf[4:8])
-			addr := (&net.TCPAddr{ip, int(port)}).String()
+			addr := (&net.TCPAddr{IP: ip, Port: int(port)}).String()
 			if buf[4] == 0 && buf[5] == 0 && buf[6] == 0 {
 				//socks4a
 			}
@@ -68,10 +68,10 @@ func ServConn(local_reader *bufio.Reader, local *net.TCPConn, dialer Dialer) err
 				return fmt.Errorf("[%s] unable to connect to remote host: %v", local.RemoteAddr(), err)
 			}
 			if sock4a {
-			    h := []byte{0, 0x5a}
-			    h = append(h, byte(port>>8), byte(port))
-			    h = append(h, ipb...)
-			    local.Write(h)
+				h := []byte{0, 0x5a}
+				h = append(h, byte(port>>8), byte(port))
+				h = append(h, ipb...)
+				local.Write(h)
 			} else {
 				local.Write([]byte{0, 0x5a, 0, 0, 0, 0, 0, 0})
 			}
@@ -106,7 +106,7 @@ func ServConn(local_reader *bufio.Reader, local *net.TCPConn, dialer Dialer) err
 					}
 					ip := net.IP(buf[1:5])
 					port := binary.BigEndian.Uint16(buf[5:6])
-					addr := &net.TCPAddr{ip, int(port)}
+					addr := &net.TCPAddr{IP: ip, Port: int(port)}
 					//log.Printf("[%s] incoming SOCKS5 TCP/IP stream connection, raddr=%s", local.RemoteAddr(), addr)
 					remote, err := dialer.DialTCP("tcp", local.RemoteAddr().(*net.TCPAddr), addr.String())
 					if err != nil {
