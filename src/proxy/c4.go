@@ -70,7 +70,13 @@ func (c4 *C4HttpConnection) requestEvent(ev event.Event, isPull bool) error {
 	domain := c4.server
 	pathstr := "invoke2"
 	path := "/" + pathstr
-	rs := strings.SplitN(c4.server, "/", 2)
+	scheme := "http"
+	if strings.HasPrefix(domain, "http://") || strings.HasPrefix(domain, "https://") {
+		tmp := strings.SplitN(domain, "://", 2)
+		scheme = tmp[0]
+		domain = tmp[1]
+	}
+	rs := strings.SplitN(domain, "/", 2)
 	if len(rs) == 2 {
 		domain = rs[0]
 		if strings.HasSuffix(rs[1], "/") {
@@ -81,7 +87,7 @@ func (c4 *C4HttpConnection) requestEvent(ev event.Event, isPull bool) error {
 	}
 	req := &http.Request{
 		Method:        "POST",
-		URL:           &url.URL{Scheme: "http", Host: domain, Path: path},
+		URL:           &url.URL{Scheme: scheme, Host: domain, Path: path},
 		Host:          domain,
 		Header:        make(http.Header),
 		Body:          ioutil.NopCloser(buf),

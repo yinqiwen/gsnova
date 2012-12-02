@@ -427,7 +427,15 @@ func InitGoogle() error {
 	}
 	log.Println("Init Google.")
 	if tmp, exist := common.Cfg.GetIntProperty("Google", "UseGlobalProxy"); exist {
-		useGlobalProxy = tmp == 1
+		if tmp == 1 {
+			useGlobalProxy = true
+		} else if tmp == 2 {
+			if !strings.Contains(common.LocalProxy.Host, "Google") {
+				useGlobalProxy = true
+			}
+		} else {
+			useGlobalProxy = false
+		}
 	}
 	if prefer, exist := common.Cfg.GetBoolProperty("Google", "PreferIP"); exist {
 		preferIP = prefer
