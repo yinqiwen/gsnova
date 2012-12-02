@@ -27,6 +27,7 @@ var logined bool
 var userToken string
 
 var total_c4_conn_num = int32(0)
+var total_c4_routines = int32(0)
 
 type C4Config struct {
 	Compressor     uint32
@@ -58,7 +59,7 @@ func (c4 *C4HttpConnection) Close() error {
 		closeEv.Status = event.TCP_CONN_CLOSED
 		closeEv.SetHash(c4.sess.SessionID)
 		c4.offerRequestEvent(closeEv)
-		c4.closed = true
+		c4.tunnelChannel <- nil
 	}
 	return nil
 }
@@ -193,9 +194,21 @@ func (c4 *C4HttpConnection) tunnel_write(conn *SessionConnection) {
 	for !c4.closed {
 		select {
 		case ev := <-c4.tunnelChannel:
+			if nil == ev {
+				c4.closed = true
+				break
+			}
 			c4.requestEvent(ev, false)
+			if ev.GetType() == event.EVENT_TCP_CONNECTION_TYPE {
+				tev := ev.(*event.SocketConnectionEvent)
+				if tev.Status == event.TCP_CONN_CLOSED {
+					c4.closed = true
+					break
+				}
+			}
 		}
 	}
+	atomic.AddInt32(&total_c4_routines, -1)
 	log.Printf("Session[%d]close write tunnel.\n", conn.SessionID)
 }
 
@@ -212,6 +225,7 @@ func (c4 *C4HttpConnection) tunnel_read(conn *SessionConnection) {
 			wait = 2 * wait
 		}
 	}
+	atomic.AddInt32(&total_c4_routines, -1)
 	log.Printf("Session[%d]close read tunnel.\n", conn.SessionID)
 }
 
@@ -272,9 +286,10 @@ func (c4 *C4HttpConnection) requestOverTunnel(conn *SessionConnection, ev event.
 		c4.server = c4.manager.servers.Select().(string)
 	}
 	if nil == c4.tunnelChannel {
-		c4.tunnelChannel = make(chan event.Event)
+		c4.tunnelChannel = make(chan event.Event, 10)
 		go c4.tunnel_write(conn)
 		go c4.tunnel_read(conn)
+		atomic.AddInt32(&total_c4_routines, 2)
 	}
 
 	switch ev.GetType() {

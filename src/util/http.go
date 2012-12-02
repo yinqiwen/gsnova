@@ -25,17 +25,21 @@ func isKeepAlive(header http.Header, protoMajor, protoMinor int) bool {
 }
 
 func IsRequestKeepAlive(req *http.Request) bool {
-	if nil == req {
+	if nil == req || req.Close {
 		return false
 	}
 	return isKeepAlive(req.Header, req.ProtoMajor, req.ProtoMinor)
 }
 
 func IsResponseKeepAlive(res *http.Response) bool {
-	if nil == res {
+	if nil == res || res.Close || (res.ContentLength == -1 && len(res.TransferEncoding) == 0) {
 		return false
 	}
-	return isKeepAlive(res.Header, res.ProtoMajor, res.ProtoMinor)
+	ret := isKeepAlive(res.Header, res.ProtoMajor, res.ProtoMinor)
+	if ret && res.ContentLength == 0 && len(res.Header.Get("Connection")) == 0 {
+		return false
+	}
+	return ret
 }
 
 func FetchLateastContent(urlstr string, proxy_port string, cmp time.Time, force bool) ([]byte, string, error) {

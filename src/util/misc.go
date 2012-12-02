@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math/big"
 	"misc/myasn1"
+	"net"
 	"net/http"
 	"os/exec"
 	"regexp"
@@ -37,6 +38,13 @@ func RecycleBuffer(b *bytes.Buffer) {
 	default:
 		// Free list full, just carry on.
 	}
+}
+
+func IsTimeoutError(err error) bool {
+	if neterr, ok := err.(net.Error); ok && neterr.Timeout() {
+		return true
+	}
+	return false
 }
 
 type dsaPrivateKey struct {

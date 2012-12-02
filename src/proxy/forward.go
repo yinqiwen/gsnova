@@ -14,13 +14,15 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"time"
 	"util"
 )
 
 var CRLFs = []byte("\r\n\r\n")
 
-var total_forwaed_conn_num uint32
+var total_forwared_conn_num int32
+var total_forwared_routine_num int32
 
 type ForwardConnection struct {
 	forward_conn         net.Conn
@@ -39,16 +41,20 @@ type ForwardConnection struct {
 
 func (conn *ForwardConnection) IsDisconnected() bool {
 	if nil == conn.forward_conn {
-		return false
+		return true
 	}
-	conn.forward_conn.SetReadDeadline(time.Now())
+	conn.forward_conn.SetReadDeadline(time.Now().Add(1 * time.Nanosecond))
 	one := make([]byte, 1)
-	if _, err := conn.forward_conn.Read(one); err == io.EOF {
+	if _, err := conn.forward_conn.Read(one); !util.IsTimeoutError(err) {
 		conn.Close()
 		return true
 	} else {
 		var zero time.Time
-		conn.forward_conn.SetReadDeadline(zero)
+		err := conn.forward_conn.SetReadDeadline(zero)
+		if nil != err {
+			conn.Close()
+			return true
+		}
 	}
 	return false
 }
@@ -82,13 +88,13 @@ func createDirectForwardConn(hostport string) (net.Conn, error) {
 }
 
 func (conn *ForwardConnection) dialRemote(addr string, lookup_trusted_dns bool) (net.Conn, error) {
-	timeout := 5 * time.Second
-	if !lookup_trusted_dns {
-		if exist := getDomainCRLFAttr(addr); exist {
-			conn.try_inject_crlf = true
-			lookup_trusted_dns = true
-		}
-	}
+	timeout := 10 * time.Second
+	//	if !lookup_trusted_dns {
+	//		if exist := getDomainCRLFAttr(addr); exist {
+	//			conn.try_inject_crlf = true
+	//			lookup_trusted_dns = true
+	//		}
+	//	}
 	if lookup_trusted_dns {
 		if newaddr, success := lookupAvailableAddress(addr); !success {
 			return nil, fmt.Errorf("No available IP found for %s", addr)
@@ -100,7 +106,7 @@ func (conn *ForwardConnection) dialRemote(addr string, lookup_trusted_dns bool) 
 	c, err := net.DialTimeout("tcp", addr, timeout)
 	if nil != err && !lookup_trusted_dns {
 		if tmp, success := lookupAvailableAddress(addr); success {
-			conn.try_inject_crlf = true
+			//conn.try_inject_crlf = true
 			c, err = net.DialTimeout("tcp", tmp, timeout)
 		}
 	}
@@ -112,7 +118,7 @@ func (conn *ForwardConnection) initForwardConn(proxyAddr string, isHttps bool) e
 		proxyAddr = proxyAddr + ":80"
 	}
 
-	if nil != conn.forward_conn && conn.proxyAddr == proxyAddr {
+	if nil != conn.forward_conn && conn.proxyAddr == proxyAddr && !conn.IsDisconnected() {
 		return nil
 	}
 	conn.Close()
@@ -428,7 +434,7 @@ func (auto *ForwardConnection) Request(conn *SessionConnection, ev event.Event) 
 		}
 		auto.forwardChan <- int(n)
 	}
-L:
+	//L:
 	auto.closed = false
 	switch ev.GetType() {
 	case event.HTTP_REQUEST_EVENT_TYPE:
@@ -458,8 +464,10 @@ L:
 			}
 			go f(conn.LocalRawConn, auto.forward_conn)
 			go f(auto.forward_conn, conn.LocalRawConn)
+			atomic.AddInt32(&total_forwared_routine_num, 2)
 			<-auto.forwardChan
 			<-auto.forwardChan
+			atomic.AddInt32(&total_forwared_routine_num, -2)
 			auto.Close()
 			conn.State = STATE_SESSION_CLOSE
 		} else {
@@ -500,19 +508,19 @@ L:
 				log.Printf("Session[%d]Send request \n%s\n", ev.GetHash(), tmp.String())
 			}
 			resp, err := http.ReadResponse(auto.buf_forward_conn, req.RawReq)
-			if nil != err && (!auto.manager.inject_crlf && !auto.try_inject_crlf) {
-				auto.try_inject_crlf = true
-				auto.Close()
-				goto L
-			}
+			//			if nil != err && (!auto.manager.inject_crlf && !auto.try_inject_crlf) {
+			//				auto.try_inject_crlf = true
+			//				auto.Close()
+			//				goto L
+			//			}
 			if err != nil {
 				log.Printf("Session[%d]Recv response with error %v\n", ev.GetHash(), err)
 				return err, nil
 			}
 
-			if auto.try_inject_crlf {
-				setDomainCRLFAttr(addr)
-			}
+			//			if auto.try_inject_crlf {
+			//				setDomainCRLFAttr(addr)
+			//			}
 
 			responsed := false
 			if rangeInjdected {
@@ -525,9 +533,8 @@ L:
 			if !responsed {
 				err = resp.Write(conn.LocalRawConn)
 			}
-			if nil == err {
-				err = resp.Body.Close()
-			}
+			resp.Body.Close()
+
 			if common.DebugEnable {
 				var tmp bytes.Buffer
 				resp.Write(&tmp)
@@ -538,9 +545,7 @@ L:
 				auto.Close()
 				conn.State = STATE_SESSION_CLOSE
 			} else {
-				//conn.LocalRawConn.Close()
 				conn.State = STATE_RECV_HTTP
-				//conn.State = STATE_SESSION_CLOSE
 			}
 		}
 	default:
@@ -563,7 +568,7 @@ func (manager *Forward) GetArg() string {
 	return manager.target
 }
 func (manager *Forward) RecycleRemoteConnection(conn RemoteConnection) {
-	total_forwaed_conn_num = total_forwaed_conn_num - 1
+	atomic.AddInt32(&total_forwared_conn_num, -1)
 }
 
 func (manager *Forward) GetRemoteConnection(ev event.Event, attrs map[string]string) (RemoteConnection, error) {
@@ -571,11 +576,11 @@ func (manager *Forward) GetRemoteConnection(ev event.Event, attrs map[string]str
 	g.manager = manager
 	g.Close()
 	if containsAttr(attrs, ATTR_CRLF_INJECT) {
-		manager.inject_crlf = true
+		//manager.inject_crlf = true
 	}
 	if containsAttr(attrs, ATTR_RANGE) {
 		manager.inject_range = true
 	}
-	total_forwaed_conn_num = total_forwaed_conn_num + 1
+	atomic.AddInt32(&total_forwared_conn_num, 1)
 	return g, nil
 }

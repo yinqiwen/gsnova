@@ -3,7 +3,7 @@ package proxy
 import (
 	"bytes"
 	"common"
-	"encoding/json"
+	//"encoding/json"
 	"event"
 	"fmt"
 	"html/template"
@@ -113,12 +113,16 @@ func statHandler(w http.ResponseWriter, req *http.Request) {
 	buf.WriteString(fmt.Sprintf("NumProxyConn: %d\n", total_proxy_conn_num))
 	buf.WriteString(fmt.Sprintf("NumGAEConn: %d\n", total_gae_conn_num))
 	buf.WriteString(fmt.Sprintf("NumC4Conn: %d\n", total_c4_conn_num))
+	buf.WriteString(fmt.Sprintf("NumC4Goroutine: %d\n", total_c4_routines))
 	buf.WriteString(fmt.Sprintf("NumGoogleConn: %d\n", total_google_conn_num))
-	buf.WriteString(fmt.Sprintf("NumForwardConn: %d\n", total_forwaed_conn_num))
+	buf.WriteString(fmt.Sprintf("NumGoogleGoroutine: %d\n", total_google_routine_num))
+	buf.WriteString(fmt.Sprintf("NumForwardConn: %d\n", total_forwared_routine_num))
+	buf.WriteString(fmt.Sprintf("NumForwardGoroutine: %d\n", total_forwared_routine_num))
 	buf.WriteString(fmt.Sprintf("GOMAXPROCS: %d\n", runtime.GOMAXPROCS(runtime.NumCPU())))
-	if content, err := json.MarshalIndent(&stat, "", " "); nil == err {
-		buf.Write(content)
-	}
+
+	//	if content, err := json.MarshalIndent(&stat, "", " "); nil == err {
+	//		buf.Write(content)
+	//	}
 	w.Header().Set("Content-Type", "text/plain")
 	w.Header().Set("Connection", "close")
 	w.Write(buf.Bytes())

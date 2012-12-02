@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"time"
 	"util"
 )
@@ -33,7 +34,8 @@ var connTimeoutSecs time.Duration
 var httpGoogleManager *Google
 var httpsGoogleManager *Google
 var google_enable bool
-var total_google_conn_num uint32
+var total_google_conn_num int32
+var total_google_routine_num int32
 
 type GoogleConnection struct {
 	http_client        net.Conn
@@ -51,14 +53,18 @@ func (conn *GoogleConnection) IsDisconnected() bool {
 	if nil == conn.http_client {
 		return false
 	}
-	conn.http_client.SetReadDeadline(time.Now())
+	conn.http_client.SetReadDeadline(time.Now().Add(1 * time.Nanosecond))
 	one := make([]byte, 1)
-	if _, err := conn.http_client.Read(one); err == io.EOF {
+	if _, err := conn.http_client.Read(one); !util.IsTimeoutError(err) {
 		conn.Close()
 		return true
 	} else {
 		var zero time.Time
-		conn.http_client.SetReadDeadline(zero)
+		err := conn.http_client.SetReadDeadline(zero)
+		if nil != err {
+			conn.Close()
+			return true
+		}
 	}
 	return false
 }
@@ -293,7 +299,7 @@ func (google *GoogleConnection) Request(conn *SessionConnection, ev event.Event)
 		local.Close()
 		remote.Close()
 	}
-//L:
+	//L:
 	switch ev.GetType() {
 	case event.HTTP_REQUEST_EVENT_TYPE:
 		req := ev.(*event.HTTPRequestEvent)
@@ -311,8 +317,10 @@ func (google *GoogleConnection) Request(conn *SessionConnection, ev event.Event)
 			}
 			go f(conn.LocalRawConn, google.https_client)
 			go f(google.https_client, conn.LocalRawConn)
+			atomic.AddInt32(&total_google_routine_num, 2)
 			<-google.forwardChan
 			<-google.forwardChan
+			atomic.AddInt32(&total_google_routine_num, -2)
 			google.Close()
 			conn.State = STATE_SESSION_CLOSE
 		} else {
@@ -384,7 +392,7 @@ func (manager *Google) RecycleRemoteConnection(conn RemoteConnection) {
 	default:
 		// Free list full, just carry on.
 	}
-	total_google_conn_num = total_google_conn_num - 1
+	atomic.AddInt32(&total_google_conn_num, -1)
 }
 
 func (manager *Google) GetRemoteConnection(ev event.Event, attrs map[string]string) (RemoteConnection, error) {
@@ -398,7 +406,7 @@ func (manager *Google) GetRemoteConnection(ev event.Event, attrs map[string]stri
 		g := new(GoogleConnection)
 		g.manager = manager
 		b = g
-		//b.auth = 
+		//b.auth =
 	} // Read next message from the net.
 	b.Close()
 	if containsAttr(attrs, ATTR_DIRECT) {
@@ -406,7 +414,7 @@ func (manager *Google) GetRemoteConnection(ev event.Event, attrs map[string]stri
 	} else {
 		b.(*GoogleConnection).simple_url = false
 	}
-	total_google_conn_num = total_google_conn_num + 1
+	atomic.AddInt32(&total_google_conn_num, 1)
 	return b, nil
 }
 

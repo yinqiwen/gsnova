@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"util"
 )
 
 const (
@@ -121,7 +122,7 @@ func (session *SessionConnection) processHttpEvent(ev *event.HTTPRequestEvent) e
 		rmanager := session.RemoteConn.GetConnectionManager()
 		matched := false
 		for _, proxy := range proxies {
-		    proxyName := adjustProxyName(proxy.GetName(), session.Type == HTTPS_TUNNEL)
+			proxyName := adjustProxyName(proxy.GetName(), session.Type == HTTPS_TUNNEL)
 			if rmanager.GetName() == proxyName {
 				matched = true
 				break
@@ -169,7 +170,7 @@ func (session *SessionConnection) process() error {
 				req, e := http.ReadRequest(session.LocalBufferConn)
 				return req, e
 			} else {
-				if neterr, ok := err.(net.Error); ok && neterr.Timeout() {
+				if util.IsTimeoutError(err) {
 					if nil != session.RemoteConn && session.RemoteConn.IsDisconnected() {
 						return nil, io.EOF
 					}
@@ -191,14 +192,11 @@ func (session *SessionConnection) process() error {
 			err = session.processHttpEvent(&rev)
 		}
 		if nil != err {
-			operr, ok := err.(*net.OpError)
-			if ok && (operr.Timeout() || operr.Temporary()) {
-				err = nil
-			}
 			if err != nil && err != io.EOF {
 				log.Printf("Session[%d]Failed to read http request:%v\n", session.SessionID, err)
 			}
 			close_session()
+			return io.EOF
 		}
 	case STATE_RECV_HTTP_CHUNK:
 		buf := make([]byte, 8192)
@@ -209,15 +207,11 @@ func (session *SessionConnection) process() error {
 			err = session.processHttpChunkEvent(rev)
 		}
 		if nil != err {
-			operr, ok := err.(*net.OpError)
-			if ok && (operr.Timeout() || operr.Temporary()) {
-				log.Printf("Timeout to read\n")
-				return nil
-			}
 			if err != io.EOF {
 				log.Printf("Session[%d]Failed to read http chunk:%v %T\n", session.SessionID, err, err)
 			}
 			close_session()
+			return io.EOF
 		}
 	case STATE_RECV_TCP:
 

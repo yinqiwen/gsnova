@@ -2,9 +2,10 @@ package util
 
 import (
 	"fmt"
+	//"log"
 	"math"
 	"net"
-	"os"
+	//"os"
 	"strconv"
 	"strings"
 )
@@ -45,16 +46,43 @@ func IsPrivateIP(ip string) bool {
 	return false
 }
 
-func GetLocalIP() string {
-	hostname, err := os.Hostname()
-	if nil != err {
-		return "127.0.0.1"
+func IsSelfIP(ip string) bool {
+	ips := GetLocalIPs()
+	for _, lip := range ips {
+		if ip == lip {
+			return true
+		}
 	}
-	ipp, err := net.LookupHost(hostname)
-	if nil != err {
-		return "127.0.0.1"
+	return false
+}
+
+func GetLocalIPs() []string {
+	tt, err := net.Interfaces()
+	if err != nil {
+		return []string{"127.0.0.1"}
 	}
-	return ipp[0]
+	ips := make([]string, 0)
+	for _, t := range tt {
+		aa, err := t.Addrs()
+		if err != nil {
+			break
+		}
+		for _, a := range aa {
+			ipnet, ok := a.(*net.IPAddr)
+			if !ok {
+				continue
+			}
+			v4 := ipnet.IP.To4()
+			if v4 == nil || v4[0] == 127 || v4[0] == 0 { // loopback address
+				continue
+			}
+			ips = append(ips, v4.String())
+		}
+	}
+	if len(ips) == 0 {
+		return []string{"127.0.0.1"}
+	}
+	return ips
 }
 
 //func qhandler(m, r *dns.Msg, e error, data interface{}) {

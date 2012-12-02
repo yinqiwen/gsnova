@@ -479,7 +479,7 @@ func SelectProxy(req *http.Request, conn net.Conn, isHttpsConn bool) ([]RemoteCo
 	if util.IsPrivateIP(host) {
 		need_select_proxy = false
 		proxyNames = []string{DIRECT_NAME}
-		if host == "127.0.0.1" || host == util.GetLocalIP() || strings.EqualFold(host, "localhost") {
+		if host == "127.0.0.1" || util.IsSelfIP(host) || strings.EqualFold(host, "localhost") {
 			if port == common.ProxyPort {
 				handleSelfHttpRequest(req, conn)
 				return nil, nil
@@ -494,6 +494,9 @@ func SelectProxy(req *http.Request, conn net.Conn, isHttpsConn bool) ([]RemoteCo
 	if !isHttpsConn && containsAttr(attrs, ATTR_REDIRECT_HTTPS) {
 		redirectHttps(conn, req)
 		return nil, nil
+	}
+	if common.DebugEnable{
+	   log.Printf("Found %v for host:%v\n", proxyNames, host)
 	}
 	for _, proxyName := range proxyNames {
 		if strings.EqualFold(proxyName, DEFAULT_NAME) {
