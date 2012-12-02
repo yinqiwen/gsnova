@@ -43,6 +43,72 @@ var gae_enable bool
 var gae_use_shared_appid bool
 var total_gae_conn_num uint32
 
+var gaeHttpClient *http.Client
+
+func initGAEClient() {
+	if nil != gaeHttpClient {
+		return
+	}
+	client := new(http.Client)
+	tlcfg := &tls.Config{}
+	tlcfg.InsecureSkipVerify = true
+
+	dial := func(n, addr string) (net.Conn, error) {
+		conn, err := net.DialTimeout(n, addr, connTimeoutSecs)
+		if err != nil {
+			return nil, err
+		}
+		return conn, err
+	}
+
+	sslDial := func(n, addr string) (net.Conn, error) {
+		conn, err := net.DialTimeout(n, addr, connTimeoutSecs)
+		if err != nil {
+			return nil, err
+		}
+		return tls.Client(conn, tlcfg), nil
+	}
+	proxyInfo, exist := common.Cfg.GetProperty("LocalProxy", "Proxy")
+	if exist {
+		if strings.HasPrefix(proxyInfo, "https") {
+			dial = sslDial
+		}
+		tr := &http.Transport{
+			Proxy: func(req *http.Request) (*url.URL, error) {
+				proxy := getLocalUrlMapping(proxyInfo)
+				proxyURL, err := url.Parse(proxy)
+				if err != nil || proxyURL.Scheme == "" {
+					if u, err := url.Parse("http://" + proxy); err == nil {
+						proxyURL = u
+						err = nil
+					}
+				}
+				if err != nil {
+					return nil, fmt.Errorf("invalid proxy address %q: %v", proxy, err)
+				}
+				return proxyURL, nil
+			},
+			Dial:               dial,
+			TLSClientConfig:    tlcfg,
+			DisableCompression: true,
+		}
+		client.Transport = tr
+	} else {
+		if mode, exist := common.Cfg.GetProperty("GAE", "ConnectionMode"); exist {
+			if strings.EqualFold(mode, MODE_HTTPS) {
+				dial = sslDial
+			}
+		}
+		tr := &http.Transport{
+			Dial:               dial,
+			TLSClientConfig:    tlcfg,
+			DisableCompression: true,
+		}
+		client.Transport = tr
+	}
+	gaeHttpClient = client
+}
+
 type GAEAuth struct {
 	appid  string
 	user   string
@@ -79,9 +145,7 @@ type GAEHttpConnection struct {
 	inject_range       bool
 	authToken          string
 	sess               *SessionConnection
-	client             *http.Client
 	manager            *GAE
-	proxyURL           *url.URL
 	tunnelChannel      chan event.Event
 	tunnel_remote_addr string
 	rangeStart         int
@@ -105,81 +169,9 @@ func (conn *GAEHttpConnection) GetConnectionManager() RemoteConnectionManager {
 	return conn.manager
 }
 
-func (conn *GAEHttpConnection) createHttpClient() *http.Client {
-	client := new(http.Client)
-	tlcfg := &tls.Config{}
-	tlcfg.InsecureSkipVerify = true
 
-	dial := func(n, addr string) (net.Conn, error) {
-		conn, err := net.DialTimeout(n, addr, connTimeoutSecs)
-		if err != nil {
-			return nil, err
-		}
-		return conn, err
-	}
-
-	sslDial := func(n, addr string) (net.Conn, error) {
-		conn, err := net.DialTimeout(n, addr, connTimeoutSecs)
-		if err != nil {
-			return nil, err
-		}
-		return tls.Client(conn, tlcfg), nil
-	}
-	proxyInfo, exist := common.Cfg.GetProperty("LocalProxy", "Proxy")
-	if exist {
-
-		if strings.HasPrefix(proxyInfo, "https") {
-			dial = sslDial
-		}
-		tr := &http.Transport{
-			Proxy: func(req *http.Request) (*url.URL, error) {
-				if nil != conn.proxyURL {
-					return conn.proxyURL, nil
-				}
-				proxy := getLocalUrlMapping(proxyInfo)
-				proxyURL, err := url.Parse(proxy)
-				if err != nil || proxyURL.Scheme == "" {
-					if u, err := url.Parse("http://" + proxy); err == nil {
-						proxyURL = u
-						err = nil
-					}
-				}
-				if err != nil {
-					return nil, fmt.Errorf("invalid proxy address %q: %v", proxy, err)
-				}
-				conn.proxyURL = proxyURL
-				return proxyURL, nil
-			},
-			Dial:               dial,
-			TLSClientConfig:    tlcfg,
-			DisableCompression: true,
-		}
-		client.Transport = tr
-	} else {
-		if mode, exist := common.Cfg.GetProperty("GAE", "ConnectionMode"); exist {
-			if strings.EqualFold(mode, MODE_HTTPS) {
-				dial = sslDial
-			}
-		}
-		tr := &http.Transport{
-			Dial:               dial,
-			TLSClientConfig:    tlcfg,
-			DisableCompression: true,
-		}
-		client.Transport = tr
-	}
-	return client
-}
-
-func (conn *GAEHttpConnection) initHttpClient() {
-	if nil != conn.client {
-		return
-	}
-	conn.client = conn.createHttpClient()
-}
 
 func (conn *GAEHttpConnection) Auth() error {
-	conn.initHttpClient()
 	var authEvent event.AuthRequestEvent
 	authEvent.User = conn.auth.user
 	authEvent.Passwd = conn.auth.passwd
@@ -254,7 +246,7 @@ func (gae *GAEHttpConnection) requestEvent(client *http.Client, conn *SessionCon
 	}
 
 	var response *http.Response
-	response, err = client.Do(req)
+	response, err = gaeHttpClient.Do(req)
 	if nil != err {
 		log.Printf("Failed to request data from GAE:%s for:%s\n", domain, err.Error())
 		return err, nil
@@ -290,7 +282,6 @@ func (gae *GAEHttpConnection) requestEvent(client *http.Client, conn *SessionCon
 func (gae *GAEHttpConnection) rangeFetch(req *event.HTTPRequestEvent, index, startpos, limit int, ch chan *rangeChunk) {
 	clonereq := req.DeepClone()
 	defer util.RecycleBuffer(clonereq.Content)
-	client := gae.createHttpClient()
 	for startpos < limit-1 && !gae.closed {
 		if startpos-gae.range_expected_pos >= 2*1024*1024 {
 			time.Sleep(10 * time.Millisecond)
@@ -303,10 +294,10 @@ func (gae *GAEHttpConnection) rangeFetch(req *event.HTTPRequestEvent, index, sta
 		log.Printf("Session[%d]Fetch[%d] range chunk[%d:%d-%d]from %s", req.GetHash(), index, startpos, endpos, limit, clonereq.Url)
 		rangeHeader := fmt.Sprintf("bytes=%d-%d", startpos, endpos)
 		clonereq.SetHeader("Range", rangeHeader)
-		err, rangeres := gae.requestEvent(client, nil, clonereq)
+		err, rangeres := gae.requestEvent(gaeHttpClient, nil, clonereq)
 		//try again
 		if nil != err {
-			err, rangeres = gae.requestEvent(client, nil, clonereq)
+			err, rangeres = gae.requestEvent(gaeHttpClient, nil, clonereq)
 		}
 		if nil != err {
 			log.Printf("Failed to fetch range chunk[%d:%d-%d] from %s for reason:%v", startpos, endpos, limit, clonereq.Url, err)
@@ -324,9 +315,9 @@ func (gae *GAEHttpConnection) rangeFetch(req *event.HTTPRequestEvent, index, sta
 			if len(location) > 0 && len(xrange) > 0 {
 				clonereq.Url = location
 				clonereq.SetHeader("Range", rangeHeader)
-				err, rangeres = gae.requestEvent(client, nil, clonereq)
+				err, rangeres = gae.requestEvent(gaeHttpClient, nil, clonereq)
 				if nil != err {
-					err, rangeres = gae.requestEvent(client, nil, clonereq)
+					err, rangeres = gae.requestEvent(gaeHttpClient, nil, clonereq)
 				}
 				if nil != err {
 					log.Printf("Failed to fetch range chunk[%s] from %s for reason:%v", xrange, clonereq.Url, err)
@@ -469,10 +460,10 @@ func (gae *GAEHttpConnection) handleHttpRes(conn *SessionConnection, req *event.
 					}
 					rangeHeader := fmt.Sprintf("bytes=%d-%d", startpos, endpos)
 					req.SetHeader("Range", rangeHeader)
-					err, rangeres := gae.requestEvent(gae.client, nil, req)
+					err, rangeres := gae.requestEvent(gaeHttpClient, nil, req)
 					//try again
 					if nil != err {
-						err, rangeres = gae.requestEvent(gae.client, nil, req)
+						err, rangeres = gae.requestEvent(gaeHttpClient, nil, req)
 					}
 					if nil != err {
 						return httpres, err
@@ -485,9 +476,9 @@ func (gae *GAEHttpConnection) handleHttpRes(conn *SessionConnection, req *event.
 						if len(location) > 0 && len(xrange) > 0 {
 							req.Url = location
 							req.SetHeader("Range", rangeHeader)
-							err, rangeres = gae.requestEvent(gae.client, nil, req)
+							err, rangeres = gae.requestEvent(gaeHttpClient, nil, req)
 							if nil != err {
-								err, rangeres = gae.requestEvent(gae.client, nil, req)
+								err, rangeres = gae.requestEvent(gaeHttpClient, nil, req)
 							}
 							if nil != err {
 								return httpres, err
@@ -514,7 +505,6 @@ func (gae *GAEHttpConnection) Request(conn *SessionConnection, ev event.Event) (
 	if gae.over_tunnel {
 		return gae.requestOverTunnel(conn, ev)
 	}
-	gae.initHttpClient()
 	if ev.GetType() == event.HTTP_REQUEST_EVENT_TYPE {
 		httpreq := ev.(*event.HTTPRequestEvent)
 		if strings.EqualFold(httpreq.Method, "CONNECT") {
@@ -565,7 +555,7 @@ func (gae *GAEHttpConnection) Request(conn *SessionConnection, ev event.Event) (
 			log.Printf("Session[%d]Request %s\n", httpreq.GetHash(), util.GetURLString(httpreq.RawReq, true))
 			//httpreq.SetHeader("Connection", "Close")
 			httpreq.RemoveHeader("Proxy-Connection")
-			err, res = gae.requestEvent(gae.client, conn, ev)
+			err, res = gae.requestEvent(gaeHttpClient, conn, ev)
 			if nil != err {
 				return
 			}
@@ -584,7 +574,7 @@ func (gae *GAEHttpConnection) Request(conn *SessionConnection, ev event.Event) (
 			return err, nil
 		}
 	}
-	return gae.requestEvent(gae.client, conn, ev)
+	return gae.requestEvent(gaeHttpClient, conn, ev)
 }
 
 type GAE struct {
@@ -733,6 +723,7 @@ func (manager *GAE) Init() error {
 		}
 	}
 	log.Println("Init GAE.")
+	initGAEClient()
 	singleton_gae = manager
 	RegisteRemoteConnManager(manager)
 	initGAEConfig()
