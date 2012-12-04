@@ -93,7 +93,7 @@ func trustedDNSQuery(host string, port string) (string, bool) {
 	options := &godns.LookupOptions{
 		DNSServers: trustedDNS,
 		Net:        net,
-		CacheTTL:   godns.DNS_CACHE_TTL_SELF,
+		CacheTTL:   godns.DNS_CACHE_TTL_FOREVER,
 		OnlyIPv4:   true}
 	if ips, err := godns.LookupIP(host, options); nil == err {
 		for _, ip := range ips {
