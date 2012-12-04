@@ -47,6 +47,7 @@ func InitSelfWebServer() {
 		w.Header().Set("Content-Disposition", "attachment;filename=snova-gfwlist.pac")
 		http.FileServer(http.Dir(common.Home)).ServeHTTP(w, r)
 	})
+	
 	http.HandleFunc("/stat", statHandler)
 	http.HandleFunc("/share", shareHandler)
 	http.HandleFunc("/exit", exitHandler)

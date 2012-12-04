@@ -402,7 +402,8 @@ func InitSpac() {
 	if len(spac.defaultRule) == 0 {
 		spac.defaultRule = GAE_NAME
 	}
-
+    //user script has higher priority
+	spac_script_path = []string{common.Home + "spac/user_spac.json", common.Home + "spac/cloud_spac.json"}
 	spac.rules = make([]*JsonRule, 0)
 	if enable, exist := common.Cfg.GetIntProperty("SPAC", "Enable"); exist {
 		spac_enable = (enable == 1)
@@ -425,8 +426,7 @@ func InitSpac() {
 	if !spac_enable {
 		return
 	}
-	//user script has higher priority
-	spac_script_path = []string{common.Home + "spac/user_spac.json", common.Home + "spac/cloud_spac.json"}
+	
 	loadSpacScript()
 	go reloadSpacScript()
 	init_spac_func()
