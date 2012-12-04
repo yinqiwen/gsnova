@@ -749,7 +749,7 @@ func (manager *GAE) Init() error {
 	}
 	//no appid found, fetch shared from master
 	gae_use_shared_appid = false
-	if index == 0 {
+	if index == 0 && (!C4Enable && !SSHEnable) {
 		gae_use_shared_appid = true
 		err, appids := manager.fetchSharedAppIDs()
 		if nil != err {

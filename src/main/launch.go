@@ -78,20 +78,7 @@ func main() {
 	log.Printf("=============Start %s %s==============\n", common.Product, common.Version)
 	var gae proxy.GAE
 	var c4 proxy.C4
-	err = gae.Init()
-	if nil != err {
-		log.Printf("[WARN]Failed to init GAE:%s\n", err.Error())
-		//return
-	} else {
-		//init fake cert if GAE inited success
-		if proxy.GAEEnable {
-			common.LoadRootCA()
-			if addr, exist := common.Cfg.GetProperty("GAE", "Listen"); exist {
-				go startLocalProxyServer(addr, proxy.GAE_PROXY_SERVER)
-			}
-		}
 
-	}
 	err = c4.Init()
 	if nil != err {
 		log.Printf("[WARN]Failed to init C4:%s\n", err.Error())
@@ -110,6 +97,20 @@ func main() {
 		if proxy.SSHEnable {
 			if addr, exist := common.Cfg.GetProperty("SSH", "Listen"); exist {
 				go startLocalProxyServer(addr, proxy.SSH_PROXY_SERVER)
+			}
+		}
+	}
+	
+	err = gae.Init()
+	if nil != err {
+		log.Printf("[WARN]Failed to init GAE:%s\n", err.Error())
+		//return
+	} else {
+		//init fake cert if GAE inited success
+		if proxy.GAEEnable {
+			common.LoadRootCA()
+			if addr, exist := common.Cfg.GetProperty("GAE", "Listen"); exist {
+				go startLocalProxyServer(addr, proxy.GAE_PROXY_SERVER)
 			}
 		}
 	}
