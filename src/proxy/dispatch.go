@@ -25,6 +25,11 @@ const (
 	STATE_RECV_TCP        = 3
 	STATE_SESSION_CLOSE   = 4
 
+	GLOBAL_PROXY_SERVER = 1
+	GAE_PROXY_SERVER    = 2
+	C4_PROXY_SERVER     = 3
+	SSH_PROXY_SERVER    = 4
+
 	GAE_NAME                 = "GAE"
 	C4_NAME                  = "C4"
 	GOOGLE_NAME              = "Google"
@@ -71,6 +76,7 @@ type SessionConnection struct {
 	RemoteConn      RemoteConnection
 	State           uint32
 	Type            uint32
+	ProxyServerType int
 }
 
 func newSessionConnection(sessionId uint32, conn net.Conn, reader *bufio.Reader) *SessionConnection {
@@ -110,7 +116,8 @@ func (session *SessionConnection) tryProxy(proxies []RemoteConnectionManager, at
 
 func (session *SessionConnection) processHttpEvent(ev *event.HTTPRequestEvent) error {
 	ev.SetHash(session.SessionID)
-	proxies, attrs := SelectProxy(ev.RawReq, session.LocalRawConn, session.Type == HTTPS_TUNNEL)
+	//proxies, attrs := SelectProxy(ev.RawReq, session.LocalRawConn, session.Type == HTTPS_TUNNEL)
+	proxies, attrs := SelectProxy(ev.RawReq, session)
 	if nil == proxies {
 		session.State = STATE_SESSION_CLOSE
 		return nil
@@ -237,7 +244,7 @@ func (f *ForwardSocksDialer) DialTCP(n string, laddr *net.TCPAddr, raddr string)
 	return conn, err
 }
 
-func HandleConn(sessionId uint32, conn net.Conn) {
+func HandleConn(sessionId uint32, conn net.Conn, proxyServerType int) {
 	total_proxy_conn_num = total_proxy_conn_num + 1
 	defer func() {
 		total_proxy_conn_num = total_proxy_conn_num - 1
@@ -265,6 +272,7 @@ func HandleConn(sessionId uint32, conn net.Conn) {
 	}
 
 	session := newSessionConnection(sessionId, conn, bufreader)
+	session.ProxyServerType = proxyServerType
 	if strings.EqualFold(string(b), "Connect") {
 		session.Type = HTTPS_TUNNEL
 	} else {

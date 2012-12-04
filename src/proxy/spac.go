@@ -20,6 +20,7 @@ import (
 )
 
 var spac_script_path []string
+var spac_enable bool
 
 type JsonRule struct {
 	Method       []string
@@ -337,7 +338,7 @@ func loadIPRangeFile(ipRepo string) {
 		var zero time.Time
 		body, _, err := util.FetchLateastContent(ipRepo, common.ProxyPort, zero, true)
 		if err != nil {
-			log.Printf("Failed to fetch ip range file from %s for reason:%v\n", ipRepo, err)
+			log.Printf("[ERROR]Failed to fetch ip range file from %s for reason:%v\n", ipRepo, err)
 			return
 		} else {
 			err = ioutil.WriteFile(hf, body, 0755)
@@ -376,17 +377,17 @@ func generatePACFromGFWList(url string) {
 		load_gfwlist_rule()
 	}
 	if nil != err {
-		log.Printf("Failed to fetch gfwlist for reason:%v\n", err)
+		log.Printf("[ERROR]Failed to fetch gfwlist for reason:%v\n", err)
 	}
 }
 
 func PostInitSpac() {
 	if spac.defaultRule == AUTO_NAME {
-		if gae_enable {
+		if GAEEnable {
 			spac.defaultRule = GAE_NAME
-		} else if c4_enable {
+		} else if C4Enable {
 			spac.defaultRule = C4_NAME
-		} else if ssh_enable {
+		} else if SSHEnable {
 			spac.defaultRule = SSH_NAME
 		} else {
 			spac.defaultRule = DIRECT_NAME
@@ -404,9 +405,7 @@ func InitSpac() {
 
 	spac.rules = make([]*JsonRule, 0)
 	if enable, exist := common.Cfg.GetIntProperty("SPAC", "Enable"); exist {
-		if enable == 0 {
-			return
-		}
+		spac_enable = (enable == 1)
 	}
 	if url, exist := common.Cfg.GetProperty("SPAC", "GFWList"); exist {
 		go generatePACFromGFWList(url)
@@ -423,6 +422,9 @@ func InitSpac() {
 		go loadIPRangeFile(strings.TrimSpace(url))
 	}
 
+	if !spac_enable {
+		return
+	}
 	//user script has higher priority
 	spac_script_path = []string{common.Home + "spac/user_spac.json", common.Home + "spac/cloud_spac.json"}
 	loadSpacScript()
@@ -462,10 +464,23 @@ func adjustProxyName(name string, isHttpsConn bool) string {
 			return GOOGLE_HTTP_NAME
 		}
 	}
+	if strings.EqualFold(name, GAE_NAME) {
+		return GAE_NAME
+	}
+	if strings.EqualFold(name, C4_NAME) {
+		return C4_NAME
+	}
+	if strings.EqualFold(name, SSH_NAME) {
+		return SSH_NAME
+	}
+	if strings.EqualFold(name, DIRECT_NAME) {
+		return DIRECT_NAME
+	}
 	return name
 }
 
-func SelectProxy(req *http.Request, conn net.Conn, isHttpsConn bool) ([]RemoteConnectionManager, map[string]string) {
+func SelectProxy(req *http.Request, conn *SessionConnection) ([]RemoteConnectionManager, map[string]string) {
+	isHttpsConn := (conn.Type == HTTPS_TUNNEL)
 	host := req.Host
 	port := "80"
 	if v, p, err := net.SplitHostPort(req.Host); nil == err {
@@ -481,22 +496,36 @@ func SelectProxy(req *http.Request, conn net.Conn, isHttpsConn bool) ([]RemoteCo
 		proxyNames = []string{DIRECT_NAME}
 		if host == "127.0.0.1" || util.IsSelfIP(host) || strings.EqualFold(host, "localhost") {
 			if port == common.ProxyPort {
-				handleSelfHttpRequest(req, conn)
+				handleSelfHttpRequest(req, conn.LocalRawConn)
 				return nil, nil
 			}
 		}
+	}
+
+	switch conn.ProxyServerType {
+	case GAE_PROXY_SERVER:
+		need_select_proxy = false
+		proxyNames = []string{GAE_NAME}
+	case C4_PROXY_SERVER:
+		need_select_proxy = false
+		proxyNames = []string{C4_NAME}
+	case SSH_PROXY_SERVER:
+		need_select_proxy = false
+		proxyNames = []string{SSH_NAME}
+	default:
+		break
 	}
 
 	if need_select_proxy {
 		proxyNames, attrs = selectProxyByRequest(req, host, port, isHttpsConn, proxyNames)
 	}
 
-	if !isHttpsConn && containsAttr(attrs, ATTR_REDIRECT_HTTPS) {
-		redirectHttps(conn, req)
+	if need_select_proxy && !isHttpsConn && containsAttr(attrs, ATTR_REDIRECT_HTTPS) {
+		redirectHttps(conn.LocalRawConn, req)
 		return nil, nil
 	}
-	if common.DebugEnable{
-	   log.Printf("Found %v for host:%v\n", proxyNames, host)
+	if common.DebugEnable {
+		log.Printf("Found %v for host:%v\n", proxyNames, host)
 	}
 	for _, proxyName := range proxyNames {
 		if strings.EqualFold(proxyName, DEFAULT_NAME) {
@@ -537,6 +566,5 @@ func SelectProxy(req *http.Request, conn net.Conn, isHttpsConn bool) ([]RemoteCo
 			proxyManagers = append(proxyManagers, forward)
 		}
 	}
-
 	return proxyManagers, attrs
 }

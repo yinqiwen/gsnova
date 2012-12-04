@@ -23,22 +23,22 @@ const (
 
 var seed uint32 = 0
 
-func handleConn(conn *net.TCPConn) {
+func handleConn(conn *net.TCPConn, proxyServerType int) {
 	sessionID := atomic.AddUint32(&seed, 1)
-	proxy.HandleConn(sessionID, conn)
+	proxy.HandleConn(sessionID, conn, proxyServerType)
 }
 
-func handleServer(lp *net.TCPListener) {
+func handleServer(lp *net.TCPListener, proxyServerType int) {
 	for {
 		conn, err := lp.AcceptTCP()
 		if nil != err {
 			continue
 		}
-		go handleConn(conn)
+		go handleConn(conn,proxyServerType)
 	}
 }
 
-func startLocalProxyServer(addr string) bool {
+func startLocalProxyServer(addr string, proxyServerType int) bool {
 	tcpaddr, err := net.ResolveTCPAddr("tcp", addr)
 	if nil != err {
 		return false
@@ -50,7 +50,7 @@ func startLocalProxyServer(addr string) bool {
 		return false
 	}
 	log.Printf("Listen on address %s\n", addr)
-	handleServer(lp)
+	handleServer(lp,proxyServerType)
 	return true
 }
 
@@ -73,7 +73,9 @@ func main() {
 	proxy.InitHosts()
 	proxy.InitSpac()
 	proxy.InitGoogle()
+	runtime.GOMAXPROCS(runtime.NumCPU())
 
+	log.Printf("=============Start %s %s==============\n", common.Product, common.Version)
 	var gae proxy.GAE
 	var c4 proxy.C4
 	err = gae.Init()
@@ -82,31 +84,50 @@ func main() {
 		//return
 	} else {
 		//init fake cert if GAE inited success
-		common.LoadRootCA()
+		if proxy.GAEEnable {
+			common.LoadRootCA()
+			if addr, exist := common.Cfg.GetProperty("GAE", "Listen"); exist {
+				go startLocalProxyServer(addr, proxy.GAE_PROXY_SERVER)
+			}
+		}
+
 	}
 	err = c4.Init()
 	if nil != err {
 		log.Printf("[WARN]Failed to init C4:%s\n", err.Error())
-		//return
+	} else {
+		if proxy.C4Enable {
+			if addr, exist := common.Cfg.GetProperty("C4", "Listen"); exist {
+				go startLocalProxyServer(addr, proxy.C4_PROXY_SERVER)
+			}
+		}
 	}
 
-	go proxy.InitSSH()
+	err = proxy.InitSSH()
+	if nil != err {
+		log.Printf("[WARN]Failed to init SSH:%s\n", err.Error())
+	} else {
+		if proxy.SSHEnable {
+			if addr, exist := common.Cfg.GetProperty("SSH", "Listen"); exist {
+				go startLocalProxyServer(addr, proxy.SSH_PROXY_SERVER)
+			}
+		}
+	}
 	proxy.InitSelfWebServer()
 	proxy.PostInitSpac()
 
-	log.Printf("=============Start %s %s==============\n", common.Product, common.Version)
 	addr, exist := common.Cfg.GetProperty("LocalServer", "Listen")
 	if !exist {
 		log.Fatalln("No config [LocalServer]->Listen found")
 	}
-	runtime.GOMAXPROCS(runtime.NumCPU())
 	if v, exist := common.Cfg.GetBoolProperty("LocalServer", "AutoOpenWebUI"); !exist || v {
 		go func() {
 			time.Sleep(1 * time.Second)
 			util.OpenBrowser("http://localhost:" + common.ProxyPort + "/")
 		}()
 	}
-	startLocalProxyServer(addr)
+
+	startLocalProxyServer(addr, proxy.GLOBAL_PROXY_SERVER)
 	//launchSystemTray()
 
 }

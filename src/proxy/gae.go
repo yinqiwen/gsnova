@@ -39,7 +39,7 @@ type GAEConfig struct {
 
 var singleton_gae *GAE
 var gae_cfg *GAEConfig
-var gae_enable bool
+var GAEEnable bool
 var gae_use_shared_appid bool
 var total_gae_conn_num uint32
 
@@ -617,6 +617,9 @@ func (manager *GAE) RecycleRemoteConnection(conn RemoteConnection) {
 }
 
 func (manager *GAE) GetRemoteConnection(ev event.Event, attrs map[string]string) (RemoteConnection, error) {
+	if !GAEEnable{
+	   return nil, fmt.Errorf("No GAE connection available.")
+	}
 	var b RemoteConnection
 	// Grab a buffer if available; allocate if not.
 	select {
@@ -717,7 +720,7 @@ func (manager *GAE) fetchSharedAppIDs() (error, []string) {
 
 func (manager *GAE) Init() error {
 	if enable, exist := common.Cfg.GetIntProperty("GAE", "Enable"); exist {
-		gae_enable = (enable != 0)
+		GAEEnable = (enable != 0)
 		if enable == 0 {
 			return fmt.Errorf("GAE not inited since [GAE] Enable=0")
 		}
@@ -784,7 +787,7 @@ func (manager *GAE) Init() error {
 		manager.auths.Add(auth)
 	}
 	if manager.auths.Size() == 0 {
-		gae_enable = false
+		GAEEnable = false
 		return fmt.Errorf("[ERROR]No valid appid found.")
 	}
 	return nil

@@ -20,9 +20,7 @@ import (
 	"util"
 )
 
-const ()
-
-var c4_enable bool
+var C4Enable bool
 var logined bool
 var userToken string
 
@@ -161,7 +159,7 @@ func (c4 *C4HttpConnection) requestEvent(ev event.Event, isPull bool) error {
 			chunk := make([]byte, c4_cfg.MaxReadBytes+100)
 			var buffer bytes.Buffer
 
-			for {
+			for !c4.closed{
 				n, err := resp.Body.Read(chunk)
 				if nil != err {
 					break
@@ -269,6 +267,7 @@ func (c4 *C4HttpConnection) handleTunnelResponse(conn *SessionConnection, ev eve
 			if c4.tunnel_remote_addr == cev.Addr {
 				conn.Close()
 				c4.Close()
+				return io.EOF
 			}
 		}
 	case event.EVENT_TCP_CHUNK_TYPE:
@@ -424,7 +423,7 @@ func initC4Config() {
 
 func (manager *C4) Init() error {
 	if enable, exist := common.Cfg.GetIntProperty("C4", "Enable"); exist {
-		c4_enable = (enable != 0)
+		C4Enable = (enable != 0)
 		if enable == 0 {
 			return nil
 		}

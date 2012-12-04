@@ -1,6 +1,17 @@
 GSnova Changelog
 ===================
-Changes in version 0.19.1(2012.12.02)
+Changes in version 0.19.3(2012.12.xx)
+-------------------------------------------
+** Features
+   * [ALL]: Launch independent proxy server for GAE/C4/SSH without SPAC support
+   
+** Improvement
+   * [GAE]: Better HTTP connection management
+   * [C4]: Close failed connection much faster now
+   * [SPAC]: Adaptive for some typo in config
+   * Bug fix
+
+Changes in version 0.19.2(2012.12.02)
 -------------------------------------------
 ** Features
    * [SPAC]: Switch to apnic's IP repo
