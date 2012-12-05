@@ -53,13 +53,13 @@ func loadLocalHostMapping(file string) error {
 
 func fetchCloudHosts(url string) {
 	time.Sleep(5 * time.Second)
-	log.Printf("Fetch remote clound spac rule:%s\n", url)
+	log.Printf("Fetch remote clound hosts:%s\n", url)
 	file := common.Home + "hosts/" + CLOUD_HOSTS_FILE
 	var file_ts time.Time
 	if fi, err := os.Stat(file); nil == err {
 		file_ts = fi.ModTime()
 	}
-	body, _, err := util.FetchLateastContent(url, common.ProxyPort, file_ts, false)
+	body, _, err := util.FetchLateastContent(url, common.ProxyPort, file_ts, true)
 	if nil == err && len(body) > 0 {
 		ioutil.WriteFile(file, body, 0666)
 		mapping = make(map[string]*util.ListSelector)

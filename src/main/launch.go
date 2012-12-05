@@ -34,7 +34,7 @@ func handleServer(lp *net.TCPListener, proxyServerType int) {
 		if nil != err {
 			continue
 		}
-		go handleConn(conn,proxyServerType)
+		go handleConn(conn, proxyServerType)
 	}
 }
 
@@ -50,7 +50,7 @@ func startLocalProxyServer(addr string, proxyServerType int) bool {
 		return false
 	}
 	log.Printf("Listen on address %s\n", addr)
-	handleServer(lp,proxyServerType)
+	handleServer(lp, proxyServerType)
 	return true
 }
 
@@ -75,48 +75,44 @@ func main() {
 	proxy.InitGoogle()
 	runtime.GOMAXPROCS(runtime.NumCPU())
 
-	log.Printf("=============Start %s %s==============\n", common.Product, common.Version)
 	var gae proxy.GAE
 	var c4 proxy.C4
 
 	err = c4.Init()
 	if nil != err {
 		log.Printf("[WARN]Failed to init C4:%s\n", err.Error())
-	} else {
-		if proxy.C4Enable {
-			if addr, exist := common.Cfg.GetProperty("C4", "Listen"); exist {
-				go startLocalProxyServer(addr, proxy.C4_PROXY_SERVER)
-			}
-		}
 	}
 
 	err = proxy.InitSSH()
 	if nil != err {
 		log.Printf("[WARN]Failed to init SSH:%s\n", err.Error())
-	} else {
-		if proxy.SSHEnable {
-			if addr, exist := common.Cfg.GetProperty("SSH", "Listen"); exist {
-				go startLocalProxyServer(addr, proxy.SSH_PROXY_SERVER)
-			}
-		}
 	}
-	
+
 	err = gae.Init()
 	if nil != err {
 		log.Printf("[WARN]Failed to init GAE:%s\n", err.Error())
-		//return
-	} else {
-		//init fake cert if GAE inited success
-		if proxy.GAEEnable {
-			common.LoadRootCA()
-			if addr, exist := common.Cfg.GetProperty("GAE", "Listen"); exist {
-				go startLocalProxyServer(addr, proxy.GAE_PROXY_SERVER)
-			}
-		}
 	}
 	proxy.InitSelfWebServer()
 	proxy.PostInitSpac()
 
+    log.Printf("=============Start %s %s==============\n", common.Product, common.Version)
+	if proxy.C4Enable {
+		if addr, exist := common.Cfg.GetProperty("C4", "Listen"); exist {
+			go startLocalProxyServer(addr, proxy.C4_PROXY_SERVER)
+		}
+	}
+	if proxy.SSHEnable {
+		if addr, exist := common.Cfg.GetProperty("SSH", "Listen"); exist {
+			go startLocalProxyServer(addr, proxy.SSH_PROXY_SERVER)
+		}
+	}
+	if proxy.GAEEnable {
+	    	//init fake cert if GAE inited success
+		common.LoadRootCA()
+		if addr, exist := common.Cfg.GetProperty("GAE", "Listen"); exist {
+			go startLocalProxyServer(addr, proxy.GAE_PROXY_SERVER)
+		}
+	}
 	addr, exist := common.Cfg.GetProperty("LocalServer", "Listen")
 	if !exist {
 		log.Fatalln("No config [LocalServer]->Listen found")

@@ -788,7 +788,7 @@ func (manager *GAE) Init() error {
 	}
 	if manager.auths.Size() == 0 {
 		GAEEnable = false
-		return fmt.Errorf("[ERROR]No valid appid found.")
+		return fmt.Errorf("No valid appid found.")
 	}
 	return nil
 }

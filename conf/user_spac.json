@@ -1,8 +1,12 @@
 [
   {
-    "Host" : ["*.c.youtube.com", "av.vimeo.com", "av.voanews.com"],
+    "Filter" : ["!IsBlockedByGFW"],
+    "Proxy":["Direct", "Default"]
+  },
+  {
+    "Host" : ["*.youtube.com", "av.vimeo.com", "av.voanews.com"],
     "Proxy": ["Default"],
-    "Attr":  ["CRLF", "Range"]
+    "Attr":  ["Range"]
   },
   {
     "Protocol":"https",
@@ -12,9 +16,5 @@
   {
     "Host" : ["Target domain patterns for proxy"],
     "Proxy":["http://127.0.0.1:8080"]
-  },
-  {
-    "Host" : ["Configure direct access sites, like *.qq.com*"],
-    "Proxy":["Direct"]
   }
 ]

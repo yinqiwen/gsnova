@@ -174,10 +174,8 @@ func InitHosts() error {
 		rangeFetchTimeoutSecs = time.Duration(secs) * time.Second
 	}
 	if crlfs, exist := common.Cfg.GetProperty("Hosts", "CRLF"); exist {
-		log.Printf("##########%s#############\n", crlfs)
 		crlfs = strings.Replace(crlfs, "\\r", "\r\r", -1)
 		crlfs = strings.Replace(crlfs, "\\n", "\n\n", -1)
-		log.Printf("##########%s#############\n", crlfs)
 		CRLFs = []byte(crlfs)
 	}
 

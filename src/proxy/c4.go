@@ -416,8 +416,15 @@ func initC4Config() {
 	c4_cfg.ConnectionMode = MODE_HTTP
 
 	logined = false
-	ifs, _ := net.Interfaces()
-	userToken = ifs[0].HardwareAddr.String()
+	if ifs, err := net.Interfaces(); nil == err{
+	   for _, itf := range ifs{
+	      if len(itf.HardwareAddr.String()) > 0{
+	         userToken = itf.HardwareAddr.String()
+	         break
+	      }
+	   }
+	}
+	
 	log.Printf("UserToken is %s\n", userToken)
 }
 

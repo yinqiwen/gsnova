@@ -4,11 +4,14 @@ Changes in version 0.19.3(2012.12.xx)
 -------------------------------------------
 ** Features
    * [ALL]: Launch independent proxy server for GAE/C4/SSH without SPAC support
+   * [SPAC]: cloud_spac.json & cloud_hosts.conf can be updated online.
+             User should modify modify user_spac.json/user_hosts.conf to override default setting. 
    
 ** Improvement
    * [GAE]: Better HTTP connection management
    * [C4]: Close failed connection much faster now
    * [SPAC]: Adaptive for some typo in config
+   * Change default spac setting
    * Bug fix
 
 Changes in version 0.19.2(2012.12.02)

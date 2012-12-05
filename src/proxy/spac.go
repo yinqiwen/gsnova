@@ -317,7 +317,7 @@ func fetchCloudSpacScript(url string) {
 		file_ts = fi.ModTime()
 	}
 
-	body, _, err := util.FetchLateastContent(url, common.ProxyPort, file_ts, false)
+	body, _, err := util.FetchLateastContent(url, common.ProxyPort, file_ts, true)
 
 	if nil == err && len(body) > 0 {
 		ioutil.WriteFile(spac_script_path[1], body, 0666)
