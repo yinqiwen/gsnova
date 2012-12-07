@@ -47,6 +47,7 @@ type GoogleConnection struct {
 	overProxy          bool
 	manager            *Google
 	simple_url         bool
+	use_sys_dns        bool
 }
 
 func (conn *GoogleConnection) IsDisconnected() bool {
@@ -136,7 +137,7 @@ func (conn *GoogleConnection) initHttpsClient() {
 		get_google_hostport := func() string {
 			addr, _ := getLocalHostMapping(googleHttpsHost)
 			addr = net.JoinHostPort(addr, "443")
-			if !preferIP {
+			if !preferIP && !conn.use_sys_dns {
 				addr, _ = lookupAvailableAddress(addr)
 			}
 			return addr
@@ -211,7 +212,7 @@ func (conn *GoogleConnection) initHttpClient(proxyAddr string) {
 			get_google_hostport := func() string {
 				addr, _ := getLocalHostMapping(googleHttpHost)
 				addr = net.JoinHostPort(addr, "80")
-				if !preferIP {
+				if !preferIP && !conn.use_sys_dns  {
 					addr, _ = lookupAvailableAddress(addr)
 				}
 				return addr
@@ -232,7 +233,7 @@ func (conn *GoogleConnection) initHttpClient(proxyAddr string) {
 			get_google_hostport := func() string {
 				addr, _ := getLocalHostMapping(googleHttpsHost)
 				addr = net.JoinHostPort(addr, "443")
-				if !preferIP {
+				if !preferIP && !conn.use_sys_dns {
 					addr, _ = lookupAvailableAddress(addr)
 				}
 				return addr
@@ -413,6 +414,11 @@ func (manager *Google) GetRemoteConnection(ev event.Event, attrs map[string]stri
 		b.(*GoogleConnection).simple_url = true
 	} else {
 		b.(*GoogleConnection).simple_url = false
+	}
+	if containsAttr(attrs, ATTR_SYS_DNS) {
+		b.(*GoogleConnection).use_sys_dns = true
+	} else {
+		b.(*GoogleConnection).use_sys_dns = false
 	}
 	atomic.AddInt32(&total_google_conn_num, 1)
 	return b, nil

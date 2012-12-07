@@ -47,6 +47,7 @@ const (
 	ATTR_DIRECT         = "Direct"
 	ATTR_TUNNEL         = "Tunnel"
 	ATTR_RANGE          = "Range"
+	ATTR_SYS_DNS        = "SysDNS"
 
 	MODE_HTTP    = "http"
 	MODE_HTTPS   = "httpS"

@@ -37,6 +37,8 @@ type ForwardConnection struct {
 	range_fetch_raw_addr string
 	range_expected_pos   int
 	range_fetch_error    error
+
+	use_sys_dns bool
 }
 
 func (conn *ForwardConnection) IsDisconnected() bool {
@@ -134,6 +136,10 @@ func (conn *ForwardConnection) initForwardConn(proxyAddr string, isHttps bool) e
 		if isHttps || (conn.manager.inject_crlf || conn.try_inject_crlf) {
 			lookup_trusted_dns = true
 		}
+	}
+
+	if conn.use_sys_dns {
+		lookup_trusted_dns = false
 	}
 
 	isSocks := strings.HasPrefix(strings.ToLower(conn.conn_url.Scheme), "socks")
@@ -580,6 +586,9 @@ func (manager *Forward) GetRemoteConnection(ev event.Event, attrs map[string]str
 	}
 	if containsAttr(attrs, ATTR_RANGE) {
 		manager.inject_range = true
+	}
+	if containsAttr(attrs, ATTR_SYS_DNS) {
+		g.use_sys_dns = true
 	}
 	atomic.AddInt32(&total_forwared_conn_num, 1)
 	return g, nil
