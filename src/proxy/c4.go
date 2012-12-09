@@ -195,6 +195,7 @@ R:
 }
 
 func (c4 *C4HttpConnection) tunnel_write(conn *SessionConnection) {
+    wait := 1 * time.Second
 	for !c4.closed {
 		select {
 		case ev := <-c4.tunnelChannel:
@@ -202,7 +203,14 @@ func (c4 *C4HttpConnection) tunnel_write(conn *SessionConnection) {
 				c4.closed = true
 				break
 			}
-			c4.requestEvent(ev, false)
+			err := c4.requestEvent(ev, false)
+			if nil != err{
+			   time.Sleep(wait)
+			   wait = 2 * wait
+			   c4.tunnelChannel <- ev
+			   continue
+			}
+			wait = 1 * time.Second
 			if ev.GetType() == event.EVENT_TCP_CONNECTION_TYPE {
 				tev := ev.(*event.SocketConnectionEvent)
 				if tev.Status == event.TCP_CONN_CLOSED {
@@ -234,14 +242,6 @@ func (c4 *C4HttpConnection) tunnel_read(conn *SessionConnection) {
 }
 
 func (c4 *C4HttpConnection) offerRequestEvent(ev event.Event) {
-	switch ev.GetType() {
-	case event.EVENT_TCP_CHUNK_TYPE:
-		var compress event.CompressEventV2
-		compress.SetHash(ev.GetHash())
-		compress.Ev = ev
-		compress.CompressType = c4_cfg.Compressor
-		ev = &compress
-	}
 	var encrypt event.EncryptEventV2
 	encrypt.SetHash(ev.GetHash())
 	encrypt.EncryptType = c4_cfg.Encrypter
@@ -424,7 +424,7 @@ func initC4Config() {
 	      }
 	   }
 	}
-	
+
 	log.Printf("UserToken is %s\n", userToken)
 }
 
