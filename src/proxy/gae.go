@@ -52,10 +52,12 @@ func initGAEClient() {
 	client := new(http.Client)
 	tlcfg := &tls.Config{}
 	tlcfg.InsecureSkipVerify = true
-
+	proxyInfo, exist := common.Cfg.GetProperty("LocalProxy", "Proxy")
+	
 	dial := func(n, addr string) (net.Conn, error) {
 		conn, err := net.DialTimeout(n, addr, connTimeoutSecs)
 		if err != nil {
+		    expireBlockVerifyCache(addr)
 			return nil, err
 		}
 		return conn, err
@@ -64,11 +66,12 @@ func initGAEClient() {
 	sslDial := func(n, addr string) (net.Conn, error) {
 		conn, err := net.DialTimeout(n, addr, connTimeoutSecs)
 		if err != nil {
+		    expireBlockVerifyCache(addr)
 			return nil, err
 		}
 		return tls.Client(conn, tlcfg), nil
 	}
-	proxyInfo, exist := common.Cfg.GetProperty("LocalProxy", "Proxy")
+
 	if exist {
 		if strings.HasPrefix(proxyInfo, "https") {
 			dial = sslDial
@@ -86,6 +89,7 @@ func initGAEClient() {
 				if err != nil {
 					return nil, fmt.Errorf("invalid proxy address %q: %v", proxy, err)
 				}
+				
 				return proxyURL, nil
 			},
 			Dial:               dial,
@@ -466,13 +470,15 @@ func (gae *GAEHttpConnection) handleHttpRes(conn *SessionConnection, req *event.
 						err, rangeres = gae.requestEvent(gaeHttpClient, nil, req)
 					}
 					if nil != err {
+					    log.Printf("Session[%d]Failed to fetched range chunk %s for reason:%v\n", req.GetHash(), rangeHeader, err)
 						return httpres, err
 					}
+					log.Printf("Session[%d]Fetched range chunk %s\n", req.GetHash(), rangeHeader)
 					rangeHttpRes := rangeres.(*event.HTTPResponseEvent)
 					if rangeHttpRes.Status == 302 {
 						location := rangeHttpRes.GetHeader("Location")
 						xrange := rangeHttpRes.GetHeader("X-Range")
-						log.Printf("########Session[%d]X-Range=%s, Location= %s\n", req.GetHash(), xrange, location)
+						log.Printf("Session[%d]X-Range=%s, Location= %s\n", req.GetHash(), xrange, location)
 						if len(location) > 0 && len(xrange) > 0 {
 							req.Url = location
 							req.SetHeader("Range", rangeHeader)

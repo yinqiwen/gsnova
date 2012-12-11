@@ -1,9 +1,5 @@
 [
   {
-    "Filter" : ["!IsBlockedByGFW"],
-    "Proxy":["Direct", "Default"]
-  },
-  {
     "Host" : ["*.youtube.com", "av.vimeo.com", "av.voanews.com"],
     "Proxy": ["Default"],
     "Attr":  ["Range"]

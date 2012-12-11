@@ -54,9 +54,9 @@ func isHostInCN(req *http.Request) bool {
 	if strings.HasSuffix(host, ".cn") {
 		return true
 	} else {
-		ip, ok = trustedDNSLookup(host)
 		if ips, err := net.LookupHost(host); nil == err {
 			ip = ips[0]
+			ok = true
 		}
 	}
 	if !ok {

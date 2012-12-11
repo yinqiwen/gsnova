@@ -32,5 +32,9 @@
     "Protocol" : "https",
     "Host": ["twitter.com"],
     "Proxy": ["Default"]
+  },
+  {
+    "Filter" : ["!IsBlockedByGFW"],
+    "Proxy":["Direct", "Default"]
   }
 ]
