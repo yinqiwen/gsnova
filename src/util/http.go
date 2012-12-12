@@ -118,6 +118,46 @@ func HttpTunnelDial(network, addr string, tunnel_url *url.URL) (c net.Conn, err 
 	return
 }
 
+type ChunkBody struct {
+	ch     chan []byte
+	closed bool
+}
+
+func (body *ChunkBody) Read(p []byte) (n int, err error) {
+	if body.closed{
+       return -1, io.EOF
+    }
+	select {
+	case b := <- body.ch:
+		if nil == b {
+		    body.closed = true
+			return -1, io.EOF
+		}
+		return copy(p, b), nil
+	}
+	return -1, io.EOF
+}
+
+func (body *ChunkBody) Offer(p []byte) error {
+    if body.closed{
+       return io.EOF
+    }
+    body.ch <- p
+    return nil
+}
+
+func (body *ChunkBody) Close() error {
+    body.closed = true
+    body.ch <- nil
+	return nil
+}
+
+func NewChunkBody() *ChunkBody {
+	body := new(ChunkBody)
+	body.ch = make(chan []byte, 10)
+	return body
+}
+
 type DelegateConnListener struct {
 	connChan chan net.Conn
 }
