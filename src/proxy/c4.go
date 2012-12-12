@@ -38,114 +38,6 @@ type C4Config struct {
 
 var c4_cfg *C4Config
 
-var chunkPushChannels = make(map[string]chan event.Event)
-
-func supportChunkRequest(server string) bool {
-	_, exist := chunkPushChannels[server]
-	return exist
-}
-
-func testChunkRequestSupport(server string) bool {
-	scheme, domain, path := parseC4Server(server, "test")
-	chunkBody := util.NewChunkBody()
-	req := &http.Request{
-		Method: "POST",
-		URL:    &url.URL{Scheme: scheme, Host: domain, Path: path},
-		Host:   domain,
-		Header: make(http.Header),
-		Body:   chunkBody,
-	}
-	req.TransferEncoding = []string{"chunked"}
-	req.Header.Set("UserToken", userToken)
-	req.Header.Set("Connection", "keep-alive")
-	req.Header.Set("Content-Type", "application/octet-stream")
-	if len(c4_cfg.UA) > 0 {
-		req.Header.Set("User-Agent", c4_cfg.UA)
-	}
-	go func() {
-		time.Sleep(10 * time.Millisecond)
-		chunkBody.Offer([]byte("Test"))
-		chunkBody.Close()
-	}()
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return false
-	} else if resp.StatusCode != 200 {
-		return false
-	}
-	return true
-}
-
-func chunkPushLoop(server string) {
-	scheme, domain, path := parseC4Server(server, "push")
-	tick := time.NewTicker(time.Duration(c4_cfg.ReadTimeout) * time.Second)
-	var chunkBody *util.ChunkBody
-	for {
-		select {
-		case <-tick.C:
-			if nil != chunkBody {
-				chunkBody.Close()
-				chunkBody = nil
-			}
-		case ev := <-chunkPushChannels[server]:
-			if nil != chunkBody {
-				buf := new(bytes.Buffer)
-				event.EncodeEvent(buf, ev)
-				var chunkLen int32
-				chunkLen = int32(buf.Len())
-				lenbuf := new(bytes.Buffer)
-				binary.Write(lenbuf, binary.BigEndian, &chunkLen)
-				chunkBody.Offer(append(lenbuf.Bytes(), buf.Bytes()...))
-			} else {
-				chunkBody := util.NewChunkBody()
-				req := &http.Request{
-					Method: "POST",
-					URL:    &url.URL{Scheme: scheme, Host: domain, Path: path},
-					Host:   domain,
-					Header: make(http.Header),
-					Body:   chunkBody,
-				}
-				req.TransferEncoding = []string{"chunked"}
-				req.Header.Set("UserToken", userToken)
-				req.Header.Set("Connection", "keep-alive")
-				req.Header.Set("Content-Type", "application/octet-stream")
-				if len(c4_cfg.UA) > 0 {
-					req.Header.Set("User-Agent", c4_cfg.UA)
-				}
-				resp, err := http.DefaultClient.Do(req)
-				if err != nil {
-					log.Println(err.Error())
-				} else if resp.StatusCode != 200 {
-					log.Printf("Unexpected response %s for push to %s\n", ev.GetHash(), resp.Status, server)
-				} else {
-					log.Printf("Server:%s push worker finished.\n", server)
-				}
-			}
-		}
-	}
-}
-
-func parseC4Server(server string, pathstr string) (string, string, string) {
-	domain := server
-	path := "/" + pathstr
-	scheme := "http"
-	if strings.HasPrefix(domain, "http://") || strings.HasPrefix(domain, "https://") {
-		tmp := strings.SplitN(domain, "://", 2)
-		scheme = tmp[0]
-		domain = tmp[1]
-	}
-	rs := strings.SplitN(domain, "/", 2)
-	if len(rs) == 2 {
-		domain = rs[0]
-		if strings.HasSuffix(rs[1], "/") {
-			path = "/" + rs[1] + pathstr
-		} else {
-			path = "/" + rs[1] + pathstr
-		}
-	}
-	return scheme, domain, path
-}
-
 type C4HttpConnection struct {
 	sess               *SessionConnection
 	tunnelChannel      chan event.Event
@@ -173,13 +65,24 @@ func (c4 *C4HttpConnection) Close() error {
 func (c4 *C4HttpConnection) requestEvent(ev event.Event, isPull bool) error {
 	buf := new(bytes.Buffer)
 	event.EncodeEvent(buf, ev)
-
-	pathstr := "push"
-	if isPull {
-		pathstr = "pull"
+	domain := c4.server
+	pathstr := "invoke2"
+	path := "/" + pathstr
+	scheme := "http"
+	if strings.HasPrefix(domain, "http://") || strings.HasPrefix(domain, "https://") {
+		tmp := strings.SplitN(domain, "://", 2)
+		scheme = tmp[0]
+		domain = tmp[1]
 	}
-	scheme, domain, path := parseC4Server(c4.server, pathstr)
-
+	rs := strings.SplitN(domain, "/", 2)
+	if len(rs) == 2 {
+		domain = rs[0]
+		if strings.HasSuffix(rs[1], "/") {
+			path = "/" + rs[1] + pathstr
+		} else {
+			path = "/" + rs[1] + pathstr
+		}
+	}
 	req := &http.Request{
 		Method:        "POST",
 		URL:           &url.URL{Scheme: scheme, Host: domain, Path: path},
@@ -193,7 +96,7 @@ func (c4 *C4HttpConnection) requestEvent(ev event.Event, isPull bool) error {
 		role = "push"
 	}
 	//log.Printf("%s\n", fmt.Sprintf("%s_%d_%d", role, c4_cfg.ReadTimeout, c4_cfg.MaxReadBytes))
-	req.Header.Set("C4MiscInfo", fmt.Sprintf("%d_%d", c4_cfg.ReadTimeout, c4_cfg.MaxReadBytes))
+	req.Header.Set("C4MiscInfo", fmt.Sprintf("%s_%d_%d", role, c4_cfg.ReadTimeout, c4_cfg.MaxReadBytes))
 
 	req.Header.Set("UserToken", userToken)
 	req.Header.Set("Connection", "keep-alive")
@@ -256,7 +159,7 @@ func (c4 *C4HttpConnection) requestEvent(ev event.Event, isPull bool) error {
 			chunk := make([]byte, c4_cfg.MaxReadBytes+100)
 			var buffer bytes.Buffer
 
-			for !c4.closed {
+			for !c4.closed{
 				n, err := resp.Body.Read(chunk)
 				if nil != err {
 					break
@@ -292,7 +195,7 @@ R:
 }
 
 func (c4 *C4HttpConnection) tunnel_write(conn *SessionConnection) {
-	wait := 1 * time.Second
+    wait := 1 * time.Second
 	for !c4.closed {
 		select {
 		case ev := <-c4.tunnelChannel:
@@ -301,11 +204,11 @@ func (c4 *C4HttpConnection) tunnel_write(conn *SessionConnection) {
 				break
 			}
 			err := c4.requestEvent(ev, false)
-			if nil != err {
-				time.Sleep(wait)
-				wait = 2 * wait
-				c4.tunnelChannel <- ev
-				continue
+			if nil != err{
+			   time.Sleep(wait)
+			   wait = 2 * wait
+			   c4.tunnelChannel <- ev
+			   continue
 			}
 			wait = 1 * time.Second
 			if ev.GetType() == event.EVENT_TCP_CONNECTION_TYPE {
@@ -343,11 +246,7 @@ func (c4 *C4HttpConnection) offerRequestEvent(ev event.Event) {
 	encrypt.SetHash(ev.GetHash())
 	encrypt.EncryptType = c4_cfg.Encrypter
 	encrypt.Ev = ev
-	if supportChunkRequest(c4.server) {
-		chunkPushChannels[c4.server] <- &encrypt
-	} else {
-		c4.tunnelChannel <- &encrypt
-	}
+	c4.tunnelChannel <- &encrypt
 }
 
 func (c4 *C4HttpConnection) doCloseTunnel() {
@@ -392,13 +291,10 @@ func (c4 *C4HttpConnection) requestOverTunnel(conn *SessionConnection, ev event.
 		c4.server = c4.manager.servers.Select().(string)
 	}
 	if nil == c4.tunnelChannel {
-		if !supportChunkRequest(c4.server) {
-			c4.tunnelChannel = make(chan event.Event, 10)
-			go c4.tunnel_write(conn)
-			atomic.AddInt32(&total_c4_routines, 1)
-		}
+		c4.tunnelChannel = make(chan event.Event, 10)
+		go c4.tunnel_write(conn)
 		go c4.tunnel_read(conn)
-		atomic.AddInt32(&total_c4_routines, 1)
+		atomic.AddInt32(&total_c4_routines, 2)
 	}
 
 	switch ev.GetType() {
@@ -469,16 +365,12 @@ func (manager *C4) RecycleRemoteConnection(conn RemoteConnection) {
 }
 
 func (manager *C4) loginC4(server string) {
+	conn := &C4HttpConnection{}
+	conn.manager = manager
+	conn.server = server
 	login := &event.UserLoginEvent{}
 	login.User = userToken
-	if supportChunkRequest(server) {
-		chunkPushChannels[server] <- login
-	} else {
-		conn := &C4HttpConnection{}
-		conn.manager = manager
-		conn.server = server
-		conn.requestEvent(login, false)
-	}
+	conn.requestEvent(login, false)
 }
 
 func (manager *C4) GetRemoteConnection(ev event.Event, attrs map[string]string) (RemoteConnection, error) {
@@ -524,13 +416,13 @@ func initC4Config() {
 	c4_cfg.ConnectionMode = MODE_HTTP
 
 	logined = false
-	if ifs, err := net.Interfaces(); nil == err {
-		for _, itf := range ifs {
-			if len(itf.HardwareAddr.String()) > 0 {
-				userToken = itf.HardwareAddr.String()
-				break
-			}
-		}
+	if ifs, err := net.Interfaces(); nil == err{
+	   for _, itf := range ifs{
+	      if len(itf.HardwareAddr.String()) > 0{
+	         userToken = itf.HardwareAddr.String()
+	         break
+	      }
+	   }
 	}
 
 	log.Printf("UserToken is %s\n", userToken)
@@ -557,10 +449,6 @@ func (manager *C4) Init() error {
 		}
 		manager.servers.Add(v)
 		index = index + 1
-		if testChunkRequestSupport(v) {
-			chunkPushChannels[v] = make(chan event.Event)
-			go chunkPushLoop(v)
-		}
 		manager.loginC4(v)
 	}
 	if index == 0 {

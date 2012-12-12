@@ -2,6 +2,7 @@ package util
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/tls"
 	"errors"
 	"io"
@@ -11,6 +12,7 @@ import (
 	"net/url"
 	"strings"
 	"time"
+	//"log"
 )
 
 func isKeepAlive(header http.Header, protoMajor, protoMinor int) bool {
@@ -119,42 +121,56 @@ func HttpTunnelDial(network, addr string, tunnel_url *url.URL) (c net.Conn, err 
 }
 
 type ChunkBody struct {
-	ch     chan []byte
-	closed bool
+	ch       chan []byte
+	cumulate *bytes.Buffer
+	closed   bool
 }
 
 func (body *ChunkBody) Read(p []byte) (n int, err error) {
-	if body.closed{
-       return -1, io.EOF
-    }
-	select {
-	case b := <- body.ch:
-		if nil == b {
-		    body.closed = true
-			return -1, io.EOF
-		}
-		return copy(p, b), nil
+	if body.closed {
+		return 0, io.EOF
 	}
-	return -1, io.EOF
+	var b []byte
+	if body.cumulate.Len() > 0{
+	   b = body.cumulate.Bytes()
+	   body.cumulate.Reset()
+	}else{
+	  b = <-body.ch
+	}
+	if nil == b || len(b) == 0 {
+		body.closed = true
+		//log.Printf("#####Closed\n")
+		return 0, io.EOF
+	}
+	k := copy(p, b)
+	if k < len(b) {
+		body.cumulate.Write(b[k:])
+	}else{
+	   //log.Printf("#######%d  %d\n",  k, len(b))
+	}
+	//log.Printf("Copyed %d\n", n)
+	return k, nil
 }
 
 func (body *ChunkBody) Offer(p []byte) error {
-    if body.closed{
-       return io.EOF
-    }
-    body.ch <- p
-    return nil
+	if body.closed {
+		return io.EOF
+	}
+	body.ch <- p
+	return nil
 }
 
 func (body *ChunkBody) Close() error {
-    body.closed = true
-    body.ch <- nil
+	//body.closed = true
+	body.ch <- nil
 	return nil
 }
 
 func NewChunkBody() *ChunkBody {
 	body := new(ChunkBody)
-	body.ch = make(chan []byte, 10)
+	body.ch = make(chan []byte, 100)
+	body.cumulate = new(bytes.Buffer)
+	body.closed = false
 	return body
 }
 
