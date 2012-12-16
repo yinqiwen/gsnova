@@ -233,9 +233,8 @@ type ForwardSocksDialer struct {
 func (f *ForwardSocksDialer) DialTCP(n string, laddr *net.TCPAddr, raddr string) (net.Conn, error) {
 	conn, err := net.Dial("tcp", net.JoinHostPort("127.0.0.1", common.ProxyPort))
 	if nil == err {
-		_, port, _ := net.SplitHostPort(raddr)
-		if port != "80" {
-			//log.Printf("##########Socks Connect remote:%s\n", raddr)
+		_, port, er := net.SplitHostPort(raddr)
+		if nil == er && port != "80" {
 			req := fmt.Sprintf("CONNECT %s HTTP/1.1\r\nHost: %s\r\nProxy-Connection: Keep-Alive\r\n\r\n", raddr, raddr)
 			conn.Write([]byte(req))
 			tmp := make([]byte, 1024)

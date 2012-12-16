@@ -53,20 +53,34 @@ func initGAEClient() {
 	tlcfg := &tls.Config{}
 	tlcfg.InsecureSkipVerify = true
 	proxyInfo, exist := common.Cfg.GetProperty("LocalProxy", "Proxy")
-	
+
 	dial := func(n, addr string) (net.Conn, error) {
-		conn, err := net.DialTimeout(n, addr, connTimeoutSecs)
+		remote := getAddressMapping(addr)
+		conn, err := net.DialTimeout(n, remote, connTimeoutSecs)
 		if err != nil {
-		    expireBlockVerifyCache(addr)
+			expireBlockVerifyCache(addr)
+			//try again
+			remote = getAddressMapping(addr)
+			conn, err = net.DialTimeout(n, remote, connTimeoutSecs)
+		}
+		if err != nil {
+			expireBlockVerifyCache(addr)
 			return nil, err
 		}
 		return conn, err
 	}
 
 	sslDial := func(n, addr string) (net.Conn, error) {
-		conn, err := net.DialTimeout(n, addr, connTimeoutSecs)
+		remote := getAddressMapping(addr)
+		conn, err := net.DialTimeout(n, remote, connTimeoutSecs)
 		if err != nil {
-		    expireBlockVerifyCache(addr)
+			expireBlockVerifyCache(addr)
+			//try again
+			remote = getAddressMapping(addr)
+			conn, err = net.DialTimeout(n, remote, connTimeoutSecs)
+		}
+		if err != nil {
+			expireBlockVerifyCache(addr)
 			return nil, err
 		}
 		return tls.Client(conn, tlcfg), nil
@@ -78,18 +92,13 @@ func initGAEClient() {
 		}
 		tr := &http.Transport{
 			Proxy: func(req *http.Request) (*url.URL, error) {
-				proxy := getLocalUrlMapping(proxyInfo)
-				proxyURL, err := url.Parse(proxy)
+				proxyURL, err := url.Parse(proxyInfo)
 				if err != nil || proxyURL.Scheme == "" {
-					if u, err := url.Parse("http://" + proxy); err == nil {
+					if u, err := url.Parse("http://" + proxyInfo); err == nil {
 						proxyURL = u
 						err = nil
 					}
 				}
-				if err != nil {
-					return nil, fmt.Errorf("invalid proxy address %q: %v", proxy, err)
-				}
-				
 				return proxyURL, nil
 			},
 			Dial:               dial,
@@ -172,8 +181,6 @@ func (gae *GAEHttpConnection) Close() error {
 func (conn *GAEHttpConnection) GetConnectionManager() RemoteConnectionManager {
 	return conn.manager
 }
-
-
 
 func (conn *GAEHttpConnection) Auth() error {
 	var authEvent event.AuthRequestEvent
@@ -285,7 +292,7 @@ func (gae *GAEHttpConnection) requestEvent(client *http.Client, conn *SessionCon
 
 func (gae *GAEHttpConnection) rangeFetch(req *event.HTTPRequestEvent, index, startpos, limit int, ch chan *rangeChunk) {
 	clonereq := req.DeepClone()
-	defer util.RecycleBuffer(clonereq.Content)
+	//defer util.RecycleBuffer(clonereq.Content)
 	for startpos < limit-1 && !gae.closed {
 		if startpos-gae.range_expected_pos >= 2*1024*1024 {
 			time.Sleep(10 * time.Millisecond)
@@ -336,7 +343,7 @@ func (gae *GAEHttpConnection) rangeFetch(req *event.HTTPRequestEvent, index, sta
 		}
 		chunk := &rangeChunk{}
 		chunk.start = startpos
-		chunk.content = (rangeHttpRes.Content)
+		chunk.content = &(rangeHttpRes.Content)
 		//rangeHttpRes.Content.Reset()
 		rangeHttpRes = nil
 		ch <- chunk
@@ -470,7 +477,7 @@ func (gae *GAEHttpConnection) handleHttpRes(conn *SessionConnection, req *event.
 						err, rangeres = gae.requestEvent(gaeHttpClient, nil, req)
 					}
 					if nil != err {
-					    log.Printf("Session[%d]Failed to fetched range chunk %s for reason:%v\n", req.GetHash(), rangeHeader, err)
+						log.Printf("Session[%d]Failed to fetched range chunk %s for reason:%v\n", req.GetHash(), rangeHeader, err)
 						return httpres, err
 					}
 					log.Printf("Session[%d]Fetched range chunk %s\n", req.GetHash(), rangeHeader)
@@ -492,7 +499,7 @@ func (gae *GAEHttpConnection) handleHttpRes(conn *SessionConnection, req *event.
 						}
 					}
 					_, err = conn.LocalRawConn.Write(rangeres.(*event.HTTPResponseEvent).Content.Bytes())
-					util.RecycleBuffer(rangeres.(*event.HTTPResponseEvent).Content)
+					//util.RecycleBuffer(rangeres.(*event.HTTPResponseEvent).Content)
 					if nil != err {
 						return httpres, err
 					}
@@ -623,8 +630,8 @@ func (manager *GAE) RecycleRemoteConnection(conn RemoteConnection) {
 }
 
 func (manager *GAE) GetRemoteConnection(ev event.Event, attrs map[string]string) (RemoteConnection, error) {
-	if !GAEEnable{
-	   return nil, fmt.Errorf("No GAE connection available.")
+	if !GAEEnable {
+		return nil, fmt.Errorf("No GAE connection available.")
 	}
 	var b RemoteConnection
 	// Grab a buffer if available; allocate if not.

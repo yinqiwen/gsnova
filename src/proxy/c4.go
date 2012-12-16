@@ -159,7 +159,7 @@ func (c4 *C4HttpConnection) requestEvent(ev event.Event, isPull bool) error {
 			chunk := make([]byte, c4_cfg.MaxReadBytes+100)
 			var buffer bytes.Buffer
 
-			for !c4.closed{
+			for !c4.closed {
 				n, err := resp.Body.Read(chunk)
 				if nil != err {
 					break
@@ -195,7 +195,7 @@ R:
 }
 
 func (c4 *C4HttpConnection) tunnel_write(conn *SessionConnection) {
-    wait := 1 * time.Second
+	wait := 1 * time.Second
 	for !c4.closed {
 		select {
 		case ev := <-c4.tunnelChannel:
@@ -204,11 +204,11 @@ func (c4 *C4HttpConnection) tunnel_write(conn *SessionConnection) {
 				break
 			}
 			err := c4.requestEvent(ev, false)
-			if nil != err{
-			   time.Sleep(wait)
-			   wait = 2 * wait
-			   c4.tunnelChannel <- ev
-			   continue
+			if nil != err {
+				time.Sleep(wait)
+				wait = 2 * wait
+				c4.tunnelChannel <- ev
+				continue
 			}
 			wait = 1 * time.Second
 			if ev.GetType() == event.EVENT_TCP_CONNECTION_TYPE {
@@ -320,6 +320,11 @@ func (c4 *C4HttpConnection) requestOverTunnel(conn *SessionConnection, ev event.
 			req.Url = req.Url[7+len(req.RawReq.Host):]
 		}
 		c4.tunnel_remote_addr = remote_addr
+		if req.RawReq.ContentLength > 0 && req.RawReq.ContentLength <= 8192 {
+			tmpbuf := make([]byte, 8192)
+			req.RawReq.Body.Read(tmpbuf)
+			req.Content.Write(tmpbuf)
+		}
 		c4.offerRequestEvent(req)
 
 		if req.RawReq.ContentLength > 0 {
@@ -397,9 +402,14 @@ func initC4Config() {
 		}
 	}
 	c4_cfg.Encrypter = event.ENCRYPTER_SE1
-	if compress, exist := common.Cfg.GetProperty("C4", "Encrypter"); exist {
-		if strings.EqualFold(compress, "None") {
-			c4_cfg.Compressor = event.ENCRYPTER_NONE
+	if enc, exist := common.Cfg.GetProperty("C4", "Encrypter"); exist {
+		enc = strings.ToLower(enc)
+		switch enc {
+		case "none":
+			c4_cfg.Encrypter = event.ENCRYPTER_NONE
+			//Support RC4 next release
+			//		case "rc4":
+			//			c4_cfg.Encrypter = event.ENCRYPTER_RC4
 		}
 	}
 
@@ -416,15 +426,14 @@ func initC4Config() {
 	c4_cfg.ConnectionMode = MODE_HTTP
 
 	logined = false
-	if ifs, err := net.Interfaces(); nil == err{
-	   for _, itf := range ifs{
-	      if len(itf.HardwareAddr.String()) > 0{
-	         userToken = itf.HardwareAddr.String()
-	         break
-	      }
-	   }
+	if ifs, err := net.Interfaces(); nil == err {
+		for _, itf := range ifs {
+			if len(itf.HardwareAddr.String()) > 0 {
+				userToken = itf.HardwareAddr.String()
+				break
+			}
+		}
 	}
-
 	log.Printf("UserToken is %s\n", userToken)
 }
 

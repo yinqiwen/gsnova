@@ -104,6 +104,16 @@ func getLocalHostMapping(host string) (string, bool) {
 	return host, false
 }
 
+func getAddressMapping(addr string) string {
+	v := strings.Split(addr, ":")
+	if len(v) == 2 {
+		tmp, _ := getLocalHostMapping(v[0])
+		addr, _ = lookupAvailableAddress(net.JoinHostPort(tmp, v[1]))
+		return addr
+	}
+	return addr
+}
+
 func getLocalUrlMapping(addr string) string {
 	l, err := url.Parse(addr)
 	if nil != err {

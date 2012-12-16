@@ -2,11 +2,15 @@ package event
 
 import (
 	"bytes"
+	"crypto/rc4"
 	"errors"
 	"strconv"
 	"util"
-	//"fmt"
 )
+
+var EncryptRC4Key = []byte("")
+
+var rc4Cipher *rc4.Cipher
 
 type EncryptEvent struct {
 	EncryptType uint32
@@ -25,6 +29,10 @@ func (ev *EncryptEvent) Encode(buffer *bytes.Buffer) {
 		newbuf := util.SimpleEncrypt(buf)
 		buffer.Write(newbuf.Bytes())
 		newbuf.Reset()
+	case ENCRYPTER_RC4:
+		dst := make([]byte, buf.Len())
+		rc4Cipher.XORKeyStream(dst, buf.Bytes())
+		buffer.Write(dst)
 	}
 	buf.Reset()
 }
@@ -39,9 +47,12 @@ func (ev *EncryptEvent) Decode(buffer *bytes.Buffer) (err error) {
 		return err
 	case ENCRYPTER_SE1:
 		newbuf := util.SimpleDecrypt(buffer)
-		//fmt.Printf("Decrypt decode %d bytes\n", newbuf.Len())
 		err, ev.Ev = DecodeEvent(newbuf)
 		newbuf.Reset()
+	case ENCRYPTER_RC4:
+		dst := make([]byte, buffer.Len())
+		rc4Cipher.XORKeyStream(dst, buffer.Bytes())
+		err, ev.Ev = DecodeEvent(bytes.NewBuffer(dst))
 	default:
 		return errors.New("Not supported encrypt type:" + strconv.Itoa(int(ev.EncryptType)))
 	}
@@ -74,6 +85,11 @@ func (ev *EncryptEventV2) Encode(buffer *bytes.Buffer) {
 		EncodeUInt64Value(buffer, uint64(newbuf.Len()))
 		buffer.Write(newbuf.Bytes())
 		newbuf.Reset()
+	case ENCRYPTER_RC4:
+		EncodeUInt64Value(buffer, uint64(buf.Len()))
+		dst := make([]byte, buf.Len())
+		rc4Cipher.XORKeyStream(dst, buf.Bytes())
+		buffer.Write(dst)
 	}
 	buf.Reset()
 }
@@ -92,9 +108,13 @@ func (ev *EncryptEventV2) Decode(buffer *bytes.Buffer) (err error) {
 		return err
 	case ENCRYPTER_SE1:
 		newbuf := util.SimpleDecrypt(bytes.NewBuffer(buffer.Next(int(length))))
-		//fmt.Printf("Decrypt decode %d bytes\n", newbuf.Len())
 		err, ev.Ev = DecodeEvent(newbuf)
 		newbuf.Reset()
+	case ENCRYPTER_RC4:
+		src := buffer.Next(int(length))
+		dst := make([]byte, int(length))
+		rc4Cipher.XORKeyStream(dst, src)
+		err, ev.Ev = DecodeEvent(bytes.NewBuffer(dst))
 	default:
 		return errors.New("Not supported encrypt type:" + strconv.Itoa(int(ev.EncryptType)))
 	}

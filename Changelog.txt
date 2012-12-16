@@ -1,5 +1,17 @@
 GSnova Changelog
 ===================
+Changes in version 0.19.4(2012.12.16)
+-------------------------------------------
+** Features
+   * [Socks]: Fix for Issue 255
+   * [GAE]: Better retry mechanism
+   * [Google]: Better retry mechanism
+   
+** Improvement
+   * [C4]: Some opt
+   * [SPAC]: Fix bug for filter 'IsHostInCN'
+   * Change default spac setting
+
 Changes in version 0.19.3(2012.12.09)
 -------------------------------------------
 ** Features

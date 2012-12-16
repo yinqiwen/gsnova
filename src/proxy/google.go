@@ -212,7 +212,7 @@ func (conn *GoogleConnection) initHttpClient(proxyAddr string) {
 			get_google_hostport := func() string {
 				addr, _ := getLocalHostMapping(googleHttpHost)
 				addr = net.JoinHostPort(addr, "80")
-				if !preferIP && !conn.use_sys_dns  {
+				if !preferIP && !conn.use_sys_dns {
 					addr, _ = lookupAvailableAddress(addr)
 				}
 				return addr
@@ -221,10 +221,12 @@ func (conn *GoogleConnection) initHttpClient(proxyAddr string) {
 			conn.http_client, err = net.DialTimeout("tcp", addr, connTimeoutSecs)
 			if nil != err {
 				conn.Close()
+				expireBlockVerifyCache(addr)
 				addr = get_google_hostport()
 				conn.http_client, err = net.DialTimeout("tcp", addr, connTimeoutSecs)
 			}
 			if nil != err {
+				expireBlockVerifyCache(addr)
 				conn.Close()
 				log.Printf("Failed to dial address:%s for reason:%s\n", addr, err.Error())
 				return
@@ -242,10 +244,12 @@ func (conn *GoogleConnection) initHttpClient(proxyAddr string) {
 			conn.http_client, err = net.DialTimeout("tcp", addr, connTimeoutSecs)
 			if nil != err {
 				conn.Close()
+				expireBlockVerifyCache(addr)
 				addr = get_google_hostport()
 				conn.http_client, err = net.DialTimeout("tcp", addr, connTimeoutSecs)
 			}
 			if nil != err {
+				expireBlockVerifyCache(addr)
 				log.Printf("Failed to dial address:%s for reason:%s\n", addr, err.Error())
 				conn.Close()
 				return
@@ -335,6 +339,7 @@ func (google *GoogleConnection) Request(conn *SessionConnection, ev event.Event)
 				return errors.New("No google proxy reachable."), nil
 			}
 			log.Printf("Session[%d]Request %s\n", req.GetHash(), util.GetURLString(req.RawReq, true))
+			req.RawReq.URL.Scheme = "http"
 			//if google.manager.GetName() == GOOGLE_HTTP {
 			//	google.http_client.Write(CRLFs)
 			//}
