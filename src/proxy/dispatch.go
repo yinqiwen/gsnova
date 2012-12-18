@@ -2,7 +2,6 @@ package proxy
 
 import (
 	"bufio"
-	"common"
 	"event"
 	"fmt"
 	"io"
@@ -228,10 +227,11 @@ func (session *SessionConnection) process() error {
 }
 
 type ForwardSocksDialer struct {
+	proxyPort int
 }
 
 func (f *ForwardSocksDialer) DialTCP(n string, laddr *net.TCPAddr, raddr string) (net.Conn, error) {
-	conn, err := net.Dial("tcp", net.JoinHostPort("127.0.0.1", common.ProxyPort))
+	conn, err := net.Dial("tcp", fmt.Sprintf("127.0.0.1:%d", f.proxyPort))
 	if nil == err {
 		_, port, er := net.SplitHostPort(raddr)
 		if nil == er && port != "80" {
@@ -258,8 +258,9 @@ func HandleConn(sessionId uint32, conn net.Conn, proxyServerType int) {
 		conn.Close()
 		return
 	}
+	localAddr := conn.LocalAddr().(*net.TCPAddr)
 	if b[0] == byte(4) || b[0] == byte(5) {
-		socks.ServConn(bufreader, conn.(*net.TCPConn), &ForwardSocksDialer{})
+		socks.ServConn(bufreader, conn.(*net.TCPConn), &ForwardSocksDialer{proxyPort: localAddr.Port})
 		return
 	}
 	b, err = bufreader.Peek(7)

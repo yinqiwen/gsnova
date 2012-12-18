@@ -18,6 +18,7 @@ import (
 
 var RootCert tls.Certificate
 var X509RootCert *x509.Certificate
+var RC4Key = "8976501f8451f03c5c4067b47882f2e5"
 
 var cachedCertificates = make(map[string]tls.Certificate)
 

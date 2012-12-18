@@ -37,6 +37,7 @@ type C4Config struct {
 }
 
 var c4_cfg *C4Config
+var c4HttpClient *http.Client
 
 type C4HttpConnection struct {
 	sess               *SessionConnection
@@ -104,7 +105,7 @@ func (c4 *C4HttpConnection) requestEvent(ev event.Event, isPull bool) error {
 	if len(c4_cfg.UA) > 0 {
 		req.Header.Set("User-Agent", c4_cfg.UA)
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := c4HttpClient.Do(req)
 	if err != nil {
 		log.Println(err.Error())
 		return err
@@ -408,8 +409,8 @@ func initC4Config() {
 		case "none":
 			c4_cfg.Encrypter = event.ENCRYPTER_NONE
 			//Support RC4 next release
-			//		case "rc4":
-			//			c4_cfg.Encrypter = event.ENCRYPTER_RC4
+		case "rc4":
+			c4_cfg.Encrypter = event.ENCRYPTER_RC4
 		}
 	}
 
@@ -449,6 +450,13 @@ func (manager *C4) Init() error {
 	initC4Config()
 	RegisteRemoteConnManager(manager)
 	manager.servers = &util.ListSelector{}
+
+	c4HttpClient = new(http.Client)
+	tr := &http.Transport{
+		DisableCompression:  true,
+		MaxIdleConnsPerHost: 20,
+	}
+	c4HttpClient.Transport = tr
 
 	index := 0
 	for {

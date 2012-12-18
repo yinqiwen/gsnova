@@ -117,7 +117,7 @@ func main() {
 	if !exist {
 		log.Fatalln("No config [LocalServer]->Listen found")
 	}
-	if v, exist := common.Cfg.GetBoolProperty("LocalServer", "AutoOpenWebUI"); !exist || v {
+	if v, exist := common.Cfg.GetBoolProperty("Misc", "AutoOpenWebUI"); !exist || v {
 		go func() {
 			time.Sleep(1 * time.Second)
 			util.OpenBrowser("http://localhost:" + common.ProxyPort + "/")

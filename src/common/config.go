@@ -4,7 +4,7 @@ import (
 	"log"
 	"net"
 	"net/url"
-//	"time"
+	"event"
 	"util"
 )
 
@@ -23,15 +23,18 @@ func InitConfig() error {
 		}
 	}
 
-//	if timeout, exist := Cfg.GetIntProperty("LocalServer", "KeepAliveTimeout"); exist {
-//		KeepAliveTimeout = time.Duration(timeout)
-//	}
+	//	if timeout, exist := Cfg.GetIntProperty("LocalServer", "KeepAliveTimeout"); exist {
+	//		KeepAliveTimeout = time.Duration(timeout)
+	//	}
 	if addr, exist := Cfg.GetProperty("LocalProxy", "Proxy"); exist {
 		LocalProxy, _ = url.Parse(addr)
 	}
-	if enable, exist := Cfg.GetIntProperty("Debug", "Enable"); exist {
+	if enable, exist := Cfg.GetIntProperty("Misc", "DebugEnable"); exist {
 		DebugEnable = (enable != 0)
 	}
-	//err = util.LoadHostMapping(Home + "hosts.conf")
+	if key, exist := Cfg.GetProperty("Misc", "RC4Key"); exist {
+		RC4Key = key
+	}
+	event.SetRC4Key(RC4Key)
 	return err
 }
