@@ -1,6 +1,6 @@
 [
   {
-    "URL" : ["www.google.*/imgres", "www.google.*/alerts"],
+    "URL" : ["www.google.*/imgres", "www.google.*/alerts", "www.google.*/custom"],
     "Proxy":["Direct", "Default"]
   },
   {
