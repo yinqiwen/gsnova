@@ -343,6 +343,8 @@ func (c4 *C4HttpConnection) requestOverTunnel(conn *SessionConnection, ev event.
 		}
 		if onlyReadTunnel {
 			req.RawReq.Body.Close()
+			if c4.readTunnelWorking{
+			}
 			err := c4.requestEvent(wrapC4RequestEvent(req), true)
 			if nil != err {
 				//retry
