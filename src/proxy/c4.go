@@ -526,6 +526,7 @@ func (manager *C4) Init() error {
 		manager.loginC4(v)
 	}
 	if index == 0 {
+	    C4Enable = false
 		return errors.New("No configed C4 server.")
 	}
 	return nil
