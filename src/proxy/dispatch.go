@@ -175,6 +175,9 @@ func (session *SessionConnection) process() error {
 			if _, err := session.LocalBufferConn.Peek(1); nil == err {
 				session.LocalRawConn.SetReadDeadline(zero)
 				req, e := http.ReadRequest(session.LocalBufferConn)
+				if nil != req {
+					req.Header.Del("Proxy-Connection")
+				}
 				return req, e
 			} else {
 				if util.IsTimeoutError(err) {
@@ -191,17 +194,19 @@ func (session *SessionConnection) process() error {
 
 	switch session.State {
 	case STATE_RECV_HTTP:
-		req, err := readRequest()
-		if nil == err {
+		req, rerr := readRequest()
+		if nil == rerr {
 			var rev event.HTTPRequestEvent
 			rev.FromRequest(req)
 			rev.SetHash(session.SessionID)
-			err = session.processHttpEvent(&rev)
-		}
-		if nil != err {
+			err := session.processHttpEvent(&rev)
 			if err != nil && err != io.EOF {
 				log.Printf("Session[%d]Failed to read http request:%v\n", session.SessionID, err)
+				close_session()
+				return io.EOF
 			}
+		}
+		if nil != rerr {
 			close_session()
 			return io.EOF
 		}
@@ -214,9 +219,6 @@ func (session *SessionConnection) process() error {
 			err = session.processHttpChunkEvent(rev)
 		}
 		if nil != err {
-			if err != io.EOF {
-				log.Printf("Session[%d]Failed to read http chunk:%v %T\n", session.SessionID, err, err)
-			}
 			close_session()
 			return io.EOF
 		}

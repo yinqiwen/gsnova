@@ -1,5 +1,14 @@
 GSnova Changelog
 ===================
+Changes in version 0.20.0(2012.12.xx)
+-------------------------------------------
+** Features
+   * [C4]: Better performance(Upgrade server & client)
+   * [C4]: Support RC4 encrypt method
+   
+** Improvement
+   * [SPAC]: Change default spac setting
+
 Changes in version 0.19.4(2012.12.16)
 -------------------------------------------
 ** Features
