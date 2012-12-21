@@ -149,8 +149,8 @@ func init() {
 	dsakey.X, _ = new(big.Int).SetString("5078D4D29795CBE76D3AACFE48C9AF0BCDBEE91A", 16)
 }
 
-// newMockAuthServer creates a new Server bound to 
-// the loopback interface. The server exits after 
+// newMockAuthServer creates a new Server bound to
+// the loopback interface. The server exits after
 // processing one handshake.
 func newMockAuthServer(t *testing.T) string {
 	l, err := Listen("tcp", "127.0.0.1:0", serverConfig)
@@ -273,6 +273,26 @@ func TestClientHMAC(t *testing.T) {
 		if err != nil {
 			t.Fatalf("client could not authenticate with mac algo %s: %v", mac, err)
 		}
+		c.Close()
+	}
+}
+
+// issue 4285.
+func TestClientUnsupportedCipher(t *testing.T) {
+	kc := new(keychain)
+	kc.keys = append(kc.keys, rsakey)
+	config := &ClientConfig{
+		User: "testuser",
+		Auth: []ClientAuth{
+			ClientAuthKeyring(kc),
+		},
+		Crypto: CryptoConfig{
+			Ciphers: []string{"aes128-cbc"}, // not currently supported
+		},
+	}
+	c, err := Dial("tcp", newMockAuthServer(t), config)
+	if err == nil {
+		t.Errorf("expected no ciphers in common")
 		c.Close()
 	}
 }

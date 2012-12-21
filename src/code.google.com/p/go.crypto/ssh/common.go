@@ -6,10 +6,11 @@ package ssh
 
 import (
 	"crypto/dsa"
+	"crypto/ecdsa"
 	"crypto/rsa"
 	"errors"
+	"fmt"
 	"math/big"
-	"strconv"
 	"sync"
 )
 
@@ -77,7 +78,7 @@ type UnexpectedMessageError struct {
 }
 
 func (u UnexpectedMessageError) Error() string {
-	return "ssh: unexpected message type " + strconv.Itoa(int(u.got)) + " (expected " + strconv.Itoa(int(u.expected)) + ")"
+	return fmt.Sprintf("ssh: unexpected message type %d (expected %d)", u.got, u.expected)
 }
 
 // ParseError results from a malformed SSH message.
@@ -86,7 +87,7 @@ type ParseError struct {
 }
 
 func (p ParseError) Error() string {
-	return "ssh: parse error in message type " + strconv.Itoa(int(p.msgType))
+	return fmt.Sprintf("ssh: parse error in message type %d", p.msgType)
 }
 
 type handshakeMagics struct {
@@ -102,7 +103,18 @@ func findCommonAlgorithm(clientAlgos []string, serverAlgos []string) (commonAlgo
 			}
 		}
 	}
+	return
+}
 
+func findCommonCipher(clientCiphers []string, serverCiphers []string) (commonCipher string, ok bool) {
+	for _, clientCipher := range clientCiphers {
+		for _, serverCipher := range serverCiphers {
+			// reject the cipher if we have no cipherModes definition
+			if clientCipher == serverCipher && cipherModes[clientCipher] != nil {
+				return clientCipher, true
+			}
+		}
+	}
 	return
 }
 
@@ -117,12 +129,12 @@ func findAgreedAlgorithms(transport *transport, clientKexInit, serverKexInit *ke
 		return
 	}
 
-	transport.writer.cipherAlgo, ok = findCommonAlgorithm(clientKexInit.CiphersClientServer, serverKexInit.CiphersClientServer)
+	transport.writer.cipherAlgo, ok = findCommonCipher(clientKexInit.CiphersClientServer, serverKexInit.CiphersClientServer)
 	if !ok {
 		return
 	}
 
-	transport.reader.cipherAlgo, ok = findCommonAlgorithm(clientKexInit.CiphersServerClient, serverKexInit.CiphersServerClient)
+	transport.reader.cipherAlgo, ok = findCommonCipher(clientKexInit.CiphersServerClient, serverKexInit.CiphersServerClient)
 	if !ok {
 		return
 	}
@@ -180,11 +192,17 @@ func serializeSignature(algoname string, sig []byte) []byte {
 	switch algoname {
 	// The corresponding private key to a public certificate is always a normal
 	// private key.  For signature serialization purposes, ensure we use the
-	// proper ssh-rsa or ssh-dss algo name in case the public cert algo name is passed.
-	case hostAlgoRSACertV01:
-		algoname = "ssh-rsa"
-	case hostAlgoDSACertV01:
-		algoname = "ssh-dss"
+	// proper key algorithm name in case the public cert algorithm name is passed.
+	case CertAlgoRSAv01:
+		algoname = KeyAlgoRSA
+	case CertAlgoDSAv01:
+		algoname = KeyAlgoDSA
+	case CertAlgoECDSA256v01:
+		algoname = KeyAlgoECDSA256
+	case CertAlgoECDSA384v01:
+		algoname = KeyAlgoECDSA384
+	case CertAlgoECDSA521v01:
+		algoname = KeyAlgoECDSA521
 	}
 	length := stringLength(len(algoname))
 	length += stringLength(len(sig))
@@ -205,6 +223,8 @@ func serializePublickey(key interface{}) []byte {
 		pubKeyBytes = marshalPubRSA(key)
 	case *dsa.PublicKey:
 		pubKeyBytes = marshalPubDSA(key)
+	case *ecdsa.PublicKey:
+		pubKeyBytes = marshalPubECDSA(key)
 	case *OpenSSHCertV01:
 		pubKeyBytes = marshalOpenSSHCertV01(key)
 	default:
@@ -222,11 +242,34 @@ func serializePublickey(key interface{}) []byte {
 func algoName(key interface{}) string {
 	switch key.(type) {
 	case *rsa.PublicKey:
-		return "ssh-rsa"
+		return KeyAlgoRSA
 	case *dsa.PublicKey:
-		return "ssh-dss"
+		return KeyAlgoDSA
+	case *ecdsa.PublicKey:
+		switch key.(*ecdsa.PublicKey).Params().BitSize {
+		case 256:
+			return KeyAlgoECDSA256
+		case 384:
+			return KeyAlgoECDSA384
+		case 521:
+			return KeyAlgoECDSA521
+		}
 	case *OpenSSHCertV01:
-		return algoName(key.(*OpenSSHCertV01).Key) + "-cert-v01@openssh.com"
+		switch key.(*OpenSSHCertV01).Key.(type) {
+		case *rsa.PublicKey:
+			return CertAlgoRSAv01
+		case *dsa.PublicKey:
+			return CertAlgoDSAv01
+		case *ecdsa.PublicKey:
+			switch key.(*OpenSSHCertV01).Key.(*ecdsa.PublicKey).Params().BitSize {
+			case 256:
+				return CertAlgoECDSA256v01
+			case 384:
+				return CertAlgoECDSA384v01
+			case 521:
+				return CertAlgoECDSA521v01
+			}
+		}
 	}
 	panic("unexpected key type")
 }
@@ -261,7 +304,7 @@ func buildDataSignedForAuth(sessionId []byte, req userAuthRequestMsg, algo, pubK
 	return ret
 }
 
-// safeString sanitises s according to RFC 4251, section 9.2. 
+// safeString sanitises s according to RFC 4251, section 9.2.
 // All control characters except tab, carriage return and newline are
 // replaced by 0x20.
 func safeString(s string) string {
@@ -286,11 +329,11 @@ func appendInt(buf []byte, n int) []byte {
 	return appendU32(buf, uint32(n))
 }
 
-// newCond is a helper to hide the fact that there is no usable zero 
+// newCond is a helper to hide the fact that there is no usable zero
 // value for sync.Cond.
 func newCond() *sync.Cond { return sync.NewCond(new(sync.Mutex)) }
 
-// window represents the buffer available to clients 
+// window represents the buffer available to clients
 // wishing to write to a channel.
 type window struct {
 	*sync.Cond
@@ -311,7 +354,7 @@ func (w *window) add(win uint32) bool {
 	}
 	w.win += win
 	// It is unusual that multiple goroutines would be attempting to reserve
-	// window space, but not guaranteed. Use broadcast to notify all waiters 
+	// window space, but not guaranteed. Use broadcast to notify all waiters
 	// that additional window is available.
 	w.Broadcast()
 	w.L.Unlock()
