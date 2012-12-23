@@ -3,11 +3,13 @@ GSnova Changelog
 Changes in version 0.20.0(2012.12.xx)
 -------------------------------------------
 ** Features
-   * [C4]: Better performance(Upgrade server & client)
-   * [C4]: Support RC4 encrypt method
+   * [C4]: Split reader&writer, a bit performance improvement.(Upgrade server & client)
+   * [C4]: Websocket Tunnel Support(Only NodeJS on dotcloud/VPS)  
    
 ** Improvement
    * [SPAC]: Change default spac setting
+   * [GAE]: Change retry times from 2 to 3
+   * [Google]: Performance improvement for proxying Google's sites 
 
 Changes in version 0.19.4(2012.12.16)
 -------------------------------------------

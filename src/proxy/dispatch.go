@@ -220,6 +220,7 @@ func (session *SessionConnection) process() error {
 		}
 		if nil != err {
 			close_session()
+			
 			return io.EOF
 		}
 	case STATE_RECV_TCP:
@@ -286,8 +287,5 @@ func HandleConn(sessionId uint32, conn net.Conn, proxyServerType int) {
 		if nil != err {
 			break
 		}
-	}
-	if nil != session.RemoteConn {
-		session.RemoteConn.GetConnectionManager().RecycleRemoteConnection(session.RemoteConn)
 	}
 }

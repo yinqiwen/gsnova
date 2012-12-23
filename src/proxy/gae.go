@@ -71,16 +71,17 @@ func initGAEClient() {
 	}
 
 	sslDial := func(n, addr string) (net.Conn, error) {
-		remote := getAddressMapping(addr)
-		conn, err := net.DialTimeout(n, remote, connTimeoutSecs)
-		if err != nil {
-			expireBlockVerifyCache(addr)
-			//try again
+		var remote string
+		var err error
+		var conn net.Conn
+		for i := 0; i < 3; i++ {
 			remote = getAddressMapping(addr)
 			conn, err = net.DialTimeout(n, remote, connTimeoutSecs)
+			if err != nil {
+				expireBlockVerifyCache(addr)
+			}
 		}
 		if err != nil {
-			expireBlockVerifyCache(addr)
 			return nil, err
 		}
 		return tls.Client(conn, tlcfg), nil
@@ -101,9 +102,10 @@ func initGAEClient() {
 				}
 				return proxyURL, nil
 			},
-			Dial:               dial,
-			TLSClientConfig:    tlcfg,
-			DisableCompression: true,
+			Dial:                dial,
+			TLSClientConfig:     tlcfg,
+			DisableCompression:  true,
+			MaxIdleConnsPerHost: int(gae_cfg.ConnectionPoolSize),
 		}
 		client.Transport = tr
 	} else {
@@ -113,9 +115,10 @@ func initGAEClient() {
 			}
 		}
 		tr := &http.Transport{
-			Dial:               dial,
-			TLSClientConfig:    tlcfg,
-			DisableCompression: true,
+			Dial:                dial,
+			TLSClientConfig:     tlcfg,
+			DisableCompression:  true,
+			MaxIdleConnsPerHost: int(gae_cfg.ConnectionPoolSize),
 		}
 		client.Transport = tr
 	}
@@ -175,6 +178,7 @@ func (gae *GAEHttpConnection) Close() error {
 		gae.doCloseTunnel()
 	}
 	gae.closed = true
+	gae.manager.RecycleRemoteConnection(gae)
 	return nil
 }
 
@@ -566,9 +570,11 @@ func (gae *GAEHttpConnection) Request(conn *SessionConnection, ev event.Event) (
 				}
 			}
 			log.Printf("Session[%d]Request %s\n", httpreq.GetHash(), util.GetURLString(httpreq.RawReq, true))
-			//httpreq.SetHeader("Connection", "Close")
-			httpreq.RemoveHeader("Proxy-Connection")
 			err, res = gae.requestEvent(gaeHttpClient, conn, ev)
+			if nil != err {
+			    //try again
+			    err, res = gae.requestEvent(gaeHttpClient, conn, ev)
+			}
 			if nil != err {
 				return
 			}
@@ -591,8 +597,7 @@ func (gae *GAEHttpConnection) Request(conn *SessionConnection, ev event.Event) (
 }
 
 type GAE struct {
-	auths      *util.ListSelector
-	idle_conns chan RemoteConnection
+	auths *util.ListSelector
 }
 
 func (manager *GAE) shareAppId(appid, email string, operation uint32) error {
@@ -619,44 +624,29 @@ func (manager *GAE) shareAppId(appid, email string, operation uint32) error {
 }
 
 func (manager *GAE) RecycleRemoteConnection(conn RemoteConnection) {
-	select {
-	case manager.idle_conns <- conn:
-		// Buffer on free list; nothing more to do.
-	default:
-		// Free list full, just carry on.
-	}
 	total_gae_conn_num = total_gae_conn_num - 1
-	conn.(*GAEHttpConnection).inject_range = false
+
 }
 
 func (manager *GAE) GetRemoteConnection(ev event.Event, attrs map[string]string) (RemoteConnection, error) {
 	if !GAEEnable {
 		return nil, fmt.Errorf("No GAE connection available.")
 	}
-	var b RemoteConnection
-	// Grab a buffer if available; allocate if not.
-	select {
-	case b = <-manager.idle_conns:
-		// Got one; nothing more to do.
-	default:
-		// None free, so allocate a new one.
-		gae := new(GAEHttpConnection)
-		gae.auth = *(manager.auths.Select().(*GAEAuth))
-		gae.authToken = gae.auth.token
-		gae.manager = manager
-		b = gae
-		//b.auth =
-	} // Read next message from the net.
+	gae := new(GAEHttpConnection)
+	gae.auth = *(manager.auths.Select().(*GAEAuth))
+	gae.authToken = gae.auth.token
+	gae.manager = manager
+
 	if containsAttr(attrs, ATTR_TUNNEL) {
-		b.(*GAEHttpConnection).over_tunnel = true && b.(*GAEHttpConnection).support_tunnel
+		gae.over_tunnel = true && gae.support_tunnel
 	} else {
-		b.(*GAEHttpConnection).over_tunnel = false
+		gae.over_tunnel = false
 	}
 	if containsAttr(attrs, ATTR_RANGE) {
-		b.(*GAEHttpConnection).inject_range = true
+		gae.inject_range = true
 	}
 	total_gae_conn_num = total_gae_conn_num + 1
-	return b, nil
+	return gae, nil
 }
 
 func (manager *GAE) GetName() string {
@@ -739,11 +729,10 @@ func (manager *GAE) Init() error {
 		}
 	}
 	log.Println("Init GAE.")
-	initGAEClient()
 	singleton_gae = manager
 	RegisteRemoteConnManager(manager)
 	initGAEConfig()
-	manager.idle_conns = make(chan RemoteConnection, gae_cfg.ConnectionPoolSize)
+	initGAEClient()
 	manager.auths = new(util.ListSelector)
 	authArray := make([]*GAEAuth, 0)
 	index := 0
@@ -796,7 +785,6 @@ func (manager *GAE) Init() error {
 		auth.token = conn.authToken
 		conn.auth.token = conn.authToken
 		total_gae_conn_num = total_gae_conn_num + 1
-		manager.RecycleRemoteConnection(conn)
 		manager.auths.Add(auth)
 	}
 	if manager.auths.Size() == 0 {

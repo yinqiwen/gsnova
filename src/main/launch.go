@@ -95,7 +95,7 @@ func main() {
 	proxy.InitSelfWebServer()
 	proxy.PostInitSpac()
 
-    log.Printf("=============Start %s %s==============\n", common.Product, common.Version)
+	log.Printf("=============Start %s %s==============\n", common.Product, common.Version)
 	if proxy.C4Enable {
 		if addr, exist := common.Cfg.GetProperty("C4", "Listen"); exist {
 			go startLocalProxyServer(addr, proxy.C4_PROXY_SERVER)
@@ -107,7 +107,7 @@ func main() {
 		}
 	}
 	if proxy.GAEEnable {
-	    	//init fake cert if GAE inited success
+		//init fake cert if GAE inited success
 		common.LoadRootCA()
 		if addr, exist := common.Cfg.GetProperty("GAE", "Listen"); exist {
 			go startLocalProxyServer(addr, proxy.GAE_PROXY_SERVER)
@@ -123,7 +123,7 @@ func main() {
 			util.OpenBrowser("http://localhost:" + common.ProxyPort + "/")
 		}()
 	}
-
+	testEntry()
 	startLocalProxyServer(addr, proxy.GLOBAL_PROXY_SERVER)
 	//launchSystemTray()
 

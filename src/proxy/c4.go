@@ -15,6 +15,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 	"util"
@@ -34,10 +35,14 @@ type C4Config struct {
 	ConnectionMode string
 	ReadTimeout    uint32
 	MaxReadBytes   uint32
+	MaxWSConn      uint32
 }
 
 var c4_cfg *C4Config
 var c4HttpClient *http.Client
+
+var c4SessionTable = make(map[uint32]*C4HttpConnection)
+var c4SessionTableMutex sync.Mutex
 
 type C4HttpConnection struct {
 	sess                  *SessionConnection
@@ -61,7 +66,9 @@ func (c4 *C4HttpConnection) Close() error {
 		closeEv.SetHash(c4.sess.SessionID)
 		c4.offerRequestEvent(closeEv)
 	}
-	c4.tunnelWriteChannel <- nil
+	if nil != c4.tunnelWriteChannel {
+		c4.tunnelWriteChannel <- nil
+	}
 	return nil
 }
 
@@ -214,6 +221,10 @@ func (c4 *C4HttpConnection) tunnel_write(conn *SessionConnection) {
 				break
 			}
 			err := c4.requestEvent(ev, false)
+			if err == io.EOF {
+				c4.tunnelWriteChannel <- ev
+				continue
+			}
 			if nil != err {
 				time.Sleep(wait)
 				wait = 2 * wait
@@ -243,7 +254,7 @@ func (c4 *C4HttpConnection) tunnel_read(conn *SessionConnection) {
 	c4.readTunnelLoopLauched = true
 	for !c4.closed {
 		err := c4.requestEvent(nil, true)
-		if nil == err {
+		if nil == err || err == io.EOF {
 			wait = 1 * time.Second
 		} else {
 			time.Sleep(wait)
@@ -264,6 +275,11 @@ func wrapC4RequestEvent(ev event.Event) event.Event {
 }
 
 func (c4 *C4HttpConnection) offerRequestEvent(ev event.Event) {
+	isWsServer := strings.HasPrefix(c4.server, "ws://")
+	if isWsServer {
+		wsOfferEvent(c4.server, ev)
+		return
+	}
 	if nil == c4.tunnelWriteChannel {
 		c4.tunnelWriteChannel = make(chan event.Event, 10)
 		go c4.tunnel_write(c4.sess)
@@ -314,7 +330,9 @@ func (c4 *C4HttpConnection) requestOverTunnel(conn *SessionConnection, ev event.
 	if len(c4.server) == 0 {
 		c4.server = c4.manager.servers.Select().(string)
 	}
+	isWsServer := strings.HasPrefix(c4.server, "ws://")
 	c4.sess = conn
+	c4.closed = false
 	switch ev.GetType() {
 	case event.HTTP_REQUEST_EVENT_TYPE:
 		req := ev.(*event.HTTPRequestEvent)
@@ -338,7 +356,9 @@ func (c4 *C4HttpConnection) requestOverTunnel(conn *SessionConnection, ev event.
 			req.Url = req.Url[7+len(req.RawReq.Host):]
 		}
 		c4.tunnel_remote_addr = remote_addr
+
 		onlyReadTunnel := false
+
 		if req.RawReq.ContentLength == 0 {
 			onlyReadTunnel = true
 		}
@@ -347,6 +367,9 @@ func (c4 *C4HttpConnection) requestOverTunnel(conn *SessionConnection, ev event.
 			n, _ := req.RawReq.Body.Read(tmpbuf)
 			req.Content.Write(tmpbuf[0:n])
 			onlyReadTunnel = true
+		}
+		if isWsServer {
+			onlyReadTunnel = false
 		}
 		if onlyReadTunnel {
 			req.RawReq.Body.Close()
@@ -379,7 +402,7 @@ func (c4 *C4HttpConnection) requestOverTunnel(conn *SessionConnection, ev event.
 			return nil, nil
 		}
 
-		if !onlyReadTunnel {
+		if !onlyReadTunnel && !isWsServer {
 			go c4.tunnel_read(conn)
 		}
 		c4.offerRequestEvent(req)
@@ -424,6 +447,10 @@ type C4 struct {
 
 func (manager *C4) RecycleRemoteConnection(conn RemoteConnection) {
 	atomic.AddInt32(&total_c4_conn_num, -1)
+	c4 := conn.(*C4HttpConnection)
+	c4SessionTableMutex.Lock()
+	delete(c4SessionTable, c4.sess.SessionID)
+	c4SessionTableMutex.Unlock()
 }
 
 func (manager *C4) loginC4(server string) {
@@ -432,13 +459,23 @@ func (manager *C4) loginC4(server string) {
 	conn.server = server
 	login := &event.UserLoginEvent{}
 	login.User = userToken
-	conn.requestEvent(login, false)
+	isWsServer := strings.HasPrefix(server, "ws://")
+	if isWsServer {
+		wsOfferEvent(server, login)
+	} else {
+		conn.requestEvent(login, false)
+	}
 }
 
 func (manager *C4) GetRemoteConnection(ev event.Event, attrs map[string]string) (RemoteConnection, error) {
 	conn := &C4HttpConnection{}
 	conn.manager = manager
 	atomic.AddInt32(&total_c4_conn_num, 1)
+	if nil != ev {
+		c4SessionTableMutex.Lock()
+		c4SessionTable[ev.GetHash()] = conn
+		c4SessionTableMutex.Unlock()
+	}
 	return conn, nil
 }
 
@@ -480,7 +517,10 @@ func initC4Config() {
 		c4_cfg.MaxReadBytes = uint32(period)
 	}
 
-	c4_cfg.ConnectionMode = MODE_HTTP
+	c4_cfg.MaxWSConn = 5
+	if num, exist := common.Cfg.GetIntProperty("C4", "MaxWSConn"); exist {
+		c4_cfg.MaxWSConn = uint32(num)
+	}
 
 	logined = false
 	if ifs, err := net.Interfaces(); nil == err {
@@ -523,10 +563,13 @@ func (manager *C4) Init() error {
 		}
 		manager.servers.Add(v)
 		index = index + 1
+		if strings.HasPrefix(v, "ws://") {
+			initC4WebsocketChannel(v)
+		}
 		manager.loginC4(v)
 	}
 	if index == 0 {
-	    C4Enable = false
+		C4Enable = false
 		return errors.New("No configed C4 server.")
 	}
 	return nil
