@@ -41,26 +41,6 @@ type ForwardConnection struct {
 	use_sys_dns bool
 }
 
-func (conn *ForwardConnection) IsDisconnected() bool {
-	if nil == conn.forward_conn {
-		return true
-	}
-	conn.forward_conn.SetReadDeadline(time.Now().Add(1 * time.Nanosecond))
-	one := make([]byte, 1)
-	if _, err := conn.forward_conn.Read(one); !util.IsTimeoutError(err) {
-		conn.Close()
-		return true
-	} else {
-		var zero time.Time
-		err := conn.forward_conn.SetReadDeadline(zero)
-		if nil != err {
-			conn.Close()
-			return true
-		}
-	}
-	return false
-}
-
 func (conn *ForwardConnection) Close() error {
 	if nil != conn.forward_conn {
 		conn.forward_conn.Close()
@@ -120,7 +100,7 @@ func (conn *ForwardConnection) initForwardConn(proxyAddr string, isHttps bool) e
 		proxyAddr = proxyAddr + ":80"
 	}
 
-	if nil != conn.forward_conn && conn.proxyAddr == proxyAddr && !conn.IsDisconnected() {
+	if nil != conn.forward_conn && conn.proxyAddr == proxyAddr {
 		return nil
 	}
 	conn.Close()

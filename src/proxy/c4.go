@@ -56,10 +56,6 @@ type C4HttpConnection struct {
 	manager               *C4
 }
 
-func (conn *C4HttpConnection) IsDisconnected() bool {
-	return conn.closed
-}
-
 func (c4 *C4HttpConnection) Close() error {
 	if !c4.closed {
 		closeEv := &event.SocketConnectionEvent{}
@@ -314,12 +310,15 @@ func (c4 *C4HttpConnection) handleTunnelResponse(conn *SessionConnection, ev eve
 	case event.EVENT_TCP_CHUNK_TYPE:
 		chunk := ev.(*event.TCPChunkEvent)
 		//log.Printf("Session[%d]Handle TCP chunk:%d with %d bytes\n", conn.SessionID, chunk.Sequence, len(chunk.Content))
-		_, err := conn.LocalRawConn.Write(chunk.Content)
+		n, err := conn.LocalRawConn.Write(chunk.Content)
 		if nil != err {
-			log.Printf("[%d]Failed to write  data to local client:%v.\n", ev.GetHash(), err)
+			log.Printf("[%d]Failed to write  data:%d to local client:%v.\n", ev.GetHash(), chunk.Sequence, err)
 			conn.Close()
 			c4.Close()
 			return err
+		}
+		if n < len(chunk.Content){
+		   log.Printf("############Not writed finished\n")
 		}
 	default:
 		log.Printf("Unexpected event type:%d\n", ev.GetType())

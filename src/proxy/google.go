@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"bytes"
 	"common"
 	"crypto/tls"
 	"event"
@@ -128,7 +129,9 @@ func (google *GoogleConnection) Request(conn *SessionConnection, ev event.Event)
 				resp, err = tryProxy()
 			}
 			if nil != err {
-				log.Printf("Session[%d]Request error:%v\n", req.GetHash(), err)
+				var tmp bytes.Buffer
+				req.RawReq.Write(&tmp)
+				log.Printf("Session[%d]Request error:%v\n%s\n", req.GetHash(), err, tmp.String())
 				return err, nil
 			}
 			err = resp.Write(conn.LocalRawConn)

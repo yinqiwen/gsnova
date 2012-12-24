@@ -10,8 +10,6 @@ import (
 	"net"
 	"net/http"
 	"strings"
-	"time"
-	"util"
 )
 
 const (
@@ -59,7 +57,6 @@ var total_proxy_conn_num uint32
 type RemoteConnection interface {
 	Request(conn *SessionConnection, ev event.Event) (err error, res event.Event)
 	GetConnectionManager() RemoteConnectionManager
-	IsDisconnected() bool
 	Close() error
 }
 
@@ -169,27 +166,11 @@ func (session *SessionConnection) process() error {
 	}
 
 	readRequest := func() (*http.Request, error) {
-		var zero time.Time
-		for {
-			session.LocalRawConn.SetReadDeadline(time.Now().Add(1 * time.Second))
-			if _, err := session.LocalBufferConn.Peek(1); nil == err {
-				session.LocalRawConn.SetReadDeadline(zero)
-				req, e := http.ReadRequest(session.LocalBufferConn)
-				if nil != req {
-					req.Header.Del("Proxy-Connection")
-				}
-				return req, e
-			} else {
-				if util.IsTimeoutError(err) {
-					if nil != session.RemoteConn && session.RemoteConn.IsDisconnected() {
-						return nil, io.EOF
-					}
-					continue
-				}
-				return nil, err
-			}
+		req, e := http.ReadRequest(session.LocalBufferConn)
+		if nil != req {
+			req.Header.Del("Proxy-Connection")
 		}
-		return nil, nil
+		return req, e
 	}
 
 	switch session.State {
@@ -200,13 +181,14 @@ func (session *SessionConnection) process() error {
 			rev.FromRequest(req)
 			rev.SetHash(session.SessionID)
 			err := session.processHttpEvent(&rev)
-			if err != nil && err != io.EOF {
+			if err != nil  {
 				log.Printf("Session[%d]Failed to read http request:%v\n", session.SessionID, err)
 				close_session()
 				return io.EOF
 			}
 		}
 		if nil != rerr {
+		    log.Printf("Session[%d]Browser close connection:%v\n", session.SessionID, rerr)
 			close_session()
 			return io.EOF
 		}
@@ -220,7 +202,7 @@ func (session *SessionConnection) process() error {
 		}
 		if nil != err {
 			close_session()
-			
+
 			return io.EOF
 		}
 	case STATE_RECV_TCP:

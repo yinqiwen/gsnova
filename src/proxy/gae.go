@@ -166,10 +166,6 @@ type GAEHttpConnection struct {
 	closed             bool
 }
 
-func (conn *GAEHttpConnection) IsDisconnected() bool {
-	return false
-}
-
 func (gae *GAEHttpConnection) Close() error {
 	if gae.over_tunnel {
 		gae.doCloseTunnel()
@@ -581,12 +577,10 @@ func (gae *GAEHttpConnection) Request(conn *SessionConnection, ev event.Event) (
 				log.Printf("ERROR:Session[%d]Request %s %s is forbidon\n", httpreq.GetHash(), httpreq.Method, httpreq.RawReq.Host)
 			}
 			httpres, err := gae.handleHttpRes(conn, httpreq, httpresev, rangeHeader)
-			//if !httpres.IsKeepAlive(){
 			if nil != err || !util.IsResponseKeepAlive(httpres) || !util.IsRequestKeepAlive(httpreq.RawReq) {
 				conn.LocalRawConn.Close()
 				conn.State = STATE_SESSION_CLOSE
 			}
-
 			return err, nil
 		}
 	}

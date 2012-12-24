@@ -156,6 +156,12 @@ func (r *JsonRule) matchFilters(req *http.Request) bool {
 }
 
 func (r *JsonRule) match(req *http.Request, isHttpsConn bool) bool {
+//    getUrl := func()string{
+//       if strings.HasPrefix(req.RequestURI, "http://"){
+//          return req.RequestURI
+//       }
+//       return "http://" + req.Host + req.RequestURI
+//    }
 	return r.matchFilters(req) && r.matchProtocol(req, isHttpsConn) && matchRegexs(req.Method, r.method_regex) && matchRegexs(req.Host, r.host_regex) && matchRegexs(req.RequestURI, r.url_regex)
 }
 
@@ -525,7 +531,7 @@ func SelectProxy(req *http.Request, conn *SessionConnection) ([]RemoteConnection
 		return nil, nil
 	}
 	if common.DebugEnable {
-		log.Printf("Found %v for host:%v\n", proxyNames, host)
+		log.Printf("Found %v for host:%v and url:%s\n", proxyNames, host, req.RequestURI)
 	}
 	for _, proxyName := range proxyNames {
 		if strings.EqualFold(proxyName, DEFAULT_NAME) {
