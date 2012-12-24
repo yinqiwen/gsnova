@@ -54,7 +54,6 @@ func initGAEClient() {
 	tlcfg := &tls.Config{}
 	tlcfg.InsecureSkipVerify = true
 
-
 	dial := func(n, addr string) (net.Conn, error) {
 		remote := getAddressMapping(addr)
 		conn, err := net.DialTimeout(n, remote, connTimeoutSecs)
@@ -89,7 +88,13 @@ func initGAEClient() {
 	}
 
 	if len(gae_cfg.Proxy) > 0 {
-		dial = net.Dial
+		if strings.Contains(gae_cfg.Proxy, "Google") {
+			if strings.HasPrefix(gae_cfg.Proxy, "https://") {
+				dial = sslDial
+			}
+		} else {
+			dial = net.Dial
+		}
 		tr := &http.Transport{
 			Proxy: func(req *http.Request) (*url.URL, error) {
 				return url.Parse(gae_cfg.Proxy)

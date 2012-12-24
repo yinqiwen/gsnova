@@ -54,7 +54,6 @@ func (conn *GoogleConnection) Close() error {
 	return nil
 }
 
-
 func (conn *GoogleConnection) GetConnectionManager() RemoteConnectionManager {
 	return conn.manager
 }
