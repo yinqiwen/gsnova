@@ -35,6 +35,7 @@ type GAEConfig struct {
 	RangeFetchRetryLimit   uint32
 	MasterAppID            string
 	ConcurrentRangeFetcher uint32
+	Proxy                  string
 }
 
 var singleton_gae *GAE
@@ -52,7 +53,7 @@ func initGAEClient() {
 	client := new(http.Client)
 	tlcfg := &tls.Config{}
 	tlcfg.InsecureSkipVerify = true
-	proxyInfo, exist := common.Cfg.GetProperty("LocalProxy", "Proxy")
+
 
 	dial := func(n, addr string) (net.Conn, error) {
 		remote := getAddressMapping(addr)
@@ -87,20 +88,11 @@ func initGAEClient() {
 		return tls.Client(conn, tlcfg), nil
 	}
 
-	if exist {
-		if strings.HasPrefix(proxyInfo, "https") {
-			dial = sslDial
-		}
+	if len(gae_cfg.Proxy) > 0 {
+		dial = net.Dial
 		tr := &http.Transport{
 			Proxy: func(req *http.Request) (*url.URL, error) {
-				proxyURL, err := url.Parse(proxyInfo)
-				if err != nil || proxyURL.Scheme == "" {
-					if u, err := url.Parse("http://" + proxyInfo); err == nil {
-						proxyURL = u
-						err = nil
-					}
-				}
-				return proxyURL, nil
+				return url.Parse(gae_cfg.Proxy)
 			},
 			Dial:                dial,
 			TLSClientConfig:     tlcfg,
@@ -572,8 +564,8 @@ func (gae *GAEHttpConnection) Request(conn *SessionConnection, ev event.Event) (
 			log.Printf("Session[%d]Request %s\n", httpreq.GetHash(), util.GetURLString(httpreq.RawReq, true))
 			err, res = gae.requestEvent(gaeHttpClient, conn, ev)
 			if nil != err {
-			    //try again
-			    err, res = gae.requestEvent(gaeHttpClient, conn, ev)
+				//try again
+				err, res = gae.requestEvent(gaeHttpClient, conn, ev)
 			}
 			if nil != err {
 				return
@@ -699,6 +691,9 @@ func initGAEConfig() {
 	if master, exist := common.Cfg.GetProperty("GAE", "MasterAppID"); exist {
 		gae_cfg.MasterAppID = master
 	}
+	if proxy, exist := common.Cfg.GetProperty("GAE", "Proxy"); exist {
+		gae_cfg.Proxy = proxy
+	}
 }
 
 func (manager *GAE) fetchSharedAppIDs() (error, []string) {
@@ -745,7 +740,6 @@ func (manager *GAE) Init() error {
 		if err := auth.parse(v); nil != err {
 			return err
 		}
-		//manager.auths.Add(&auth)
 		authArray = append(authArray, &auth)
 		index = index + 1
 	}
@@ -763,7 +757,6 @@ func (manager *GAE) Init() error {
 			auth.user = ANONYMOUSE
 			auth.passwd = ANONYMOUSE
 			authArray = append(authArray, &auth)
-			//manager.auths.Add(&auth)
 		}
 	}
 	for _, auth := range authArray {

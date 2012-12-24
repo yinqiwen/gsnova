@@ -26,7 +26,7 @@ import (
 	"util"
 )
 
-var sshUseGlobalProxy bool
+var sshLocalProxy *url.URL
 var sshResolveRemote bool
 var SSHEnable bool
 
@@ -207,9 +207,9 @@ func (conn *SSHRawConnection) GetClientConn(reconnect bool) (*ssh.ClientConn, er
 		}
 		conn.clientConn = nil
 		dial := net.Dial
-		if sshUseGlobalProxy {
+		if nil != sshLocalProxy {
 			dial = func(network, addr string) (net.Conn, error) {
-				return util.HttpTunnelDial(network, addr, common.LocalProxy)
+				return util.HttpTunnelDial(network, addr, sshLocalProxy)
 			}
 		}
 		if c, err := dial("tcp", conn.Server); nil != err {
@@ -271,8 +271,8 @@ func InitSSH() error {
 	}
 	SSHEnable = true
 	log.Println("Init SSH.")
-	if enable, exist := common.Cfg.GetIntProperty("SSH", "UseGlobalProxy"); exist {
-		sshUseGlobalProxy = (enable != 0)
+	if proxy, exist := common.Cfg.GetProperty("SSH", "Proxy"); exist {
+		sshLocalProxy, _ = url.Parse(proxy)
 	}
 	if enable, exist := common.Cfg.GetIntProperty("SSH", "RemoteResolve"); exist {
 		sshResolveRemote = (enable != 0)

@@ -10,7 +10,6 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"strings"
 	"sync/atomic"
 	"time"
 	"util"
@@ -23,11 +22,11 @@ const (
 	GOOGLE_HTTP     = "GoogleHttp"
 )
 
-var useGlobalProxy bool
 var preferIP = true
 var googleHttpHost = "GoogleHttpIP"
 var googleHttpsHost = "GoogleHttps"
 var connTimeoutSecs time.Duration
+var googleLocalProxy string
 
 var httpGoogleManager *Google
 var httpsGoogleManager *Google
@@ -55,25 +54,12 @@ func (conn *GoogleConnection) Close() error {
 	return nil
 }
 
-func isLocalGoogleProxy() bool {
-	proxyInfo, exist := common.Cfg.GetProperty("LocalProxy", "Proxy")
-	if exist {
-		if strings.Contains(proxyInfo, GOOGLE_HTTPS_IP) || strings.Contains(proxyInfo, GOOGLE_HTTPS) {
-			return true
-		}
-		if strings.Contains(proxyInfo, GOOGLE_HTTP_IP) || strings.Contains(proxyInfo, GOOGLE_HTTP) {
-			return true
-		}
-	}
-	return false
-}
 
 func (conn *GoogleConnection) GetConnectionManager() RemoteConnectionManager {
 	return conn.manager
 }
 
 func (google *GoogleConnection) Request(conn *SessionConnection, ev event.Event) (err error, res event.Event) {
-	//log.Printf("Enter here for request\n")
 	f := func(local, remote net.Conn, ch chan int) {
 		io.Copy(remote, local)
 		ch <- 1
@@ -82,30 +68,47 @@ func (google *GoogleConnection) Request(conn *SessionConnection, ev event.Event)
 	}
 	//L:
 	switch ev.GetType() {
+
 	case event.HTTP_REQUEST_EVENT_TYPE:
 		req := ev.(*event.HTTPRequestEvent)
 		if conn.Type == HTTPS_TUNNEL {
-			addr := getGoogleHostport(true)
-			directConn, err := net.DialTimeout("tcp", addr, connTimeoutSecs)
-			if nil != err {
-				//try again
-				addr = getGoogleHostport(true)
-				directConn, err = net.DialTimeout("tcp", addr, connTimeoutSecs)
+			var proxyConn net.Conn
+			if len(googleLocalProxy) > 0 {
+				proxyURL, _ := url.Parse(googleLocalProxy)
+				proxyConn, err = net.Dial("tcp", proxyURL.Host)
+				addr, _ := getLocalHostMapping(GOOGLE_HTTPS)
+				connreq := req.RawReq
+				connreq.Host = addr
+				if nil == err {
+					connreq.Write(proxyConn)
+				}
+			} else {
+				addr := getGoogleHostport(true)
+				proxyConn, err = net.DialTimeout("tcp", addr, connTimeoutSecs)
+				if nil != err {
+					//try again
+					addr = getGoogleHostport(true)
+					proxyConn, err = net.DialTimeout("tcp", addr, connTimeoutSecs)
+				}
 			}
+
 			log.Printf("Session[%d]Request %s\n", req.GetHash(), util.GetURLString(req.RawReq, true))
 			if nil == err {
-				conn.LocalRawConn.Write([]byte("HTTP/1.1 200 Connection established\r\n\r\n"))
+				if len(googleLocalProxy) > 0 {
+				} else {
+					conn.LocalRawConn.Write([]byte("HTTP/1.1 200 Connection established\r\n\r\n"))
+				}
 			} else {
 				return fmt.Errorf("No google proxy reachable:%v", err), nil
 			}
 			ch := make(chan int)
-			go f(conn.LocalRawConn, directConn, ch)
-			go f(directConn, conn.LocalRawConn, ch)
+			go f(conn.LocalRawConn, proxyConn, ch)
+			go f(proxyConn, conn.LocalRawConn, ch)
 			atomic.AddInt32(&total_google_routine_num, 2)
 			<-ch
 			<-ch
 			atomic.AddInt32(&total_google_routine_num, -2)
-			directConn.Close()
+			proxyConn.Close()
 			google.Close()
 			conn.State = STATE_SESSION_CLOSE
 		} else {
@@ -121,10 +124,10 @@ func (google *GoogleConnection) Request(conn *SessionConnection, ev event.Event)
 				return httpsGoogleClient.Do(req.RawReq)
 			}
 			resp, err = tryProxy()
-			//            if nil != err {
-			//                //try proxy
-			//				resp, err = tryProxy()
-			//			}
+			if nil != err {
+				//try proxy
+				resp, err = tryProxy()
+			}
 			if nil != err {
 				log.Printf("Session[%d]Request error:%v\n", req.GetHash(), err)
 				return err, nil
@@ -174,11 +177,11 @@ func (manager *Google) GetRemoteConnection(ev event.Event, attrs map[string]stri
 func getGoogleHostport(isHttps bool) string {
 	var addr string
 	if !isHttps {
-		addr, _ = getLocalHostMapping(googleHttpsHost)
+		addr, _ = getLocalHostMapping(googleHttpHost)
 		addr = net.JoinHostPort(addr, "80")
 
 	} else {
-		addr, _ = getLocalHostMapping(googleHttpHost)
+		addr, _ = getLocalHostMapping(googleHttpsHost)
 		addr = net.JoinHostPort(addr, "443")
 	}
 	if !preferIP {
@@ -220,18 +223,16 @@ func initGoogleHttpClients() {
 		return commonDial(n, addr, true)
 	}
 
-	proxyInfo, exist := common.Cfg.GetProperty("LocalProxy", "Proxy")
-
 	proxyFunc := func(req *http.Request) (*url.URL, error) {
-		if useGlobalProxy && exist && !isLocalGoogleProxy() {
-			proxy := getLocalUrlMapping(proxyInfo)
+		if len(googleLocalProxy) > 0 {
+			proxy := getLocalUrlMapping(googleLocalProxy)
 			log.Printf("Google use proxy:%s\n", proxy)
 			return url.Parse(proxy)
 		}
 		//just a trick to let http client to write proxy request
 		return url.Parse("http://localhost:48100")
 	}
-	if useGlobalProxy && exist && !isLocalGoogleProxy() {
+	if len(googleLocalProxy) > 0 {
 		httpDial = net.Dial
 		httpsDial = net.Dial
 	}
@@ -259,17 +260,6 @@ func InitGoogle() error {
 		}
 	}
 	log.Println("Init Google.")
-	if tmp, exist := common.Cfg.GetIntProperty("Google", "UseGlobalProxy"); exist {
-		if tmp == 1 {
-			useGlobalProxy = true
-		} else if tmp == 2 {
-			if !strings.Contains(common.LocalProxy.Host, "Google") {
-				useGlobalProxy = true
-			}
-		} else {
-			useGlobalProxy = false
-		}
-	}
 	if prefer, exist := common.Cfg.GetBoolProperty("Google", "PreferIP"); exist {
 		preferIP = prefer
 	}
@@ -283,6 +273,9 @@ func InitGoogle() error {
 	connTimeoutSecs = 1500 * time.Millisecond
 	if tmp, exist := common.Cfg.GetIntProperty("Google", "ConnectTimeout"); exist {
 		connTimeoutSecs = time.Duration(tmp) * time.Millisecond
+	}
+	if proxy, exist := common.Cfg.GetProperty("Google", "Proxy"); exist {
+		googleLocalProxy = proxy
 	}
 	httpGoogleManager = newGoogle(GOOGLE_HTTP_NAME)
 	httpsGoogleManager = newGoogle(GOOGLE_HTTPS_NAME)

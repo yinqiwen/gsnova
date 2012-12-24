@@ -36,6 +36,7 @@ type C4Config struct {
 	ReadTimeout    uint32
 	MaxReadBytes   uint32
 	MaxWSConn      uint32
+	Proxy          string
 }
 
 var c4_cfg *C4Config
@@ -521,6 +522,9 @@ func initC4Config() {
 	if num, exist := common.Cfg.GetIntProperty("C4", "MaxWSConn"); exist {
 		c4_cfg.MaxWSConn = uint32(num)
 	}
+	if tmp, exist := common.Cfg.GetProperty("C4", "Proxy"); exist {
+		c4_cfg.Proxy = tmp
+	}
 
 	logined = false
 	if ifs, err := net.Interfaces(); nil == err {
@@ -551,7 +555,12 @@ func (manager *C4) Init() error {
 	tr := &http.Transport{
 		DisableCompression:  true,
 		MaxIdleConnsPerHost: 20,
-		Proxy:               http.ProxyFromEnvironment,
+		Proxy: func(req *http.Request) (*url.URL, error) {
+			if len(c4_cfg.Proxy) == 0 {
+				return nil, nil
+			}
+			return url.Parse(c4_cfg.Proxy)
+		},
 	}
 	c4HttpClient.Transport = tr
 

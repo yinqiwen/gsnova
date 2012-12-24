@@ -3,7 +3,7 @@ package common
 import (
 	"log"
 	"net"
-	"net/url"
+	//"net/url"
 	"event"
 	"util"
 )
@@ -26,9 +26,9 @@ func InitConfig() error {
 	//	if timeout, exist := Cfg.GetIntProperty("LocalServer", "KeepAliveTimeout"); exist {
 	//		KeepAliveTimeout = time.Duration(timeout)
 	//	}
-	if addr, exist := Cfg.GetProperty("LocalProxy", "Proxy"); exist {
-		LocalProxy, _ = url.Parse(addr)
-	}
+//	if addr, exist := Cfg.GetProperty("LocalProxy", "Proxy"); exist {
+//		LocalProxy, _ = url.Parse(addr)
+//	}
 	if enable, exist := Cfg.GetIntProperty("Misc", "DebugEnable"); exist {
 		DebugEnable = (enable != 0)
 	}
