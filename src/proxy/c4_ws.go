@@ -89,7 +89,7 @@ func wsC4Routine(server string, index int, ch chan event.Event) error {
 			if len(u.Path) == 0 {
 				u.Path = "/"
 			}
-			request := fmt.Sprintf("GET %s HTTP/1.1\r\nUpgrade: WebSocket\r\nHost: %s\r\nConnection: Upgrade\r\nConnectionIndex:%d\r\nUserToken:%s\r\nSec-WebSocket-Key:null\r\nSec-WebSocket-Protocol: c4\r\nSec-WebSocket-Version: 13\r\n\r\n", u.Path, u.Host, index, userToken)
+			request := fmt.Sprintf("GET %s HTTP/1.1\r\nUpgrade: WebSocket\r\nHost: %s\r\nConnection: Upgrade\r\nConnectionIndex:%d\r\nUserToken:%s\r\nKeep-Alive: %d\r\n\r\n", u.Path, u.Host, index, userToken, c4_cfg.WSConnKeepAlive)
 			addr := u.Host
 			if !strings.Contains(u.Host, ":") {
 				addr = net.JoinHostPort(u.Host, "80")
@@ -125,6 +125,7 @@ func wsC4Routine(server string, index int, ch chan event.Event) error {
 					ws = nil
 				}
 				checkWsConnection()
+				log.Printf("Lost websocket connection:%d\n", index)
 				continue
 			}
 			buf := new(bytes.Buffer)

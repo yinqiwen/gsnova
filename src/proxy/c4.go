@@ -29,14 +29,15 @@ var total_c4_conn_num = int32(0)
 var total_c4_routines = int32(0)
 
 type C4Config struct {
-	Compressor     uint32
-	Encrypter      uint32
-	UA             string
-	ConnectionMode string
-	ReadTimeout    uint32
-	MaxReadBytes   uint32
-	MaxWSConn      uint32
-	Proxy          string
+	Compressor      uint32
+	Encrypter       uint32
+	UA              string
+	ConnectionMode  string
+	ReadTimeout     uint32
+	MaxReadBytes    uint32
+	MaxWSConn       uint32
+	WSConnKeepAlive uint32
+	Proxy           string
 }
 
 var c4_cfg *C4Config
@@ -309,16 +310,16 @@ func (c4 *C4HttpConnection) handleTunnelResponse(conn *SessionConnection, ev eve
 		}
 	case event.EVENT_TCP_CHUNK_TYPE:
 		chunk := ev.(*event.TCPChunkEvent)
-		//log.Printf("Session[%d]Handle TCP chunk:%d with %d bytes\n", conn.SessionID, chunk.Sequence, len(chunk.Content))
+		log.Printf("Session[%d]Handle TCP chunk[%d-%d]\n", conn.SessionID, chunk.Sequence, len(chunk.Content))
 		n, err := conn.LocalRawConn.Write(chunk.Content)
 		if nil != err {
-			log.Printf("[%d]Failed to write  data:%d to local client:%v.\n", ev.GetHash(), chunk.Sequence, err)
+			log.Printf("[%d]Failed to write  chunk[%d-%d] to local client:%v.\n", ev.GetHash(), chunk.Sequence, len(chunk.Content), err)
 			conn.Close()
 			c4.Close()
 			return err
 		}
-		if n < len(chunk.Content){
-		   log.Printf("############Not writed finished\n")
+		if n < len(chunk.Content) {
+			log.Printf("############Not writed finished\n")
 		}
 	default:
 		log.Printf("Unexpected event type:%d\n", ev.GetType())
@@ -520,6 +521,11 @@ func initC4Config() {
 	c4_cfg.MaxWSConn = 5
 	if num, exist := common.Cfg.GetIntProperty("C4", "MaxWSConn"); exist {
 		c4_cfg.MaxWSConn = uint32(num)
+	}
+
+	c4_cfg.WSConnKeepAlive = 180
+	if num, exist := common.Cfg.GetIntProperty("C4", "WSConnKeepAlive"); exist {
+		c4_cfg.WSConnKeepAlive = uint32(num)
 	}
 	if tmp, exist := common.Cfg.GetProperty("C4", "Proxy"); exist {
 		c4_cfg.Proxy = tmp
