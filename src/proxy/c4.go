@@ -67,6 +67,7 @@ func (c4 *C4HttpConnection) Close() error {
 	if nil != c4.tunnelWriteChannel {
 		c4.tunnelWriteChannel <- nil
 	}
+	c4.closed = true
 	return nil
 }
 
