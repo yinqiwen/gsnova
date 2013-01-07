@@ -3,7 +3,6 @@ package proxy
 import (
 	"bufio"
 	"bytes"
-	//"code.google.com/p/go.net/websocket"
 	"encoding/binary"
 	"event"
 	"fmt"
@@ -40,8 +39,8 @@ func wsReadTask(ws net.Conn, ch chan event.Event) {
 				err, evv := event.DecodeEvent(tmp)
 				if nil == err {
 					evv = event.ExtractEvent(evv)
-					c4, exist := c4SessionTable[evv.GetHash()]
-					if !exist {
+					c4 := getC4Session(evv.GetHash())
+					if nil == c4 {
 						if evv.GetType() != event.EVENT_TCP_CONNECTION_TYPE {
 							log.Printf("[ERROR]No C4 session found for %d with type:%T\n", evv.GetHash(), evv)
 						}
@@ -153,7 +152,6 @@ func wsC4Routine(server string, index int, ch chan event.Event) error {
 				}
 				break
 			}
-
 		}
 	}
 	return nil
