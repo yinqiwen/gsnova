@@ -77,6 +77,7 @@ func (google *GoogleConnection) Request(conn *SessionConnection, ev event.Event)
 				proxyURL, _ := url.Parse(googleLocalProxy)
 				proxyConn, err = net.Dial("tcp", proxyURL.Host)
 				addr, _ := getLocalHostMapping(GOOGLE_HTTPS)
+				
 				connreq := req.RawReq
 				connreq.Host = addr
 				if nil == err {

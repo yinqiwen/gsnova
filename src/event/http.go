@@ -102,6 +102,17 @@ func (msg *HTTPMessageEvent) GetHeader(name string) string {
 	return ""
 }
 
+func (msg *HTTPMessageEvent) GetHeaderValues(name string) []string {
+	v := make([]string, 0)
+	for i := 0; i < len(msg.Headers); i++ {
+		header := msg.Headers[i]
+		if strings.EqualFold(header.Name, name) {
+			v = append(v, header.Value)
+		}
+	}
+	return v
+}
+
 func (msg *HTTPMessageEvent) RemoveHeader(name string) {
 	for i := 0; i < len(msg.Headers); i++ {
 		header := msg.Headers[i]

@@ -43,7 +43,7 @@ func loadSpacScript() error {
 			log.Printf("Failed to init SPAC for reason:%v", err)
 		}
 	}()
-	for _, path := range spac_script_path {
+	for idx, path := range spac_script_path {
 		file, e := ioutil.ReadFile(path)
 		err = e
 		if err == nil {
@@ -61,7 +61,10 @@ func loadSpacScript() error {
 			}
 			rules = append(rules, tmp...)
 		} else {
-			return err
+		    //The first is hiding  file
+			if idx != 0 {
+				return err
+			}
 		}
 	}
 	spac.rules = rules
@@ -156,12 +159,12 @@ func (r *JsonRule) matchFilters(req *http.Request) bool {
 }
 
 func (r *JsonRule) match(req *http.Request, isHttpsConn bool) bool {
-//    getUrl := func()string{
-//       if strings.HasPrefix(req.RequestURI, "http://"){
-//          return req.RequestURI
-//       }
-//       return "http://" + req.Host + req.RequestURI
-//    }
+	//    getUrl := func()string{
+	//       if strings.HasPrefix(req.RequestURI, "http://"){
+	//          return req.RequestURI
+	//       }
+	//       return "http://" + req.Host + req.RequestURI
+	//    }
 	return r.matchFilters(req) && r.matchProtocol(req, isHttpsConn) && matchRegexs(req.Method, r.method_regex) && matchRegexs(req.Host, r.host_regex) && matchRegexs(req.RequestURI, r.url_regex)
 }
 
@@ -408,8 +411,8 @@ func InitSpac() {
 	if len(spac.defaultRule) == 0 {
 		spac.defaultRule = GAE_NAME
 	}
-    //user script has higher priority
-	spac_script_path = []string{common.Home + "spac/user_spac.json", common.Home + "spac/cloud_spac.json"}
+	//user script has higher priority
+	spac_script_path = []string{common.Home + "spac/user_pre_spac.json", common.Home + "spac/cloud_spac.json", common.Home + "spac/user_spac.json"}
 	spac.rules = make([]*JsonRule, 0)
 	if enable, exist := common.Cfg.GetIntProperty("SPAC", "Enable"); exist {
 		spac_enable = (enable == 1)
@@ -432,7 +435,7 @@ func InitSpac() {
 	if !spac_enable {
 		return
 	}
-	
+
 	loadSpacScript()
 	go reloadSpacScript()
 	init_spac_func()
