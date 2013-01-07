@@ -15,46 +15,12 @@ import (
 )
 
 func wsReadTask(ws net.Conn, ch chan event.Event) {
-	data := make([]byte, 8192)
-	var buffer bytes.Buffer
-	chunkLen := int32(-1)
+	cumulate := new(C4CumulateTask)
 	for {
-		n, err := ws.Read(data)
+		err := cumulate.fillContent(ws)
 		if nil != err {
 			ch <- nil
 			return
-		}
-		buffer.Write(data[0:n])
-		for {
-			if chunkLen < 0 && buffer.Len() >= 4 {
-				err = binary.Read(&buffer, binary.BigEndian, &chunkLen)
-				if nil != err {
-					log.Printf("#################%v\n", err)
-					break
-				}
-			}
-			if chunkLen >= 0 && buffer.Len() >= int(chunkLen) {
-				content := buffer.Next(int(chunkLen))
-				tmp := bytes.NewBuffer(content)
-				err, evv := event.DecodeEvent(tmp)
-				if nil == err {
-					evv = event.ExtractEvent(evv)
-					c4 := getC4Session(evv.GetHash())
-					if nil == c4 {
-						if evv.GetType() != event.EVENT_TCP_CONNECTION_TYPE {
-							log.Printf("[ERROR]No C4 session found for %d with type:%T\n", evv.GetHash(), evv)
-						}
-					} else {
-						c4.handleTunnelResponse(c4.sess, evv)
-					}
-				} else {
-					log.Printf("[ERROR]Decode event failed %v with content len:%d\n", err, chunkLen)
-				}
-				buffer.Truncate(buffer.Len())
-				chunkLen = -1
-			} else {
-				break
-			}
 		}
 	}
 }
@@ -62,7 +28,7 @@ func wsReadTask(ws net.Conn, ch chan event.Event) {
 var c4WsChannelTable = make(map[string][]chan event.Event)
 
 func initC4WebsocketChannel(server string) {
-	maxConn := int(c4_cfg.MaxWSConn)
+	maxConn := int(c4_cfg.MaxConn)
 	c4WsChannelTable[server] = make([]chan event.Event, maxConn)
 	for i := 0; i < maxConn; i++ {
 		ch := make(chan event.Event, 1000)

@@ -6,9 +6,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"event"
-	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
@@ -17,7 +15,6 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
-	"time"
 	"util"
 )
 
@@ -34,9 +31,7 @@ type C4Config struct {
 	UA              string
 	ConnectionMode  string
 	ReadTimeout     uint32
-	MaxReadBytes    uint32
-	MaxHTTPConn     uint32
-	MaxWSConn       uint32
+	MaxConn         uint32
 	WSConnKeepAlive uint32
 	Proxy           string
 }
@@ -44,29 +39,74 @@ type C4Config struct {
 var c4_cfg *C4Config
 var c4HttpClient *http.Client
 
-var c4SessionTable = make(map[uint32]*C4HttpConnection)
+var c4SessionTable = make(map[uint32]*C4RemoteSession)
 var c4SessionTableMutex sync.Mutex
 
-type C4HttpConnection struct {
-	sess               *SessionConnection
-	tunnel_remote_addr string
-	server             string
-	closed             bool
-	manager            *C4
+type C4CumulateTask struct {
+	chunkLen int32
+	buffer   bytes.Buffer
 }
 
-func (c4 *C4HttpConnection) Close() error {
+func (task *C4CumulateTask) fillContent(reader io.Reader) error {
+	data := make([]byte, 8192)
+	for {
+		n, err := reader.Read(data)
+		if nil != err {
+			return err
+		}
+		task.buffer.Write(data[0:n])
+		for {
+			if task.chunkLen < 0 && task.buffer.Len() >= 4 {
+				err = binary.Read(&task.buffer, binary.BigEndian, &task.chunkLen)
+				if nil != err {
+					log.Printf("#################%v\n", err)
+					break
+				}
+			}
+			if task.chunkLen >= 0 && task.buffer.Len() >= int(task.chunkLen) {
+				content := task.buffer.Next(int(task.chunkLen))
+				tmp := bytes.NewBuffer(content)
+				err, evv := event.DecodeEvent(tmp)
+				if nil == err {
+					evv = event.ExtractEvent(evv)
+					c4 := getC4Session(evv.GetHash())
+					if nil == c4 {
+						if evv.GetType() != event.EVENT_TCP_CONNECTION_TYPE {
+							log.Printf("[ERROR]No C4 session found for %d with type:%T\n", evv.GetHash(), evv)
+						}
+					} else {
+						c4.handleTunnelResponse(c4.sess, evv)
+					}
+				} else {
+					log.Printf("[ERROR]Decode event failed %v with content len:%d\n", err, task.chunkLen)
+				}
+				task.buffer.Truncate(task.buffer.Len())
+				task.chunkLen = -1
+			} else {
+				break
+			}
+		}
+	}
+	return nil
+}
+
+type C4RemoteSession struct {
+	sess              *SessionConnection
+	remote_proxy_addr string
+	server            string
+	closed            bool
+	manager           *C4
+}
+
+func (c4 *C4RemoteSession) Close() error {
 	if !c4.closed {
 		closeEv := &event.SocketConnectionEvent{}
 		closeEv.Status = event.TCP_CONN_CLOSED
 		closeEv.SetHash(c4.sess.SessionID)
-		offerRequestEvent(closeEv)
+		c4.offerRequestEvent(closeEv)
 	}
 	c4.closed = true
-<<<<<<< HEAD
 	removeC4SessionTable(c4)
-=======
->>>>>>> 39251c0d60f5d29ed81292263c790572d2d5b81e
 	return nil
 }
 
@@ -78,7 +118,7 @@ func wrapC4RequestEvent(ev event.Event) event.Event {
 	return &encrypt
 }
 
-func (c4 *C4HttpConnection) offerRequestEvent(ev event.Event) {
+func (c4 *C4RemoteSession) offerRequestEvent(ev event.Event) {
 	ev = wrapC4RequestEvent(ev)
 	isWsServer := strings.HasPrefix(c4.server, "ws://")
 	if isWsServer {
@@ -88,13 +128,13 @@ func (c4 *C4HttpConnection) offerRequestEvent(ev event.Event) {
 	httpOfferEvent(c4.server, ev)
 }
 
-func (c4 *C4HttpConnection) handleTunnelResponse(conn *SessionConnection, ev event.Event) error {
+func (c4 *C4RemoteSession) handleTunnelResponse(conn *SessionConnection, ev event.Event) error {
 	switch ev.GetType() {
 	case event.EVENT_TCP_CONNECTION_TYPE:
 		cev := ev.(*event.SocketConnectionEvent)
 		if cev.Status == event.TCP_CONN_CLOSED {
-			log.Printf("Session[%d]Remote %s connection closed, current proxy addr:%s\n", conn.SessionID, cev.Addr, c4.tunnel_remote_addr)
-			if c4.tunnel_remote_addr == cev.Addr {
+			log.Printf("Session[%d]Remote %s connection closed, current proxy addr:%s\n", conn.SessionID, cev.Addr, c4.remote_proxy_addr)
+			if c4.remote_proxy_addr == cev.Addr {
 				c4.closed = true
 				conn.Close()
 				c4.Close()
@@ -120,7 +160,7 @@ func (c4 *C4HttpConnection) handleTunnelResponse(conn *SessionConnection, ev eve
 	return nil
 }
 
-func (c4 *C4HttpConnection) Request(conn *SessionConnection, ev event.Event) (err error, res event.Event) {
+func (c4 *C4RemoteSession) Request(conn *SessionConnection, ev event.Event) (err error, res event.Event) {
 	c4.sess = conn
 	if len(c4.server) == 0 {
 		c4.server = c4.manager.servers.Select().(string)
@@ -150,7 +190,7 @@ func (c4 *C4HttpConnection) Request(conn *SessionConnection, ev event.Event) (er
 		if strings.Contains(req.Url, "http://") {
 			req.Url = req.Url[7+len(req.RawReq.Host):]
 		}
-		c4.tunnel_remote_addr = remote_addr
+		c4.remote_proxy_addr = remote_addr
 		c4.offerRequestEvent(req)
 		rest := req.RawReq.ContentLength
 		tmpbuf := make([]byte, 8192)
@@ -176,7 +216,7 @@ func (c4 *C4HttpConnection) Request(conn *SessionConnection, ev event.Event) (er
 	}
 	return nil, nil
 }
-func (c4 *C4HttpConnection) GetConnectionManager() RemoteConnectionManager {
+func (c4 *C4RemoteSession) GetConnectionManager() RemoteConnectionManager {
 	return c4.manager
 }
 
@@ -184,19 +224,19 @@ type C4 struct {
 	servers *util.ListSelector
 }
 
-func setC4SessionTable(c4 *C4HttpConnection) {
+func setC4SessionTable(c4 *C4RemoteSession) {
 	c4SessionTableMutex.Lock()
-	c4SessionTable[c4.sess.SessionID] = conn
+	c4SessionTable[c4.sess.SessionID] = c4
 	c4SessionTableMutex.Unlock()
 }
 
-func removeC4SessionTable(c4 *C4HttpConnection) {
+func removeC4SessionTable(c4 *C4RemoteSession) {
 	c4SessionTableMutex.Lock()
 	delete(c4SessionTable, c4.sess.SessionID)
 	c4SessionTableMutex.Unlock()
 }
 
-func getC4Session(sid uint32) *C4HttpConnection {
+func getC4Session(sid uint32) *C4RemoteSession {
 	c4SessionTableMutex.Lock()
 	defer c4SessionTableMutex.Unlock()
 	s, ok := c4SessionTable[sid]
@@ -208,11 +248,11 @@ func getC4Session(sid uint32) *C4HttpConnection {
 
 func (manager *C4) RecycleRemoteConnection(conn RemoteConnection) {
 	atomic.AddInt32(&total_c4_conn_num, -1)
-	c4 := conn.(*C4HttpConnection)
+	//c4 := conn.(*C4RemoteSession)
 }
 
 func (manager *C4) loginC4(server string) {
-	conn := &C4HttpConnection{}
+	conn := &C4RemoteSession{}
 	conn.manager = manager
 	conn.server = server
 	login := &event.UserLoginEvent{}
@@ -221,12 +261,12 @@ func (manager *C4) loginC4(server string) {
 	if isWsServer {
 		wsOfferEvent(server, login)
 	} else {
-		conn.requestEvent(login, false)
+		httpOfferEvent(server, login)
 	}
 }
 
 func (manager *C4) GetRemoteConnection(ev event.Event, attrs map[string]string) (RemoteConnection, error) {
-	conn := &C4HttpConnection{}
+	conn := &C4RemoteSession{}
 	conn.manager = manager
 	atomic.AddInt32(&total_c4_conn_num, 1)
 	return conn, nil
@@ -265,19 +305,9 @@ func initC4Config() {
 		c4_cfg.ReadTimeout = uint32(period)
 	}
 
-	c4_cfg.MaxReadBytes = 256 * 1024
-	if period, exist := common.Cfg.GetIntProperty("C4", "MaxReadBytes"); exist {
-		c4_cfg.MaxReadBytes = uint32(period)
-	}
-
-	c4_cfg.MaxWSConn = 5
-	if num, exist := common.Cfg.GetIntProperty("C4", "MaxWSConn"); exist {
-		c4_cfg.MaxWSConn = uint32(num)
-	}
-
-	c4_cfg.MaxHTTPConn = 5
-	if num, exist := common.Cfg.GetIntProperty("C4", "MaxHTTPConn"); exist {
-		c4_cfg.MaxHTTPConn = uint32(num)
+	c4_cfg.MaxConn = 5
+	if num, exist := common.Cfg.GetIntProperty("C4", "MaxConn"); exist {
+		c4_cfg.MaxConn = uint32(num)
 	}
 
 	c4_cfg.WSConnKeepAlive = 180
@@ -331,6 +361,12 @@ func (manager *C4) Init() error {
 		v, exist := common.Cfg.GetProperty("C4", "WorkerNode["+strconv.Itoa(index)+"]")
 		if !exist || len(v) == 0 {
 			break
+		}
+		if !strings.Contains(v, "://") {
+			v = "http://" + v
+		}
+		if strings.HasSuffix(v, "/") {
+			v = v + "/"
 		}
 		manager.servers.Add(v)
 		index = index + 1
