@@ -67,13 +67,15 @@ func (p *pushWorker) writeContent(content []byte) {
 	resp, err := c4HttpClient.Do(req)
 	if nil != err || resp.StatusCode != 200 {
 		log.Printf("Push worker recevice error:%v  %v\n", err, p.server)
-		if nil != resp.Body {
+		if nil != resp {
 			resp.Body.Close()
 		}
 		time.Sleep(1 * time.Second)
 		p.writeContent(content)
 	}
-	resp.Body.Close()
+	if nil != resp {
+		resp.Body.Close()
+	}
 	p.working = false
 	p.tryWriteCache()
 }

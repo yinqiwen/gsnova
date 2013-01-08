@@ -151,9 +151,6 @@ func (c4 *C4RemoteSession) handleTunnelResponse(conn *SessionConnection, ev even
 			c4.Close()
 			return err
 		}
-		if n < len(chunk.Content) {
-			log.Printf("############Not writed finished\n")
-		}
 	default:
 		log.Printf("Unexpected event type:%d\n", ev.GetType())
 	}
@@ -207,7 +204,7 @@ func (c4 *C4RemoteSession) Request(conn *SessionConnection, ev event.Event) (err
 		}
 		req.RawReq.Body.Close()
 	case event.HTTP_CHUNK_EVENT_TYPE:
-		log.Printf("Session[%d]Offer chunk\n", conn.SessionID)
+		//log.Printf("Session[%d]Offer chunk\n", conn.SessionID)
 		chunk := ev.(*event.HTTPChunkEvent)
 		tcp_chunk := &event.TCPChunkEvent{Content: chunk.Content}
 		tcp_chunk.SetHash(ev.GetHash())
