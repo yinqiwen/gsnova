@@ -45,8 +45,8 @@ func (p *pushWorker) tryWriteCache() {
 func (p *pushWorker) writeContent(content []byte) {
 	p.working = true
 	buf := bytes.NewBuffer(content)
-	if !strings.HasSuffix(p.server.Path, "push/") {
-		p.server.Path = p.server.Path + "push/"
+	if !strings.HasSuffix(p.server.Path, "push") {
+		p.server.Path = p.server.Path + "push"
 	}
 	req := &http.Request{
 		Method:        "POST",
@@ -66,10 +66,14 @@ func (p *pushWorker) writeContent(content []byte) {
 	}
 	resp, err := c4HttpClient.Do(req)
 	if nil != err || resp.StatusCode != 200 {
-		log.Printf("Push worker recevice error:%v\n", err)
+		log.Printf("Push worker recevice error:%v  %v\n", err, p.server)
+		if nil != resp.Body {
+			resp.Body.Close()
+		}
 		time.Sleep(1 * time.Second)
 		p.writeContent(content)
 	}
+	resp.Body.Close()
 	p.working = false
 	p.tryWriteCache()
 }
@@ -81,8 +85,9 @@ type pullWorker struct {
 
 func (p *pullWorker) loop() {
 	cumulate := new(C4CumulateTask)
-	if !strings.HasSuffix(p.server.Path, "pull/") {
-		p.server.Path = p.server.Path + "pull/"
+	cumulate.chunkLen = -1
+	if !strings.HasSuffix(p.server.Path, "pull") {
+		p.server.Path = p.server.Path + "pull"
 	}
 	for {
 		req := &http.Request{
@@ -106,6 +111,9 @@ func (p *pullWorker) loop() {
 			time.Sleep(1 * time.Second)
 		} else {
 			cumulate.fillContent(resp.Body)
+		}
+		if nil != resp.Body {
+			resp.Body.Close()
 		}
 	}
 }
@@ -131,6 +139,7 @@ func newHttpTunnelService(server string) *httpTunnelService {
 	if nil != err {
 
 	}
+
 	serv := new(httpTunnelService)
 	serv.server, _ = url.Parse(server)
 	serv.puller = make([]*pullWorker, c4_cfg.MaxConn)
@@ -139,12 +148,14 @@ func newHttpTunnelService(server string) *httpTunnelService {
 	for i, _ := range serv.puller {
 		serv.puller[i] = new(pullWorker)
 		serv.puller[i].index = i
+		u, _ = url.Parse(server)
 		serv.puller[i].server = u
 		go serv.puller[i].loop()
 	}
 	for i, _ := range serv.puller {
 		serv.pusher[i] = new(pushWorker)
 		serv.pusher[i].index = i
+		u, _ = url.Parse(server)
 		serv.pusher[i].server = u
 	}
 	return serv
@@ -154,6 +165,7 @@ func getHttpTunnelService(server string) *httpTunnelService {
 	serv, exist := httpTunnelServiceTable[server]
 	if !exist {
 		serv = newHttpTunnelService(server)
+		httpTunnelServiceTable[server] = serv
 	}
 	return serv
 }

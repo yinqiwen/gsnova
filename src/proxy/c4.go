@@ -207,7 +207,7 @@ func (c4 *C4RemoteSession) Request(conn *SessionConnection, ev event.Event) (err
 		}
 		req.RawReq.Body.Close()
 	case event.HTTP_CHUNK_EVENT_TYPE:
-		//log.Printf("Session[%d]Offer chunk\n", conn.SessionID)
+		log.Printf("Session[%d]Offer chunk\n", conn.SessionID)
 		chunk := ev.(*event.HTTPChunkEvent)
 		tcp_chunk := &event.TCPChunkEvent{Content: chunk.Content}
 		tcp_chunk.SetHash(ev.GetHash())
@@ -257,12 +257,7 @@ func (manager *C4) loginC4(server string) {
 	conn.server = server
 	login := &event.UserLoginEvent{}
 	login.User = userToken
-	isWsServer := strings.HasPrefix(server, "ws://")
-	if isWsServer {
-		wsOfferEvent(server, login)
-	} else {
-		httpOfferEvent(server, login)
-	}
+	conn.offerRequestEvent(login)
 }
 
 func (manager *C4) GetRemoteConnection(ev event.Event, attrs map[string]string) (RemoteConnection, error) {
@@ -365,7 +360,7 @@ func (manager *C4) Init() error {
 		if !strings.Contains(v, "://") {
 			v = "http://" + v
 		}
-		if strings.HasSuffix(v, "/") {
+		if !strings.HasSuffix(v, "/") {
 			v = v + "/"
 		}
 		manager.servers.Add(v)

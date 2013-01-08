@@ -16,6 +16,7 @@ import (
 
 func wsReadTask(ws net.Conn, ch chan event.Event) {
 	cumulate := new(C4CumulateTask)
+	cumulate.chunkLen = -1
 	for {
 		err := cumulate.fillContent(ws)
 		if nil != err {
