@@ -60,14 +60,17 @@ func main() {
 		fmt.Println(err)
 		return
 	}
+	common.Home, _ = filepath.Split(path)
+
 	as_server := flag.Bool("server", false, "Run as remote proxy server")
+	conf := flag.String("file", common.Home+common.Product+".conf", "Specify config file for gsnova")
 	event.Init()
 	flag.Parse()
 	if *as_server {
 		remote.LaunchC4HttpServer()
 		return
 	}
-	common.Home, _ = filepath.Split(path)
+	common.CfgFile = *conf
 	common.InitLogger()
 	common.InitConfig()
 	proxy.InitHosts()

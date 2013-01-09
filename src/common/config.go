@@ -9,9 +9,10 @@ import (
 )
 
 var Cfg *util.Ini
+var CfgFile string
 
 func InitConfig() error {
-	cfg, err := util.LoadIniFile(Home + Product + ".conf")
+	cfg, err := util.LoadIniFile(CfgFile)
 	Cfg = cfg
 	if nil != err {
 		log.Fatalf("Failed to load config file for reason:%s\n", err.Error())

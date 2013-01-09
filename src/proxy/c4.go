@@ -72,7 +72,7 @@ func (task *C4CumulateTask) fillContent(reader io.Reader) error {
 					c4 := getC4Session(evv.GetHash())
 					if nil == c4 {
 						if evv.GetType() != event.EVENT_TCP_CONNECTION_TYPE {
-							log.Printf("[ERROR]No C4 session found for %d with type:%T\n", evv.GetHash(), evv)
+							//log.Printf("[ERROR]No C4 session found for %d with type:%T\n", evv.GetHash(), evv)
 						}
 					} else {
 						c4.handleTunnelResponse(c4.sess, evv)
@@ -144,7 +144,7 @@ func (c4 *C4RemoteSession) handleTunnelResponse(conn *SessionConnection, ev even
 	case event.EVENT_TCP_CHUNK_TYPE:
 		chunk := ev.(*event.TCPChunkEvent)
 		log.Printf("Session[%d]Handle TCP chunk[%d-%d]\n", conn.SessionID, chunk.Sequence, len(chunk.Content))
-		n, err := conn.LocalRawConn.Write(chunk.Content)
+		_, err := conn.LocalRawConn.Write(chunk.Content)
 		if nil != err {
 			log.Printf("[%d]Failed to write  chunk[%d-%d] to local client:%v.\n", ev.GetHash(), chunk.Sequence, len(chunk.Content), err)
 			conn.Close()
