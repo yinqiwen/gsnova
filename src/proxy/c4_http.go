@@ -114,7 +114,7 @@ func (p *pullWorker) loop() {
 		} else {
 			cumulate.fillContent(resp.Body)
 		}
-		if nil != resp.Body {
+		if nil != resp && nil != resp.Body {
 			resp.Body.Close()
 		}
 	}
