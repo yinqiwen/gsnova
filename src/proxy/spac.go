@@ -435,7 +435,6 @@ func InitSpac() {
 	if !spac_enable {
 		return
 	}
-
 	loadSpacScript()
 	go reloadSpacScript()
 	init_spac_func()

@@ -56,7 +56,6 @@ func wsC4Routine(server string, index int, ch chan event.Event) error {
 				u.Path = "/"
 			}
 			request := fmt.Sprintf("GET / HTTP/1.1\r\nUpgrade: WebSocket\r\nHost: %s\r\nConnection: Upgrade\r\nConnectionIndex:%d\r\nUserToken:%s\r\nKeep-Alive: %d\r\n\r\n",  u.Host, index, userToken, c4_cfg.WSConnKeepAlive)
-			log.Printf("#####:%s\n", request)
 			addr := u.Host
 			if !strings.Contains(u.Host, ":") {
 				addr = net.JoinHostPort(u.Host, "80")
