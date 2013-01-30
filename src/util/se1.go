@@ -22,7 +22,7 @@ func SimpleDecrypt(buffer *bytes.Buffer) *bytes.Buffer {
 	for i := 0; i < len(buf); i++ {
 		var k int32 = int32(buf[i])
 		k += 1
-		if k > 256 {
+		if k >= 256 {
 			k -= 256
 		}
 		buf[i] = uint8(k)
