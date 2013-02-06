@@ -1,3 +1,3 @@
 package common
-var Version string = "0.19.4"
+var Version string = "0.20.1"
 var Product string = "gsnova"

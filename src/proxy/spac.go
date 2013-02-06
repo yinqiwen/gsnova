@@ -509,7 +509,6 @@ func SelectProxy(req *http.Request, conn *SessionConnection) ([]RemoteConnection
 			}
 		}
 	}
-
 	switch conn.ProxyServerType {
 	case GAE_PROXY_SERVER:
 		need_select_proxy = false

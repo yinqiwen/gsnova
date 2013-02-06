@@ -5,6 +5,10 @@
     "Attr":  ["Range"]
   },
   {
+    "Filter" : ["!IsBlockedByGFW"],
+    "Proxy":["Direct", "Default"]
+  },
+  {
     "Protocol":"https",
     "Host" : ["Target https domain patterns for proxy"],
     "Proxy":["socks://127.0.0.1:7070"]

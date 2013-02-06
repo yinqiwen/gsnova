@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-VERSION="0.20.1"
+VERSION="0.19.4"
 
 #this part is copied from ANT's script
 # OS specific support.  $var _must_ be set to either true or false.
@@ -32,6 +32,9 @@ build_product()
    go install -v ...
    #mv common/constants.go{.bak,}
 }
+
+export GOROOT="C:\Soft\Develop\OfficialGo\go64\go"
+export PATH=$GOROOT/bin:$PATH
 
 build_dist()
 {

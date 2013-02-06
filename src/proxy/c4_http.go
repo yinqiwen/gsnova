@@ -2,6 +2,9 @@ package proxy
 
 import (
 	"bytes"
+	"common"
+	"crypto/rc4"
+	"encoding/base64"
 	"event"
 	"fmt"
 	"io/ioutil"
@@ -56,6 +59,13 @@ func (p *pushWorker) writeContent(content []byte) {
 		Body:          ioutil.NopCloser(buf),
 		ContentLength: int64(buf.Len()),
 	}
+	if c4_cfg.Encrypter == event.ENCRYPTER_RC4 {
+		tmp := []byte(common.RC4Key)
+		cipher, _ := rc4.NewCipher(tmp)
+		dst := make([]byte, len(tmp))
+		cipher.XORKeyStream(dst, tmp)
+		req.Header.Set("RC4Key", base64.StdEncoding.EncodeToString(dst))
+	}
 
 	req.Header.Set("UserToken", userToken)
 	req.Header.Set("C4MiscInfo", fmt.Sprintf("%d_%d", p.index, c4_cfg.ReadTimeout))
@@ -65,8 +75,16 @@ func (p *pushWorker) writeContent(content []byte) {
 		req.Header.Set("User-Agent", c4_cfg.UA)
 	}
 	resp, err := c4HttpClient.Do(req)
-	if nil != err || resp.StatusCode != 200 {
+	fail := false
+	if nil != err {
+		fail = true
 		log.Printf("Push worker recevice error:%v  %v\n", err, p.server)
+	}
+	if nil == err && resp.StatusCode != 200 {
+		fail = true
+		log.Printf("Push worker recevice error response :%v\n", resp)
+	}
+	if fail {
 		if nil != resp {
 			resp.Body.Close()
 		}

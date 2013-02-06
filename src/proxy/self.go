@@ -1,13 +1,15 @@
 package proxy
 
 import (
+	"archive/zip"
 	"bytes"
 	"common"
-	//"encoding/json"
 	"event"
 	"fmt"
 	"html/template"
+	"io"
 	"log"
+	"math/rand"
 	"net"
 	"net/http"
 	"os"
@@ -47,9 +49,10 @@ func InitSelfWebServer() {
 		w.Header().Set("Content-Disposition", "attachment;filename=snova-gfwlist.pac")
 		http.FileServer(http.Dir(common.Home)).ServeHTTP(w, r)
 	})
-	
+
 	http.HandleFunc("/stat", statHandler)
 	http.HandleFunc("/share", shareHandler)
+	http.HandleFunc("/genrc4", rc4Handler)
 	http.HandleFunc("/exit", exitHandler)
 	http.HandleFunc("/", indexHandler)
 	go http.Serve(lp, nil)
@@ -77,6 +80,76 @@ func indexHandler(w http.ResponseWriter, req *http.Request) {
 		}
 		t.Execute(w, &PageContent{common.Product, common.Version, common.ProxyPort})
 	}
+}
+
+func processC4ServerPackage(file string, key []byte) error {
+	r, err := zip.OpenReader(common.Home + "/" + file)
+	if err != nil {
+		log.Printf("Failed to zip file for reason:%v", err)
+		return err
+	}
+	w, err := os.Create(common.Home + "/" + string(key) + "_" + file)
+	if err != nil {
+		log.Printf("Failed to create zip file for reason:%v", err)
+		return err
+	}
+	wr := zip.NewWriter(w)
+	defer w.Close()
+	defer r.Close()
+	defer wr.Close()
+	for _, f := range r.File {
+		x, err := wr.Create(f.Name)
+		if err != nil {
+			return err
+		}
+		if strings.HasSuffix(f.Name, "rc4.key") {
+			x.Write(key)
+		} else {
+			rr, err := f.Open()
+			if err != nil {
+				return err
+			}
+			io.Copy(x, rr)
+			rr.Close()
+		}
+	}
+	r.Close()
+	wr.Close()
+	return nil
+}
+
+func rc4Handler(w http.ResponseWriter, req *http.Request) {
+	w.Header().Set("Connection", "close")
+	alphabet := "abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+	rc4key := make([]byte, 32)
+	for i := 0; i < len(rc4key); i++ {
+		rc4key[i] = alphabet[rand.Int()%len(alphabet)]
+	}
+	found_file := false
+	f, err := os.Open(common.Home)
+	if nil == err {
+		fs, err := f.Readdir(-1)
+		if nil == err {
+			for _, file := range fs {
+				if strings.HasSuffix(file.Name(), ".war") || strings.HasSuffix(file.Name(), ".zip") {
+					ss := strings.Split(file.Name(), "_")
+					if len(ss) == 2 && len(ss[0]) == len(rc4key) {
+						continue
+					}
+					if err := processC4ServerPackage(file.Name(), rc4key); nil == err {
+						found_file = true
+					} else {
+						log.Printf("Failed to process file:%s for reason:%v", file.Name(), err)
+					}
+				}
+			}
+		}
+	}
+	content := "<p>" + string(rc4key) + "</p><p>Please find processed server files in " + common.Home + "</p>"
+	if !found_file {
+		content = "<p>" + string(rc4key) + "</p><p>No valid C4 server package files in " + common.Home + "</p>"
+	}
+	w.Write([]byte(content))
 }
 
 func exitHandler(w http.ResponseWriter, req *http.Request) {
