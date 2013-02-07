@@ -34,7 +34,7 @@ func Auth(ctx appengine.Context, ev *event.AuthRequestEvent) event.Event {
 	user := GetUserWithName(ctx, ev.User)
 	res := new(event.AuthResponseEvent)
 	res.Appid = ev.Appid
-	if nil != user || ev.Passwd == user.Passwd {
+	if nil != user && ev.Passwd == user.Passwd {
 		res.Token = user.AuthToken
 	} else {
 		res.Error = "Invalid user/passwd."
