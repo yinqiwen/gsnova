@@ -576,16 +576,16 @@ func (gae *GAEHttpConnection) Request(conn *SessionConnection, ev event.Event) (
 			if httpresev.Status == 403 {
 				log.Printf("ERROR:Session[%d]Request %s %s is forbidon\n", httpreq.GetHash(), httpreq.Method, httpreq.RawReq.Host)
 			}
-			
-//			if len(httpresev.GetHeaderValues("Set-Cookie")) > 1{
-//			    tmp := httpresev.GetHeaderValues("Set-Cookie")
-//			    log.Printf("Set-Cookie[0]=%v\n", tmp[0])
-//			    log.Printf("Set-Cookie[1]=%v\n", tmp[1])
-//			    httpresev.RemoveHeader("Set-Cookie")
-//			    sc := strings.Join(tmp, ",")
-//			    httpresev.SetHeader("Set-Cookie", sc)
-//			}
-		
+
+			//			if len(httpresev.GetHeaderValues("Set-Cookie")) > 1{
+			//			    tmp := httpresev.GetHeaderValues("Set-Cookie")
+			//			    log.Printf("Set-Cookie[0]=%v\n", tmp[0])
+			//			    log.Printf("Set-Cookie[1]=%v\n", tmp[1])
+			//			    httpresev.RemoveHeader("Set-Cookie")
+			//			    sc := strings.Join(tmp, ",")
+			//			    httpresev.SetHeader("Set-Cookie", sc)
+			//			}
+
 			httpres, err := gae.handleHttpRes(conn, httpreq, httpresev, rangeHeader)
 			if nil != err || !util.IsResponseKeepAlive(httpres) || !util.IsRequestKeepAlive(httpreq.RawReq) {
 				conn.LocalRawConn.Close()
@@ -634,7 +634,6 @@ func (manager *GAE) GetRemoteConnection(ev event.Event, attrs map[string]string)
 		return nil, fmt.Errorf("No GAE connection available.")
 	}
 	gae := new(GAEHttpConnection)
-	gae.auth = *(manager.auths.Select().(*GAEAuth))
 	gae.authToken = gae.auth.token
 	gae.manager = manager
 
@@ -646,6 +645,22 @@ func (manager *GAE) GetRemoteConnection(ev event.Event, attrs map[string]string)
 	if containsAttr(attrs, ATTR_RANGE) {
 		gae.inject_range = true
 	}
+	found := false
+	if containsAttr(attrs, ATTR_APP) {
+		appid := attrs[ATTR_APP]
+		for _, tmp := range manager.auths.ArrayValues() {
+			auth := tmp.(*GAEAuth)
+			if auth.appid == appid {
+				gae.auth = *auth
+				found = true
+				break
+			}
+		}
+	}
+	if !found {
+		gae.auth = *(manager.auths.Select().(*GAEAuth))
+	}
+
 	total_gae_conn_num = total_gae_conn_num + 1
 	return gae, nil
 }

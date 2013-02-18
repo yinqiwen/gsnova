@@ -284,6 +284,23 @@ func (manager *C4) loginC4(server string) {
 func (manager *C4) GetRemoteConnection(ev event.Event, attrs map[string]string) (RemoteConnection, error) {
 	conn := &C4RemoteSession{}
 	conn.manager = manager
+
+	found := false
+	if containsAttr(attrs, ATTR_APP) {
+		app := attrs[ATTR_APP]
+		for _, tmp := range manager.servers.ArrayValues() {
+			server := tmp.(string)
+			if strings.Contains(server, app) {
+				conn.server = server
+				found = true
+				break
+			}
+		}
+	}
+	if !found {
+		conn.server = manager.servers.Select().(string)
+	}
+
 	atomic.AddInt32(&total_c4_conn_num, 1)
 	return conn, nil
 }

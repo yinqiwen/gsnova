@@ -61,7 +61,7 @@ func loadSpacScript() error {
 			}
 			rules = append(rules, tmp...)
 		} else {
-		    //The first is hiding  file
+			//The first is hiding  file
 			if idx != 0 {
 				return err
 			}
@@ -539,6 +539,13 @@ func SelectProxy(req *http.Request, conn *SessionConnection) ([]RemoteConnection
 			proxyName = spac.defaultRule
 		}
 		proxyName = adjustProxyName(proxyName, isHttpsConn)
+		if strings.HasPrefix(proxyName, GAE_NAME) || strings.HasPrefix(proxyName, C4_NAME) {
+			if strings.Contains(proxyName, ":") {
+				ss := strings.SplitN(proxyName, ":", 2)
+				proxyName = ss[0]
+				attrs[ATTR_APP] = ss[1]
+			}
+		}
 		switch proxyName {
 		case GAE_NAME, C4_NAME, SSH_NAME:
 			if v, ok := registedRemoteConnManager[proxyName]; ok {

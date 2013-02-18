@@ -45,6 +45,7 @@ const (
 	ATTR_TUNNEL         = "Tunnel"
 	ATTR_RANGE          = "Range"
 	ATTR_SYS_DNS        = "SysDNS"
+	ATTR_APP            = "App"
 
 	MODE_HTTP    = "http"
 	MODE_HTTPS   = "httpS"
@@ -181,14 +182,14 @@ func (session *SessionConnection) process() error {
 			rev.FromRequest(req)
 			rev.SetHash(session.SessionID)
 			err := session.processHttpEvent(&rev)
-			if err != nil  {
+			if err != nil {
 				log.Printf("Session[%d]Failed to read http request:%v\n", session.SessionID, err)
 				close_session()
 				return io.EOF
 			}
 		}
 		if nil != rerr {
-		    log.Printf("Session[%d]Browser close connection:%v\n", session.SessionID, rerr)
+			log.Printf("Session[%d]Browser close connection:%v\n", session.SessionID, rerr)
 			close_session()
 			return io.EOF
 		}
