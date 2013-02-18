@@ -158,7 +158,7 @@ func exitHandler(w http.ResponseWriter, req *http.Request) {
 
 func shareHandler(w http.ResponseWriter, req *http.Request) {
 	req.ParseForm()
-	log.Printf("Request from is %v\n", req.Form)
+	log.Printf("Request form is %v\n", req.Form)
 	w.Header().Set("Connection", "close")
 	if nil != singleton_gae {
 		op := event.APPID_SHARE

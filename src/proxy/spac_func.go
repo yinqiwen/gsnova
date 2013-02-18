@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"log"
 	"misc/gfwlist"
 	"misc/iprange"
 	"net"
@@ -54,18 +55,21 @@ func isHostInCN(req *http.Request) bool {
 	if strings.HasSuffix(host, ".cn") {
 		return true
 	} else {
-		if ips, err := net.LookupHost(host); nil == err {
+		if ips, err := net.LookupHost(host); nil == err && len(ips) > 0 {
 			ip = ips[0]
 			ok = true
 		}
 	}
-	if !ok {
+	if !ok || nil == ipfunc {
 		return false
 	}
-	ret := strings.EqualFold(ipfunc.FindCountry(ip), "CN")
-	//	if ret {
-	//	   log.Printf("Find country for host:%s is CN\n", host)
-	//	}
+	country, err := ipfunc.FindCountry(ip)
+	if nil != err {
+		log.Printf("[WARN]Find country error:%v\n", err)
+		return false
+	}
+	ret := strings.EqualFold(country, "CN")
+
 	return ret
 }
 

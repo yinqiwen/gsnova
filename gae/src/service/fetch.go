@@ -62,7 +62,7 @@ func Fetch(context appengine.Context, ev *event.HTTPRequestEvent) event.Event {
 	}
 	var t urlfetch.Transport
 	t.Context = context
-	t.Deadline,_ = time.ParseDuration("10s")
+	t.Deadline, _ = time.ParseDuration("10s")
 	t.AllowInvalidServerCertificate = true
 	//t := &transport
 	//t := &urlfetch.Transport{context, 0, true}

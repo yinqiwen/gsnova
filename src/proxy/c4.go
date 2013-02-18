@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"common"
 	"encoding/binary"
-
 	"errors"
 	"event"
 	"io"
@@ -76,7 +75,8 @@ func (task *C4CumulateTask) fillContent(reader io.Reader) error {
 							//log.Printf("[ERROR]No C4 session found for %d with type:%T\n", evv.GetHash(), evv)
 						}
 					} else {
-						c4.handleTunnelResponse(c4.sess, evv)
+						c4.writeChannel <- evv
+						//c4.handleTunnelResponse(c4.sess, evv)
 					}
 				} else {
 					log.Printf("[ERROR]Decode event failed %v with content len:%d\n", err, task.chunkLen)
@@ -97,6 +97,7 @@ type C4RemoteSession struct {
 	server            string
 	closed            bool
 	manager           *C4
+	writeChannel      chan event.Event
 }
 
 func (c4 *C4RemoteSession) Close() error {
@@ -105,6 +106,9 @@ func (c4 *C4RemoteSession) Close() error {
 		closeEv.Status = event.TCP_CONN_CLOSED
 		closeEv.SetHash(c4.sess.SessionID)
 		c4.offerRequestEvent(closeEv)
+	}
+	if nil != c4.writeChannel {
+		c4.writeChannel <- nil
 	}
 	c4.closed = true
 	removeC4SessionTable(c4)
@@ -129,6 +133,18 @@ func (c4 *C4RemoteSession) offerRequestEvent(ev event.Event) {
 	httpOfferEvent(c4.server, ev)
 }
 
+func (c4 *C4RemoteSession) writerLoop() {
+	for {
+		select {
+		case ev := <-c4.writeChannel:
+			if nil == ev {
+				return
+			}
+			c4.handleTunnelResponse(c4.sess, ev)
+		}
+	}
+}
+
 func (c4 *C4RemoteSession) handleTunnelResponse(conn *SessionConnection, ev event.Event) error {
 	switch ev.GetType() {
 	case event.EVENT_TCP_CONNECTION_TYPE:
@@ -145,12 +161,15 @@ func (c4 *C4RemoteSession) handleTunnelResponse(conn *SessionConnection, ev even
 	case event.EVENT_TCP_CHUNK_TYPE:
 		chunk := ev.(*event.TCPChunkEvent)
 		log.Printf("Session[%d]Handle TCP chunk[%d-%d]\n", conn.SessionID, chunk.Sequence, len(chunk.Content))
-		_, err := conn.LocalRawConn.Write(chunk.Content)
+		n, err := conn.LocalRawConn.Write(chunk.Content)
 		if nil != err {
 			log.Printf("[%d]Failed to write  chunk[%d-%d] to local client:%v.\n", ev.GetHash(), chunk.Sequence, len(chunk.Content), err)
 			conn.Close()
 			c4.Close()
 			return err
+		}
+		if n < len(chunk.Content) {
+			log.Printf("[%d]Less data written[%d-%d] to local client.\n", ev.GetHash(), n, len(chunk.Content))
 		}
 	default:
 		log.Printf("Unexpected event type:%d\n", ev.GetType())
@@ -162,6 +181,10 @@ func (c4 *C4RemoteSession) Request(conn *SessionConnection, ev event.Event) (err
 	c4.sess = conn
 	if len(c4.server) == 0 {
 		c4.server = c4.manager.servers.Select().(string)
+	}
+	if nil == c4.writeChannel {
+		c4.writeChannel = make(chan event.Event, 1024)
+		go c4.writerLoop()
 	}
 	c4.sess = conn
 	c4.closed = false

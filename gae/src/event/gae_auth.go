@@ -268,4 +268,5 @@ func InitGAEAuthEvents() {
 	RegistEvent(&ServerConfigEvent{})
 	RegistEvent(&ListGroupRequestEvent{})
 	RegistEvent(&ListUserRequestEvent{})
+	RegistEvent(&ShareAppIDEvent{})
 }

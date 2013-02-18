@@ -37,10 +37,13 @@ func IsResponseKeepAlive(res *http.Response) bool {
 	if nil == res || res.Close || (res.ContentLength == -1 && len(res.TransferEncoding) == 0) {
 		return false
 	}
+//	if res.StatusCode == 301 || res.StatusCode == 302 {
+//		return false
+//	}
 	ret := isKeepAlive(res.Header, res.ProtoMajor, res.ProtoMinor)
-	if ret && res.ContentLength == 0 && len(res.Header.Get("Connection")) == 0 {
-		return false
-	}
+	//	if ret && res.ContentLength == 0 && len(res.Header.Get("Connection")) == 0 {
+	//		return false
+	//	}
 	return ret
 }
 

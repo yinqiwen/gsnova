@@ -87,7 +87,9 @@ func (conn *ForwardConnection) initForwardConn(proxyAddr string, isHttps bool) e
 	}
 
 	if nil != conn.forward_conn && conn.proxyAddr == proxyAddr {
-		return nil
+		if !util.IsDeadConnection(conn.forward_conn) {
+			return nil
+		}
 	}
 	conn.Close()
 	var err error
@@ -222,20 +224,11 @@ func (auto *ForwardConnection) Request(conn *SessionConnection, ev event.Event) 
 				log.Printf("Session[%d]Send request \n%s\n", ev.GetHash(), tmp.String())
 			}
 			resp, err := http.ReadResponse(auto.buf_forward_conn, req.RawReq)
-			//			if nil != err && (!auto.manager.inject_crlf && !auto.try_inject_crlf) {
-			//				auto.try_inject_crlf = true
-			//				auto.Close()
-			//				goto L
-			//			}
 			if err != nil {
 				log.Printf("Session[%d]Recv response with error %v\n", ev.GetHash(), err)
 				return err, nil
 			}
-
-			//			if auto.try_inject_crlf {
-			//				setDomainCRLFAttr(addr)
-			//			}
-
+			//log.Printf("Session[%d]Recv response  %v\n", ev.GetHash(), resp)
 			err = resp.Write(conn.LocalRawConn)
 			resp.Body.Close()
 
@@ -244,7 +237,7 @@ func (auto *ForwardConnection) Request(conn *SessionConnection, ev event.Event) 
 				resp.Write(&tmp)
 				log.Printf("Session[%d]Recv response \n%s\n", ev.GetHash(), tmp.String())
 			}
-			if nil != err || !util.IsResponseKeepAlive(resp) || !util.IsRequestKeepAlive(req.RawReq) {
+			if nil != err || !util.IsResponseKeepAlive(resp) || !util.IsRequestKeepAlive(req.RawReq) || util.IsDeadConnection(auto.forward_conn) {
 				conn.LocalRawConn.Close()
 				auto.Close()
 				conn.State = STATE_SESSION_CLOSE

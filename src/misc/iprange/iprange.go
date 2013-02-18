@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bufio"
 	"bytes"
+	"fmt"
 	"log"
 	"os"
 	"sort"
@@ -45,23 +46,27 @@ func (h *IPRangeHolder) sort() {
 	sort.Sort(h)
 }
 
-func (h *IPRangeHolder) FindCountry(ip string) string {
+func (h *IPRangeHolder) FindCountry(ip string) (string, error) {
 	v, err := util.IPv42Int(ip)
 	if nil != err {
 		log.Printf("Failed to convert ip to int for reason:%v\n", err)
-		return ""
+		return "", err
 	}
+
 	compare := func(i int) bool {
-		return h.ranges[i].Start >= uint64(v) || (h.ranges[i].Start <= uint64(v) && h.ranges[i].End >= uint64(v))
+		return h.ranges[i].Start > uint64(v) || h.ranges[i].Start <= uint64(v) && h.ranges[i].End >= uint64(v)
 	}
 	index := sort.Search(len(h.ranges), compare)
+	if index == len(h.ranges) {
+		return "", nil
+	}
 	if index > 0 {
 		if h.ranges[index].Start > uint64(v) || h.ranges[index].End < uint64(v) {
-			return ""
+			return "", nil
 		}
-		return h.ranges[index].Country
+		return h.ranges[index].Country, nil
 	}
-	return ""
+	return "", fmt.Errorf("No record found.")
 }
 
 func ParseApnic(name string) (*IPRangeHolder, error) {

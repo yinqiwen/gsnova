@@ -3,11 +3,12 @@ package util
 import (
 	"fmt"
 	//"log"
+	//"io"
 	"math"
 	"net"
-	//"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
 func Long2IPv4(i int64) string {
@@ -27,6 +28,20 @@ func IPv42Int(ip string) (int64, error) {
 		}
 	}
 	return num, nil
+}
+
+func IsDeadConnection(c net.Conn) bool {
+	c.SetReadDeadline(time.Now().Add(1 * time.Millisecond))
+	_, err := c.Read(make([]byte, 0))
+	if err != nil {
+		if !IsTimeoutError(err) {
+			var zero time.Time
+			c.SetReadDeadline(zero)
+			return false
+		}
+		return true
+	}
+	return false
 }
 
 func IsPrivateIP(ip string) bool {

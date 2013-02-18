@@ -576,14 +576,15 @@ func (gae *GAEHttpConnection) Request(conn *SessionConnection, ev event.Event) (
 			if httpresev.Status == 403 {
 				log.Printf("ERROR:Session[%d]Request %s %s is forbidon\n", httpreq.GetHash(), httpreq.Method, httpreq.RawReq.Host)
 			}
-			if len(httpresev.GetHeaderValues("Set-Cookie")) > 1{
-			    tmp := httpresev.GetHeaderValues("Set-Cookie")
-			    log.Printf("Set-Cookie[0]=%v\n", tmp[0])
-			    log.Printf("Set-Cookie[1]=%v\n", tmp[1])
-			    httpresev.RemoveHeader("Set-Cookie")
-			    sc := strings.Join(tmp, ",")
-			    httpresev.SetHeader("Set-Cookie", sc)
-			}
+			
+//			if len(httpresev.GetHeaderValues("Set-Cookie")) > 1{
+//			    tmp := httpresev.GetHeaderValues("Set-Cookie")
+//			    log.Printf("Set-Cookie[0]=%v\n", tmp[0])
+//			    log.Printf("Set-Cookie[1]=%v\n", tmp[1])
+//			    httpresev.RemoveHeader("Set-Cookie")
+//			    sc := strings.Join(tmp, ",")
+//			    httpresev.SetHeader("Set-Cookie", sc)
+//			}
 		
 			httpres, err := gae.handleHttpRes(conn, httpreq, httpresev, rangeHeader)
 			if nil != err || !util.IsResponseKeepAlive(httpres) || !util.IsRequestKeepAlive(httpreq.RawReq) {
