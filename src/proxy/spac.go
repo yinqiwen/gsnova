@@ -535,17 +535,18 @@ func SelectProxy(req *http.Request, conn *SessionConnection) ([]RemoteConnection
 		log.Printf("Found %v for host:%v and url:%s\n", proxyNames, host, req.RequestURI)
 	}
 	for _, proxyName := range proxyNames {
-		if strings.EqualFold(proxyName, DEFAULT_NAME) {
-			proxyName = spac.defaultRule
-		}
-		proxyName = adjustProxyName(proxyName, isHttpsConn)
-		if strings.HasPrefix(proxyName, GAE_NAME) || strings.HasPrefix(proxyName, C4_NAME) {
+		if strings.HasPrefix(proxyName, GAE_NAME) || strings.HasPrefix(proxyName, C4_NAME) || strings.HasPrefix(proxyName, DEFAULT_NAME) {
 			if strings.Contains(proxyName, ":") {
 				ss := strings.SplitN(proxyName, ":", 2)
 				proxyName = ss[0]
 				attrs[ATTR_APP] = ss[1]
 			}
 		}
+		if strings.EqualFold(proxyName, DEFAULT_NAME) {
+			proxyName = spac.defaultRule
+		}
+		proxyName = adjustProxyName(proxyName, isHttpsConn)
+
 		switch proxyName {
 		case GAE_NAME, C4_NAME, SSH_NAME:
 			if v, ok := registedRemoteConnManager[proxyName]; ok {
