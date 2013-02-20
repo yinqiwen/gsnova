@@ -1,5 +1,24 @@
 GSnova Changelog
 ===================
+Changes in version 0.20.3(2013.02.20)
+-------------------------------------------
+** Features
+   
+** Improvement
+   * [SPAC]: Support app binding for GAE/C$
+   * Fix for  issue 355 & 363
+   * [C4]: Server performance improvement
+
+Changes in version 0.20.2(2013.02.08)
+-------------------------------------------
+** Features
+   
+** Improvement
+   * [SPAC]: Fix crash bug in filter 'IsHostInCN'
+   * [SPAC]: Reduce 'unexpected EOF' error
+   * [C4]: Performance improvement
+
+
 Changes in version 0.20.0(2013.02.05)
 -------------------------------------------
 ** Features
