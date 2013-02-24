@@ -41,6 +41,7 @@ var c4HttpClient *http.Client
 
 var c4SessionTable = make(map[uint32]*C4RemoteSession)
 var c4SessionTableMutex sync.Mutex
+var c4WriteCBChannels = make(map[uint32]chan event.Event)
 
 type C4CumulateTask struct {
 	chunkLen int32
@@ -69,15 +70,17 @@ func (task *C4CumulateTask) fillContent(reader io.Reader) error {
 				err, evv := event.DecodeEvent(tmp)
 				if nil == err {
 					evv = event.ExtractEvent(evv)
-					c4 := getC4Session(evv.GetHash())
-					if nil == c4 {
-						if evv.GetType() != event.EVENT_TCP_CONNECTION_TYPE {
-							//log.Printf("[ERROR]No C4 session found for %d with type:%T\n", evv.GetHash(), evv)
-						}
-					} else {
-						c4.writeChannel <- evv
-						//c4.handleTunnelResponse(c4.sess, evv)
-					}
+					idx := evv.GetHash() % uint32(len(c4WriteCBChannels))
+					c4WriteCBChannels[idx] <- evv
+					//c4 := getC4Session(evv.GetHash())
+					//					if nil == c4 {
+					//						if evv.GetType() != event.EVENT_TCP_CONNECTION_TYPE {
+					//							//log.Printf("[ERROR]No C4 session found for %d with type:%T\n", evv.GetHash(), evv)
+					//						}
+					//					} else {
+					//						c4.writeChannel <- evv
+					//						//c4.handleTunnelResponse(c4.sess, evv)
+					//					}
 				} else {
 					log.Printf("[ERROR]Decode event failed %v with content len:%d\n", err, task.chunkLen)
 				}
@@ -97,7 +100,7 @@ type C4RemoteSession struct {
 	server            string
 	closed            bool
 	manager           *C4
-	writeChannel      chan event.Event
+	//	writeChannel      chan event.Event
 }
 
 func (c4 *C4RemoteSession) Close() error {
@@ -107,9 +110,9 @@ func (c4 *C4RemoteSession) Close() error {
 		closeEv.SetHash(c4.sess.SessionID)
 		c4.offerRequestEvent(closeEv)
 	}
-	if nil != c4.writeChannel {
-		c4.writeChannel <- nil
-	}
+//	if nil != c4.writeChannel {
+//		c4.writeChannel <- nil
+//	}
 	c4.closed = true
 	removeC4SessionTable(c4)
 	return nil
@@ -133,17 +136,32 @@ func (c4 *C4RemoteSession) offerRequestEvent(ev event.Event) {
 	httpOfferEvent(c4.server, ev)
 }
 
-func (c4 *C4RemoteSession) writerLoop() {
+func writeCBLoop(index uint32) {
+	ch := c4WriteCBChannels[index]
 	for {
 		select {
-		case ev := <-c4.writeChannel:
-			if nil == ev {
-				return
+		case ev := <-ch:
+			if nil != ev {
+				c4 := getC4Session(ev.GetHash())
+				if nil != c4 {
+					c4.handleTunnelResponse(c4.sess, ev)
+				}
 			}
-			c4.handleTunnelResponse(c4.sess, ev)
 		}
 	}
 }
+
+//func (c4 *C4RemoteSession) writerLoop() {
+//	for {
+//		select {
+//		case ev := <-c4.writeChannel:
+//			if nil == ev {
+//				return
+//			}
+//			c4.handleTunnelResponse(c4.sess, ev)
+//		}
+//	}
+//}
 
 func (c4 *C4RemoteSession) handleTunnelResponse(conn *SessionConnection, ev event.Event) error {
 	switch ev.GetType() {
@@ -182,10 +200,10 @@ func (c4 *C4RemoteSession) Request(conn *SessionConnection, ev event.Event) (err
 	if len(c4.server) == 0 {
 		c4.server = c4.manager.servers.Select().(string)
 	}
-	if nil == c4.writeChannel {
-		c4.writeChannel = make(chan event.Event, 1024)
-		go c4.writerLoop()
-	}
+	//	if nil == c4.writeChannel {
+	//		c4.writeChannel = make(chan event.Event, 1024)
+	//		go c4.writerLoop()
+	//	}
 	c4.sess = conn
 	c4.closed = false
 	setC4SessionTable(c4)
@@ -388,6 +406,11 @@ func (manager *C4) Init() error {
 		},
 	}
 	c4HttpClient.Transport = tr
+
+	for i := uint32(0); i < c4_cfg.MaxConn; i++ {
+		c4WriteCBChannels[i] = make(chan event.Event, 1024)
+		go writeCBLoop(i)
+	}
 
 	index := 0
 	for {
