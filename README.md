@@ -37,7 +37,7 @@
 注意暂时https的站点通过GAE代理是伪造证书方式实现的，若需要屏蔽浏览器警告，需要将conf目录下的Fake-ACRoot-Certificate.cer导入到浏览器中。
 此Proxy实现在SPAC中名称为GAE
 
-#####Cloudfoudry/Openshift/Heroku/Dotcloud/Jelastic 
+#####Cloudfoudry/Openshift/Heroku/Dotcloud/Appfog/Modulus 
 修改gsnova.conf中[C4]以下部分，默认Enable为0，开启需要修改Enable为1：   
 
     [C4]   
