@@ -550,7 +550,7 @@ func (gae *GAEHttpConnection) Request(conn *SessionConnection, ev event.Event) (
 			gae.rangeStart = 0
 			rangeHeader := httpreq.GetHeader("Range")
 			if len(rangeHeader) > 0{
-			    log.Printf("Session[%d]Request has range:%s\n", httpreq.GetHash(), rangeHeader)
+			    //log.Printf("Session[%d]Request has range:%s\n", httpreq.GetHash(), rangeHeader)
 				startPos, endPos := util.ParseRangeHeaderValue(rangeHeader)
 				if endPos == -1 || endPos-startPos > int(gae_cfg.FetchLimitSize-1) {
 					endPos = startPos + int(gae_cfg.FetchLimitSize-1)
