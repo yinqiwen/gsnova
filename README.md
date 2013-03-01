@@ -8,7 +8,7 @@
 * Cloudfoudry/Openshift/Heroku/Dotcloud/Jelastic   
   下载snova-c4-server-[version].war。按照[部署说明](http://code.google.com/p/snova/w/list)部署。注意各个PaaS平台部署方式均不一致。  
 
->[下载](https://github.com/yinqiwen/gsnova/downloads)
+>[下载](http://code.google.com/p/snova/downloads/list)
 
 
 安装客户端
@@ -16,7 +16,7 @@
 >客户端为zip包，解压即可；目前预编译支持的有Windows（32/64位）， Linux（64位），Mac（64位）。   
 用户按照[配置]一节修改配置后，即可启动gsnova。 windows用户直接执行gsnova.exe即可，Linux/Mac用户需要在命令行下启动gsnova程序。   
 用户还需要修改浏览器的代理地址为127.0.0.1:48100， 或者在支持PAC设置的浏览器中设置PAC地址为http://127.0.0.1:48100/pac/gfwlist       
-[下载](https://github.com/yinqiwen/gsnova/downloads)
+[下载](http://code.google.com/p/snova/downloads/list)
 
 配置
 -------
@@ -37,7 +37,7 @@
 注意暂时https的站点通过GAE代理是伪造证书方式实现的，若需要屏蔽浏览器警告，需要将conf目录下的Fake-ACRoot-Certificate.cer导入到浏览器中。
 此Proxy实现在SPAC中名称为GAE
 
-#####Cloudfoudry/Openshift/Heroku/Dotcloud/Jelastic 
+#####Cloudfoudry/Openshift/Heroku/Dotcloud/Appfog/Modulus 
 修改gsnova.conf中[C4]以下部分，默认Enable为0，开启需要修改Enable为1：   
 
     [C4]   
