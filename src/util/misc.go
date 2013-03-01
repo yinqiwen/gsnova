@@ -113,7 +113,11 @@ func ParseRangeHeaderValue(value string) (startPos, endPos int) {
 	vs := strings.Split(value, "=")
 	vs = strings.Split(vs[1], "-")
 	startPos, _ = strconv.Atoi(vs[0])
-	endPos, _ = strconv.Atoi(vs[1])
+	if tmp, err := strconv.Atoi(vs[1]); nil != err {
+	   endPos = -1
+	}else{
+	   endPos = tmp
+	}
 	return
 }
 

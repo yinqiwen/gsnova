@@ -455,7 +455,7 @@ func (gae *GAEHttpConnection) handleHttpRes(conn *SessionConnection, req *event.
 			httpres.Write(conn.LocalRawConn)
 			return httpres, nil
 		}
-		if endpos < limit {
+		if endpos > 0 && endpos < limit {
 			if gae_cfg.ConcurrentRangeFetcher > 1 {
 				gae.concurrentRrangeFetch(req, httpres, limit, endpos)
 			} else {
@@ -549,12 +549,16 @@ func (gae *GAEHttpConnection) Request(conn *SessionConnection, ev event.Event) (
 			}
 			gae.rangeStart = 0
 			rangeHeader := httpreq.GetHeader("Range")
-			if len(rangeHeader) > 0 {
+			if len(rangeHeader) > 0{
+			    log.Printf("Session[%d]Request has range:%s\n", httpreq.GetHash(), rangeHeader)
 				startPos, endPos := util.ParseRangeHeaderValue(rangeHeader)
 				if endPos == -1 || endPos-startPos > int(gae_cfg.FetchLimitSize-1) {
 					endPos = startPos + int(gae_cfg.FetchLimitSize-1)
 					httpreq.SetHeader("Range", fmt.Sprintf("bytes=%d-%d", startPos, endPos))
 					gae.rangeStart = startPos
+				}
+				if endPos == -1{
+				   rangeHeader = ""
 				}
 			} else {
 				//inject range header
@@ -587,6 +591,9 @@ func (gae *GAEHttpConnection) Request(conn *SessionConnection, ev event.Event) (
 			//			}
 
 			httpres, err := gae.handleHttpRes(conn, httpreq, httpresev, rangeHeader)
+//			if nil != httpres {
+//				log.Printf("Session[%d]Response %d %v\n", httpreq.GetHash(), httpres.StatusCode, httpres.Header)
+//			}
 			if nil != err || !util.IsResponseKeepAlive(httpres) || !util.IsRequestKeepAlive(httpreq.RawReq) {
 				conn.LocalRawConn.Close()
 				conn.State = STATE_SESSION_CLOSE
