@@ -125,7 +125,9 @@ func (p *pullWorker) loop() {
 		if len(c4_cfg.UA) > 0 {
 			req.Header.Set("User-Agent", c4_cfg.UA)
 		}
+		log.Printf("Pull worker:%d start working\n", p.index)
 		resp, err := c4HttpClient.Do(req)
+		
 
 		if nil != err || resp.StatusCode != 200 {
 			time.Sleep(1 * time.Second)
@@ -135,6 +137,7 @@ func (p *pullWorker) loop() {
 		if nil != resp && nil != resp.Body {
 			resp.Body.Close()
 		}
+		log.Printf("Pull worker:%d stop working\n", p.index)
 	}
 }
 
