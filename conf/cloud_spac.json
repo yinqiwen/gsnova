@@ -8,7 +8,7 @@
     "Proxy":["Google", "Default"]
   },
   {
-    "Host" : ["*.ytimg.com*", "*.google.com(.*)?","*.googleusercontent.com*", "*.gstatic.com", "*.googleapis.com*", "*.googlecode.com"],
+    "Host" : ["*.ytimg.com*", "*.google.com(.*)?","*.googleusercontent.com*", "*.gstatic.com","*.googlecode.com"],
     "Proxy":["GoogleHttps", "Direct", "Default"]
   },
   {

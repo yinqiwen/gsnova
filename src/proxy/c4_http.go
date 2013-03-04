@@ -132,6 +132,7 @@ func (p *pullWorker) loop() {
 		if nil != err || resp.StatusCode != 200 {
 			time.Sleep(1 * time.Second)
 		} else {
+		    log.Printf("Got chunked %v %v\n", resp.TransferEncoding, resp.Header)
 			cumulate.fillContent(resp.Body)
 		}
 		if nil != resp && nil != resp.Body {

@@ -152,18 +152,18 @@ func (auth *GAEAuth) parse(line string) error {
 }
 
 type GAEHttpConnection struct {
-	auth                GAEAuth
-	support_tunnel      bool
-	over_tunnel         bool
-	inject_range        bool
-	authToken           string
-	sess                *SessionConnection
-	manager             *GAE
-	tunnelChannel       chan event.Event
-	tunnel_remote_addr  string
-	rangeStart          int
-	range_expected_pos  int
-	closed              bool
+	auth               GAEAuth
+	support_tunnel     bool
+	over_tunnel        bool
+	inject_range       bool
+	authToken          string
+	sess               *SessionConnection
+	manager            *GAE
+	tunnelChannel      chan event.Event
+	tunnel_remote_addr string
+	rangeStart         int
+	range_expected_pos int
+	closed             bool
 }
 
 func (gae *GAEHttpConnection) Close() error {
@@ -431,7 +431,9 @@ func (gae *GAEHttpConnection) handleHttpRes(conn *SessionConnection, req *event.
 	contentRange := ev.GetHeader("Content-Range")
 	limit := 0
 	if len(contentRange) > 0 {
-		httpres.Header.Del("Content-Range")
+		if len(rangeHeader) == 0 {
+			httpres.Header.Del("Content-Range")
+		}
 		startpos, endpos, length := util.ParseContentRangeHeaderValue(contentRange)
 		limit = length - 1
 		if httpres.StatusCode < 300 {
@@ -450,8 +452,6 @@ func (gae *GAEHttpConnection) handleHttpRes(conn *SessionConnection, req *event.
 				httpres.Header.Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d\r\n", start, (int64(start)+httpres.ContentLength-1), length))
 			}
 		}
-		
-
 
 		if httpres.StatusCode >= 300 {
 			httpres.Write(conn.LocalRawConn)

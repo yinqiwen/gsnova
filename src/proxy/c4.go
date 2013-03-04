@@ -105,6 +105,7 @@ type C4RemoteSession struct {
 	closed                 bool
 	manager                *C4
 	rangeStart             int
+	originRangeHeader      string
 	range_expected_pos     int
 	rangeFetchWorkerNum    int
 	proxyReqEvent          *event.HTTPRequestEvent
@@ -200,10 +201,19 @@ func (c4 *C4RemoteSession) handleTunnelResponse(conn *SessionConnection, ev even
 		limit := 0
 		if len(xhce) > 0 && len(contentRange) > 0 {
 			c4.rangeFetchWorkerNum--
-			httpres.Header.Del("Content-Range")
+			if len(c4.originRangeHeader) == 0 {
+				httpres.Header.Del("Content-Range")
+			}
 			startpos, endpos, length := util.ParseContentRangeHeaderValue(contentRange)
 			log.Printf("Session[%d]Fetched range chunk[%d:%d-%d]", res.GetHash(), startpos, endpos, length)
 			limit = length - 1
+			if len(c4.originRangeHeader) > 0 {
+				rs, re := util.ParseRangeHeaderValue(c4.originRangeHeader)
+				if re > 0 {
+					limit = re
+				} 
+				httpres.Header.Set("Content-Range", fmt.Sprintf("%d-%d/%d", rs, limit, limit+1))
+			}
 			if httpres.StatusCode < 300 {
 				httpres.StatusCode = 200
 				httpres.Status = ""
@@ -316,11 +326,23 @@ func (c4 *C4RemoteSession) Request(conn *SessionConnection, ev event.Event) (err
 		}
 		c4.remote_proxy_addr = remote_addr
 		rangeHeader := req.GetHeader("Range")
+		c4.originRangeHeader = rangeHeader
 		if len(rangeHeader) > 0 {
 			log.Printf("Session[%d]Request has range:%s\n", req.GetHash(), rangeHeader)
-			_, endPos := util.ParseRangeHeaderValue(rangeHeader)
+			startPos, endPos := util.ParseRangeHeaderValue(rangeHeader)
 			if endPos == -1 {
 				rangeHeader = ""
+			} else {
+				if endPos-startPos > int(c4_cfg.FetchLimitSize-1) {
+					endPos = startPos + int(c4_cfg.FetchLimitSize-1)
+					req.SetHeader("Range", fmt.Sprintf("bytes=%d-%d", startPos, endPos))
+					req.SetHeader("X-Snova-HCE", "1")
+					log.Printf("Session[%d]Inject range:%s\n", req.GetHash(), req.GetHeader("Range"))
+					c4.rangeStart = startPos
+					c4.proxyReqEvent = req
+					c4.proxyResEvent = nil
+					c4.rangeFetchWorkerNum++
+				}
 			}
 		}
 		if len(rangeHeader) == 0 {
