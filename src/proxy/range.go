@@ -118,6 +118,7 @@ func (r *rangeFetchTask) ProcessResponse(res *http.Response) error {
 			r.res.Status = ""
 			r.res.Header.Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", r.contentBegin, r.contentEnd, res.ContentLength))
 		}
+		r.res.Body = newRangeBody()
 		return nil
 	case STATE_WAIT_RANGE_GET_RES:
 		contentRange := res.Header.Get("Content-Range")
@@ -176,7 +177,7 @@ func (r *rangeFetchTask) Start(req *http.Request, fetch func(*http.Request) (*ht
 		return res, err
 	}
 	r.rangeState = STATE_WAIT_RANGE_GET_RES
-	r.res.Body = newRangeBody()
+
 	var loop_fetch func()
 	var f func(int, int)
 
