@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 	"proxy"
 	"remote"
-	//"runtime"
+	"runtime"
 	"sync/atomic"
 	"time"
 	"util"
@@ -76,7 +76,7 @@ func main() {
 	proxy.InitHosts()
 	proxy.InitSpac()
 	proxy.InitGoogle()
-	//runtime.GOMAXPROCS(runtime.NumCPU())
+	runtime.GOMAXPROCS(runtime.NumCPU())
 
 	var gae proxy.GAE
 	var c4 proxy.C4

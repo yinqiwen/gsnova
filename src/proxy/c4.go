@@ -104,16 +104,9 @@ type C4RemoteSession struct {
 	server                 string
 	closed                 bool
 	manager                *C4
-	rangeStart             int
-	originRangeHeader      string
-	range_expected_pos     int
-	rangeFetchWorkerNum    int
-	proxyReqEvent          *event.HTTPRequestEvent
-	proxyResEvent          *event.HTTPResponseEvent
-	responsedChunks        map[int]*rangeChunk
-	rangeFetchChunkPos     int
 	injectRange            bool
 	remoteHttpClientEnable bool
+	rangeWorker            *rangeFetchTask
 }
 
 func (c4 *C4RemoteSession) Close() error {
@@ -196,95 +189,8 @@ func (c4 *C4RemoteSession) handleTunnelResponse(conn *SessionConnection, ev even
 		//log.Printf("Session[%d]Handle HTTP Response event.\n", conn.SessionID)
 		res := ev.(*event.HTTPResponseEvent)
 		httpres := res.ToResponse()
-		contentRange := res.GetHeader("Content-Range")
-		xhce := res.GetHeader("X-Snova-HCE")
-		limit := 0
-		if len(xhce) > 0 && len(contentRange) > 0 {
-			c4.rangeFetchWorkerNum--
-			if len(c4.originRangeHeader) == 0 {
-				httpres.Header.Del("Content-Range")
-			}
-			startpos, endpos, length := util.ParseContentRangeHeaderValue(contentRange)
-			log.Printf("Session[%d]Fetched range chunk[%d:%d-%d]", res.GetHash(), startpos, endpos, length)
-			limit = length - 1
-			if len(c4.originRangeHeader) > 0 {
-				rs, re := util.ParseRangeHeaderValue(c4.originRangeHeader)
-				if re > 0 {
-					limit = re
-				} 
-				httpres.Header.Set("Content-Range", fmt.Sprintf("%d-%d/%d", rs, limit, limit+1))
-			}
-			if httpres.StatusCode < 300 {
-				httpres.StatusCode = 200
-				httpres.Status = ""
-				httpres.ContentLength = int64(length - c4.rangeStart)
-				if nil == c4.proxyResEvent {
-					httpres.Write(conn.LocalRawConn)
-					c4.proxyResEvent = res
-					c4.responsedChunks = make(map[int]*rangeChunk)
-					c4.rangeFetchChunkPos = endpos + 1
-					c4.range_expected_pos = endpos + 1
-				} else {
-					chunk := &rangeChunk{}
-					chunk.start = startpos
-					chunk.content = &(res.Content)
-					c4.responsedChunks[chunk.start] = chunk
-				}
-			} else {
-				if httpres.StatusCode == 302 {
-					location := res.GetHeader("Location")
-					xrange := res.GetHeader("X-Range")
-					log.Printf("Session[%d]X-Range=%s, Location= %s\n", res.GetHash(), xrange, location)
-					if len(location) > 0 && len(xrange) > 0 && nil != c4.proxyReqEvent {
-						c4.proxyReqEvent.Url = location
-						c4.proxyReqEvent.SetHeader("Range", xrange)
-						c4.rangeFetchWorkerNum++
-						c4.offerRequestEvent(c4.proxyReqEvent)
-						return nil
-
-					}
-				}
-				httpres.Write(conn.LocalRawConn)
-				return nil
-			}
-			for {
-				if chunk, exist := c4.responsedChunks[c4.range_expected_pos]; exist {
-					_, err := conn.LocalRawConn.Write(chunk.content.Bytes())
-					delete(c4.responsedChunks, chunk.start)
-					if nil != err {
-						log.Printf("????????????????????????????%v\n", err)
-						conn.LocalRawConn.Close()
-						c4.Close()
-						break
-					} else {
-						c4.range_expected_pos = c4.range_expected_pos + chunk.content.Len()
-					}
-					chunk.content = nil
-				} else {
-					log.Printf("Session[%d]Expected range chunk pos:%d", res.GetHash(), c4.range_expected_pos)
-					break
-				}
-			}
-			if endpos > 0 && endpos < limit {
-				start := c4.rangeFetchChunkPos
-				waterMark := (c4_cfg.FetchLimitSize + 1) * c4_cfg.ConcurrentRangeFetcher
-				for !c4.closed && uint32(c4.rangeFetchWorkerNum) < c4_cfg.ConcurrentRangeFetcher && (start-c4.range_expected_pos) < int(waterMark) {
-					begin := start
-					if begin >= limit {
-						break
-					}
-					end := start + int(c4_cfg.FetchLimitSize) - 1
-					if end > limit {
-						end = limit
-					}
-					start = end + 1
-					c4.proxyReqEvent.SetHeader("Range", fmt.Sprintf("bytes=%d-%d", begin, end))
-					c4.offerRequestEvent(c4.proxyReqEvent)
-					log.Printf("Session[%d]Fetch range chunk:%s", res.GetHash(), fmt.Sprintf("bytes=%d-%d", begin, end))
-					c4.rangeFetchWorkerNum++
-					c4.rangeFetchChunkPos = start
-				}
-			}
+		if nil != c4.rangeWorker {
+			c4.rangeWorker.ProcessAyncResponse(httpres, nil)
 		} else {
 			httpres.Write(conn.LocalRawConn)
 		}
@@ -325,37 +231,18 @@ func (c4 *C4RemoteSession) Request(conn *SessionConnection, ev event.Event) (err
 			req.Url = req.Url[7+len(req.RawReq.Host):]
 		}
 		c4.remote_proxy_addr = remote_addr
-		rangeHeader := req.GetHeader("Range")
-		c4.originRangeHeader = rangeHeader
-		if len(rangeHeader) > 0 {
-			log.Printf("Session[%d]Request has range:%s\n", req.GetHash(), rangeHeader)
-			startPos, endPos := util.ParseRangeHeaderValue(rangeHeader)
-			if endPos == -1 {
-				rangeHeader = ""
-			} else {
-				if endPos-startPos > int(c4_cfg.FetchLimitSize-1) {
-					endPos = startPos + int(c4_cfg.FetchLimitSize-1)
-					req.SetHeader("Range", fmt.Sprintf("bytes=%d-%d", startPos, endPos))
-					req.SetHeader("X-Snova-HCE", "1")
-					log.Printf("Session[%d]Inject range:%s\n", req.GetHash(), req.GetHeader("Range"))
-					c4.rangeStart = startPos
-					c4.proxyReqEvent = req
-					c4.proxyResEvent = nil
-					c4.rangeFetchWorkerNum++
-				}
-			}
-		}
-		if len(rangeHeader) == 0 {
-			//inject range header
-			if hostPatternMatched(c4_cfg.InjectRange, req.RawReq.Host) || c4.injectRange {
-				req.SetHeader("X-Snova-HCE", "1")
-				req.SetHeader("Range", "bytes=0-"+strconv.Itoa(int(c4_cfg.FetchLimitSize-1)))
-				log.Printf("Session[%d]Inject range:%s\n", req.GetHash(), req.GetHeader("Range"))
-				c4.proxyReqEvent = req
-				c4.proxyResEvent = nil
-				c4.rangeFetchWorkerNum++
-
-			}
+		if strings.EqualFold(req.Method, "GET") {
+//			if hostPatternMatched(c4_cfg.InjectRange, req.RawReq.Host) || c4.injectRange {
+//				rangeHeader := req.GetHeader("Range")
+//				if len(rangeHeader) == 0 {
+//					//try 64k range first
+//					req.SetHeader("Range", "bytes=0-65535")
+//					c4.offerRequestEvent(req)
+//
+//				} else {
+//					httpres, err = gae.doRangeFetch(httpreq.RawReq)
+//				}
+//			}
 		}
 
 		c4.offerRequestEvent(req)

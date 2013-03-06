@@ -34,7 +34,7 @@ func IsDeadConnection(c net.Conn) bool {
 	c.SetReadDeadline(time.Now().Add(1 * time.Millisecond))
 	_, err := c.Read(make([]byte, 0))
 	if err != nil {
-		if !IsTimeoutError(err) {
+		if IsTimeoutError(err) {
 			var zero time.Time
 			c.SetReadDeadline(zero)
 			return false
