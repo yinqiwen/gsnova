@@ -142,7 +142,7 @@ func (r *rangeFetchTask) processResponse(res *http.Response) error {
 			return fmt.Errorf("Task ternminated by callback")
 		}
 	}
-	if res.StatusCode < 200 || res.StatusCode >= 300 {
+	if r.rangeState == STATE_WAIT_RANGE_GET_RES && (res.StatusCode < 200 || res.StatusCode >= 300) {
 		return fmt.Errorf("Expected 2xx response, but got %d", res.StatusCode)
 	}
 
@@ -161,15 +161,18 @@ func (r *rangeFetchTask) processResponse(res *http.Response) error {
 		}
 		resbody := res.Body
 		r.res = res
-		if len(r.originRangeHader) > 0 {
-			r.res.StatusCode = 206
-			r.res.Status = ""
-			r.res.Header.Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", r.contentBegin, r.contentEnd, res.ContentLength))
-		} else {
-			r.res.StatusCode = 200
-			r.res.Status = ""
-			r.res.Header.Del("Content-Range")
+		if r.res.StatusCode < 300 {
+			if len(r.originRangeHader) > 0 {
+				r.res.StatusCode = 206
+				r.res.Status = ""
+				r.res.Header.Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", r.contentBegin, r.contentEnd, res.ContentLength))
+			} else {
+				r.res.StatusCode = 200
+				r.res.Status = ""
+				r.res.Header.Del("Content-Range")
+			}
 		}
+
 		res.ContentLength = int64(r.contentEnd - r.contentBegin + 1)
 		rb := newRangeBody()
 		r.res.Body = rb
@@ -216,7 +219,7 @@ func (r *rangeFetchTask) ProcessAyncResponse(res *http.Response, httpWrite func(
 			r.req.Header.Set("X-Snova-HCE", "1")
 			r.req.Header.Set("Range", xrange)
 			httpWrite(r.req)
-			return r.res, nil
+			return nil, nil
 		}
 	}
 	err := r.processResponse(res)
@@ -230,9 +233,13 @@ func (r *rangeFetchTask) ProcessAyncResponse(res *http.Response, httpWrite func(
 		return r.res, nil
 	case STATE_WAIT_RANGE_GET_RES:
 		atomic.AddInt32(&r.rangeWorker, -1)
+		httpres = nil
 	case STATE_WAIT_HEAD_RES:
 		httpres = r.res
 		r.rangeState = STATE_WAIT_RANGE_GET_RES
+		if r.res.StatusCode >= 300 {
+			return httpres, nil
+		}
 	}
 
 	for !r.closed && r.res.StatusCode < 300 && int(r.rangeWorker) < r.FetchWorkerNum && r.rangePos < r.contentEnd && (r.rangePos-r.expectedRangePos) < (r.FetchLimit*r.FetchWorkerNum*2) {
@@ -258,6 +265,7 @@ func (r *rangeFetchTask) AyncGet(req *http.Request, httpWrite func(*http.Request
 	r.processRequest(req)
 	if len(r.originRangeHader) > 0 {
 		if r.contentEnd > 0 && r.contentEnd-r.contentBegin < r.FetchLimit {
+			r.rangeState = STATE_WAIT_NORMAL_RES
 			return httpWrite(req)
 		}
 	}

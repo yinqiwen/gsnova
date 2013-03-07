@@ -455,20 +455,10 @@ func IndexCallback(w http.ResponseWriter, req *http.Request) {
 	io.WriteString(w, html)
 }
 
-func RSocketHeartBeat(w http.ResponseWriter, req *http.Request) {
-	user := req.Header.Get("UserToken")
-	server := req.Header.Get("RServer")
-	addr := req.Header.Get("RServerAddress")
-	pool_size_str := req.Header.Get("ConnectionPoolSize")
-	pool_size, _ := strconv.Atoi(pool_size_str)
-	check_rsock_conn(user, server, addr, pool_size)
-	w.WriteHeader(200)
-}
 
 func LaunchC4HttpServer() {
 	http.HandleFunc("/", IndexCallback)
 	http.HandleFunc("/invoke", InvokeCallback)
-	http.HandleFunc("/rsocket", RSocketHeartBeat)
 	err := http.ListenAndServe(":"+port(), nil)
 	if err != nil {
 		log.Fatal("ListenAndServe: ", err.Error())

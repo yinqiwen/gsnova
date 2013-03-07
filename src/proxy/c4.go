@@ -198,8 +198,10 @@ func (c4 *C4RemoteSession) handleTunnelResponse(conn *SessionConnection, ev even
 			}
 			pres, err := c4.rangeWorker.ProcessAyncResponse(httpres, httpWriter)
 			if nil == err {
-				log.Printf("####%d %d %v\n", ev.GetHash(), pres.StatusCode, pres.Header)
-				go pres.Write(conn.LocalRawConn)
+				if nil != pres {
+					log.Printf("Session[%d] %d %v\n", ev.GetHash(), pres.StatusCode, pres.Header)
+					go pres.Write(conn.LocalRawConn)
+				}
 			} else {
 				log.Printf("####%v\n", err)
 				c4.Close()
@@ -221,7 +223,7 @@ func (c4 *C4RemoteSession) writeHttpRequest(preq *http.Request) error {
 	if strings.Contains(ev.Url, "http://") {
 		ev.Url = ev.Url[7+len(preq.Host):]
 	}
-	log.Printf("Session[%d]Range Request %s\n", c4.sess.SessionID, ev.Url)
+	//log.Printf("Session[%d]Range Request %s\n", c4.sess.SessionID, ev.Url)
 	c4.offerRequestEvent(ev)
 	return nil
 }
@@ -256,7 +258,7 @@ func (c4 *C4RemoteSession) Request(conn *SessionConnection, ev event.Event) (err
 		} else {
 			conn.State = STATE_RECV_HTTP
 		}
-		log.Printf("Session[%d]Request %s\n", req.GetHash(), util.GetURLString(req.RawReq, true))
+		log.Printf("Session[%d]%v Request %s\n", req.GetHash(), c4.injectRange, util.GetURLString(req.RawReq, true))
 		if nil != err {
 			log.Printf("Session[%d]Failed to encode request to bytes", req.GetHash())
 			return
@@ -271,7 +273,7 @@ func (c4 *C4RemoteSession) Request(conn *SessionConnection, ev event.Event) (err
 		c4.rangeWorker = nil
 		c4.remote_proxy_addr = remote_addr
 		if strings.EqualFold(req.Method, "GET") {
-			if hostPatternMatched(c4_cfg.InjectRange, req.RawReq.Host) || c4.injectRange {
+			if c4.injectRange || hostPatternMatched(c4_cfg.InjectRange, req.RawReq.Host) {
 				if nil == c4.doRangeFetch(req.RawReq) {
 					return nil, nil
 				}
@@ -353,6 +355,8 @@ func (manager *C4) GetRemoteConnection(ev event.Event, attrs map[string]string) 
 	found := false
 	if containsAttr(attrs, ATTR_RANGE) {
 		conn.injectRange = true
+	} else {
+		conn.injectRange = false
 	}
 	if containsAttr(attrs, ATTR_APP) {
 		app := attrs[ATTR_APP]
