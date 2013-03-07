@@ -293,9 +293,9 @@ func (gae *GAEHttpConnection) doRangeFetch(req *http.Request) (*http.Response, e
 	task.FetchLimit = int(gae_cfg.FetchLimitSize)
 	task.FetchWorkerNum = int(gae_cfg.ConcurrentRangeFetcher)
 	task.SessionID = gae.sess.SessionID
-	//	task.TaskValidation = func() bool {
-	//		return !util.IsDeadConnection(gae.sess.LocalRawConn)
-	//	}
+	task.TaskValidation = func() bool {
+		return !util.IsDeadConnection(gae.sess.LocalRawConn)
+	}
 	gae.rangeWorker = task
 	fetch := func(preq *http.Request) (*http.Response, error) {
 		ev := new(event.HTTPRequestEvent)

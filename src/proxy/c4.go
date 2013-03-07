@@ -39,6 +39,7 @@ type C4Config struct {
 	FetchLimitSize         uint32
 	ConcurrentRangeFetcher uint32
 	Proxy                  string
+	MultiRangeFetchEnable  bool
 }
 
 var c4_cfg *C4Config
@@ -189,9 +190,10 @@ func (c4 *C4RemoteSession) handleTunnelResponse(conn *SessionConnection, ev even
 		}
 		chunk.Content = nil
 	case event.HTTP_RESPONSE_EVENT_TYPE:
-		log.Printf("Session[%d]Handle HTTP Response event.\n", conn.SessionID)
+		log.Printf("Session[%d]Handle HTTP Response event with range task:%p\n", conn.SessionID, c4.rangeWorker)
 		res := ev.(*event.HTTPResponseEvent)
 		httpres := res.ToResponse()
+		//log.Printf("Session[%d]Recv res %d %v\n", ev.GetHash(), httpres.StatusCode, httpres.Header)
 		if nil != c4.rangeWorker {
 			httpWriter := func(preq *http.Request) error {
 				return c4.writeHttpRequest(preq)
@@ -199,8 +201,10 @@ func (c4 *C4RemoteSession) handleTunnelResponse(conn *SessionConnection, ev even
 			pres, err := c4.rangeWorker.ProcessAyncResponse(httpres, httpWriter)
 			if nil == err {
 				if nil != pres {
-					log.Printf("Session[%d] %d %v\n", ev.GetHash(), pres.StatusCode, pres.Header)
+					//log.Printf("Session[%d] %d %v\n", ev.GetHash(), pres.StatusCode, pres.Header)
 					go pres.Write(conn.LocalRawConn)
+				} else {
+					//log.Printf("Session[%d]NULLL\n", ev.GetHash())
 				}
 			} else {
 				log.Printf("####%v\n", err)
@@ -234,6 +238,12 @@ func (c4 *C4RemoteSession) doRangeFetch(req *http.Request) error {
 	task.FetchWorkerNum = int(c4_cfg.ConcurrentRangeFetcher)
 	task.SessionID = c4.sess.SessionID
 	c4.rangeWorker = task
+	//	rh := req.Header.Get("Range")
+	//	if len(rh) > 0 {
+	//		log.Printf("Session[%d] Request  has range:%s\n", c4.sess.SessionID, rh)
+	//	} else {
+	//		log.Printf("Session[%d] Request has no range\n", c4.sess.SessionID)
+	//	}
 	httpWriter := func(preq *http.Request) error {
 		return c4.writeHttpRequest(preq)
 	}
@@ -258,7 +268,7 @@ func (c4 *C4RemoteSession) Request(conn *SessionConnection, ev event.Event) (err
 		} else {
 			conn.State = STATE_RECV_HTTP
 		}
-		log.Printf("Session[%d]%v Request %s\n", req.GetHash(), c4.injectRange, util.GetURLString(req.RawReq, true))
+		log.Printf("Session[%d] Request %s\n", req.GetHash(), util.GetURLString(req.RawReq, true))
 		if nil != err {
 			log.Printf("Session[%d]Failed to encode request to bytes", req.GetHash())
 			return
@@ -272,7 +282,7 @@ func (c4 *C4RemoteSession) Request(conn *SessionConnection, ev event.Event) (err
 		}
 		c4.rangeWorker = nil
 		c4.remote_proxy_addr = remote_addr
-		if strings.EqualFold(req.Method, "GET") {
+		if strings.EqualFold(req.Method, "GET") && c4_cfg.MultiRangeFetchEnable {
 			if c4.injectRange || hostPatternMatched(c4_cfg.InjectRange, req.RawReq.Host) {
 				if nil == c4.doRangeFetch(req.RawReq) {
 					return nil, nil
@@ -429,6 +439,11 @@ func initC4Config() {
 	c4_cfg.FetchLimitSize = 256000
 	if limit, exist := common.Cfg.GetIntProperty("C4", "RangeFetchLimitSize"); exist {
 		c4_cfg.FetchLimitSize = uint32(limit)
+	}
+
+	c4_cfg.MultiRangeFetchEnable = false
+	if enable, exist := common.Cfg.GetIntProperty("C4", "MultiRangeFetchEnable"); exist {
+		c4_cfg.MultiRangeFetchEnable = (enable != 0)
 	}
 
 	c4_cfg.InjectRange = []*regexp.Regexp{}

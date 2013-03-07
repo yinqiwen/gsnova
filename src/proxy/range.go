@@ -103,7 +103,7 @@ func (r *rangeFetchTask) processRequest(req *http.Request) error {
 		return fmt.Errorf("Only GET request supported!")
 	}
 	r.req = req
-	rangeHeader := req.Header.Get("range")
+	rangeHeader := req.Header.Get("Range")
 	r.contentEnd = -1
 	r.contentBegin = 0
 	r.rangePos = 0
@@ -142,10 +142,9 @@ func (r *rangeFetchTask) processResponse(res *http.Response) error {
 			return fmt.Errorf("Task ternminated by callback")
 		}
 	}
-	if r.rangeState == STATE_WAIT_RANGE_GET_RES && (res.StatusCode < 200 || res.StatusCode >= 300) {
-		return fmt.Errorf("Expected 2xx response, but got %d", res.StatusCode)
+	if r.rangeState != STATE_WAIT_NORMAL_RES && res.StatusCode != 206 {
+		return fmt.Errorf("Expected 206response, but got %d", res.StatusCode)
 	}
-
 	switch r.rangeState {
 	case STATE_WAIT_NORMAL_RES:
 		r.res = res
@@ -161,6 +160,7 @@ func (r *rangeFetchTask) processResponse(res *http.Response) error {
 		}
 		resbody := res.Body
 		r.res = res
+		r.res.Request = r.req
 		if r.res.StatusCode < 300 {
 			if len(r.originRangeHader) > 0 {
 				r.res.StatusCode = 206
@@ -171,14 +171,24 @@ func (r *rangeFetchTask) processResponse(res *http.Response) error {
 				r.res.Status = ""
 				r.res.Header.Del("Content-Range")
 			}
+			res.ContentLength = int64(r.contentEnd - r.contentBegin + 1)
+			res.Header.Set("Content-Length", fmt.Sprintf("%d", res.ContentLength))
+			rb := newRangeBody()
+			r.res.Body = rb
 		}
 
-		res.ContentLength = int64(r.contentEnd - r.contentBegin + 1)
-		rb := newRangeBody()
-		r.res.Body = rb
-		log.Printf("Session[%d]Recv first range chunk:%s", r.SessionID, contentRangeHeader)
-		if nil != resbody {
-			n, _ := io.Copy(rb.buf, resbody)
+		log.Printf("Session[%d]Recv first range chunk:%s, %d %d ", r.SessionID, contentRangeHeader, r.contentEnd, r.contentBegin)
+		if nil != resbody && r.res.StatusCode < 300 {
+			var n int
+			rb := r.res.Body.(*rangeBody)
+			tmpbuf, ok := resbody.(*util.BufferCloseWrapper)
+			if ok {
+				n = tmpbuf.Buf.Len()
+				rb.buf = tmpbuf.Buf
+			} else {
+				nn, _ := io.Copy(rb.buf, resbody)
+				n = int(nn)
+			}
 			r.expectedRangePos += int(n)
 			r.rangePos += int(n)
 		}
@@ -222,24 +232,28 @@ func (r *rangeFetchTask) ProcessAyncResponse(res *http.Response, httpWrite func(
 			return nil, nil
 		}
 	}
-	err := r.processResponse(res)
-	if nil != err {
-		r.Close()
-		return r.res, err
-	}
 	var httpres *http.Response
+	var err error
 	switch r.rangeState {
 	case STATE_WAIT_NORMAL_RES:
-		return r.res, nil
+		err = r.processResponse(res)
+		return r.res, err
 	case STATE_WAIT_RANGE_GET_RES:
 		atomic.AddInt32(&r.rangeWorker, -1)
+		err = r.processResponse(res)
 		httpres = nil
 	case STATE_WAIT_HEAD_RES:
-		httpres = r.res
-		r.rangeState = STATE_WAIT_RANGE_GET_RES
-		if r.res.StatusCode >= 300 {
-			return httpres, nil
+		if res.StatusCode != 206 {
+			return res, nil
 		}
+		err = r.processResponse(res)
+		if nil == err {
+			httpres = r.res
+			r.rangeState = STATE_WAIT_RANGE_GET_RES
+		}
+	}
+	if nil != err {
+		return nil, err
 	}
 
 	for !r.closed && r.res.StatusCode < 300 && int(r.rangeWorker) < r.FetchWorkerNum && r.rangePos < r.contentEnd && (r.rangePos-r.expectedRangePos) < (r.FetchLimit*r.FetchWorkerNum*2) {
@@ -301,7 +315,7 @@ func (r *rangeFetchTask) SyncGet(req *http.Request, fetch func(*http.Request) (*
 	if nil != err {
 		return res, err
 	}
-	if res.StatusCode >= 300 {
+	if res.StatusCode != 206 {
 		return res, nil
 	}
 	//log.Printf("Session[%d]Recv res:%d %v\n", r.SessionID, res.StatusCode, res.Header)
