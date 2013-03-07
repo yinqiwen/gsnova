@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"container/list"
 	"fmt"
-	"io/ioutil"
+	//"io/ioutil"
 	"net"
 	"net/http"
 	"strconv"
@@ -360,7 +360,7 @@ func (res *HTTPResponseEvent) ToResponse() *http.Response {
 		}
 	}
 	if raw.ContentLength > 0 {
-		raw.Body = ioutil.NopCloser(&res.Content)
+		raw.Body = &util.BufferCloseWrapper{&res.Content}
 	}
 	return raw
 }

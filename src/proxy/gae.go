@@ -302,19 +302,25 @@ func (gae *GAEHttpConnection) doRangeFetch(req *http.Request) (*http.Response, e
 		ev.FromRequest(preq)
 		ev.SetHash(gae.sess.SessionID)
 		err, xres := gae.requestEvent(gaeHttpClient, gae.sess, ev)
+		if nil != err {
+			//try again
+			err, xres = gae.requestEvent(gaeHttpClient, gae.sess, ev)
+		}
 		if nil == err {
 			httpresev := xres.(*event.HTTPResponseEvent)
 			return httpresev.ToResponse(), nil
 		}
 		return nil, err
 	}
-	pres, err := task.Start(req, fetch)
+	pres, err := task.SyncGet(req, fetch)
 	if nil == err {
 		err = pres.Write(gae.sess.LocalRawConn)
 		if nil != err {
 			task.Close()
 		}
-		pres.Body.Close()
+		if nil != pres.Body {
+			pres.Body.Close()
+		}
 	}
 	return pres, err
 }
@@ -387,19 +393,8 @@ func (gae *GAEHttpConnection) Request(conn *SessionConnection, ev event.Event) (
 			var httpres *http.Response
 			if strings.EqualFold(httpreq.Method, "GET") {
 				if hostPatternMatched(gae_cfg.InjectRange, httpreq.RawReq.Host) || gae.inject_range {
-					rangeHeader := httpreq.GetHeader("Range")
-					if len(rangeHeader) == 0 {
-						//try 64k range first
-						httpreq.SetHeader("Range", "bytes=0-65535")
-						err, res = gae.requestEvent(gaeHttpClient, conn, ev)
-						if nil == err {
-							httpresev := res.(*event.HTTPResponseEvent)
-							httpres, err = gae.handleHttpRes(conn, httpreq, httpresev)
-						}
-					} else {
-						httpres, err = gae.doRangeFetch(httpreq.RawReq)
-					}
-					//httpres, err = gae.doRangeFetch(httpreq.RawReq)
+					//rangeHeader := httpreq.GetHeader("Range")
+					httpres, err = gae.doRangeFetch(httpreq.RawReq)
 					requestProxyed = true
 				}
 			}

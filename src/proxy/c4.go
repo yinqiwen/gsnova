@@ -6,7 +6,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"event"
-	"fmt"
+	//"fmt"
 	"io"
 	"log"
 	"net"
@@ -118,6 +118,9 @@ func (c4 *C4RemoteSession) Close() error {
 	}
 	c4.closed = true
 	removeC4SessionTable(c4)
+	if nil != c4.rangeWorker {
+		c4.rangeWorker.Close()
+	}
 	return nil
 }
 
@@ -165,10 +168,10 @@ func (c4 *C4RemoteSession) handleTunnelResponse(conn *SessionConnection, ev even
 		if cev.Status == event.TCP_CONN_CLOSED {
 			log.Printf("Session[%d]Remote %s connection closed, current proxy addr:%s\n", conn.SessionID, cev.Addr, c4.remote_proxy_addr)
 			if c4.remote_proxy_addr == cev.Addr {
-				//c4.closed = true
-				//conn.Close()
-				//c4.Close()
-				//return io.EOF
+				c4.closed = true
+				conn.Close()
+				c4.Close()
+				return io.EOF
 			}
 		}
 	case event.EVENT_TCP_CHUNK_TYPE:
@@ -186,11 +189,22 @@ func (c4 *C4RemoteSession) handleTunnelResponse(conn *SessionConnection, ev even
 		}
 		chunk.Content = nil
 	case event.HTTP_RESPONSE_EVENT_TYPE:
-		//log.Printf("Session[%d]Handle HTTP Response event.\n", conn.SessionID)
+		log.Printf("Session[%d]Handle HTTP Response event.\n", conn.SessionID)
 		res := ev.(*event.HTTPResponseEvent)
 		httpres := res.ToResponse()
 		if nil != c4.rangeWorker {
-			c4.rangeWorker.ProcessAyncResponse(httpres, nil)
+			httpWriter := func(preq *http.Request) error {
+				return c4.writeHttpRequest(preq)
+			}
+			pres, err := c4.rangeWorker.ProcessAyncResponse(httpres, httpWriter)
+			if nil == err {
+				log.Printf("####%d %d %v\n", ev.GetHash(), pres.StatusCode, pres.Header)
+				go pres.Write(conn.LocalRawConn)
+			} else {
+				log.Printf("####%v\n", err)
+				c4.Close()
+				conn.Close()
+			}
 		} else {
 			httpres.Write(conn.LocalRawConn)
 		}
@@ -198,6 +212,30 @@ func (c4 *C4RemoteSession) handleTunnelResponse(conn *SessionConnection, ev even
 		log.Printf("Unexpected event type:%d\n", ev.GetType())
 	}
 	return nil
+}
+
+func (c4 *C4RemoteSession) writeHttpRequest(preq *http.Request) error {
+	ev := new(event.HTTPRequestEvent)
+	ev.FromRequest(preq)
+	ev.SetHash(c4.sess.SessionID)
+	if strings.Contains(ev.Url, "http://") {
+		ev.Url = ev.Url[7+len(preq.Host):]
+	}
+	log.Printf("Session[%d]Range Request %s\n", c4.sess.SessionID, ev.Url)
+	c4.offerRequestEvent(ev)
+	return nil
+}
+
+func (c4 *C4RemoteSession) doRangeFetch(req *http.Request) error {
+	task := new(rangeFetchTask)
+	task.FetchLimit = int(c4_cfg.FetchLimitSize)
+	task.FetchWorkerNum = int(c4_cfg.ConcurrentRangeFetcher)
+	task.SessionID = c4.sess.SessionID
+	c4.rangeWorker = task
+	httpWriter := func(preq *http.Request) error {
+		return c4.writeHttpRequest(preq)
+	}
+	return task.AyncGet(req, httpWriter)
 }
 
 func (c4 *C4RemoteSession) Request(conn *SessionConnection, ev event.Event) (err error, res event.Event) {
@@ -230,19 +268,14 @@ func (c4 *C4RemoteSession) Request(conn *SessionConnection, ev event.Event) (err
 		if strings.Contains(req.Url, "http://") {
 			req.Url = req.Url[7+len(req.RawReq.Host):]
 		}
+		c4.rangeWorker = nil
 		c4.remote_proxy_addr = remote_addr
 		if strings.EqualFold(req.Method, "GET") {
-//			if hostPatternMatched(c4_cfg.InjectRange, req.RawReq.Host) || c4.injectRange {
-//				rangeHeader := req.GetHeader("Range")
-//				if len(rangeHeader) == 0 {
-//					//try 64k range first
-//					req.SetHeader("Range", "bytes=0-65535")
-//					c4.offerRequestEvent(req)
-//
-//				} else {
-//					httpres, err = gae.doRangeFetch(httpreq.RawReq)
-//				}
-//			}
+			if hostPatternMatched(c4_cfg.InjectRange, req.RawReq.Host) || c4.injectRange {
+				if nil == c4.doRangeFetch(req.RawReq) {
+					return nil, nil
+				}
+			}
 		}
 
 		c4.offerRequestEvent(req)
