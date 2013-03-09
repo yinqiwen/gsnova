@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-VERSION="0.20.3"
+VERSION="0.21.0"
 
 #this part is copied from ANT's script
 # OS specific support.  $var _must_ be set to either true or false.
@@ -53,6 +53,7 @@ build_dist()
    exename=$1
    if [ "$OS" = "windows" ]; then
       exename="$1".exe
+      cp $GSNOVA_DIR/misc/hidegsnova.exe $DIST_DIR
    fi
    cp $GSNOVA_DIR/README.md $DIST_DIR
    cp $GSNOVA_DIR/*.txt $DIST_DIR

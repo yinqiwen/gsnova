@@ -1,5 +1,5 @@
 #!/bin/sh
-VERSION="0.20.0"
+VERSION="0.21.0"
 
 GSNOVA_DIR=`dirname $0 | sed -e "s#^\\([^/]\\)#${PWD}/\\1#"` # sed makes absolute
 build_product()

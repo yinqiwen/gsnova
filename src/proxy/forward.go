@@ -32,6 +32,8 @@ type ForwardConnection struct {
 	manager          *Forward
 	use_sys_dns      bool
 	closed           bool
+
+	checkChannel chan int
 }
 
 func (conn *ForwardConnection) Close() error {
@@ -41,6 +43,13 @@ func (conn *ForwardConnection) Close() error {
 	}
 	conn.closed = true
 	return nil
+}
+
+func (conn *ForwardConnection) IsClosed() bool {
+	if nil != conn.forward_conn && !conn.closed {
+		return util.IsDeadConnection(conn.forward_conn)
+	}
+	return true
 }
 
 func createDirectForwardConn(hostport string) (net.Conn, error) {
@@ -237,7 +246,7 @@ func (auto *ForwardConnection) Request(conn *SessionConnection, ev event.Event) 
 				resp.Write(&tmp)
 				log.Printf("Session[%d]Recv response \n%s\n", ev.GetHash(), tmp.String())
 			}
-			if nil != err || !util.IsResponseKeepAlive(resp) || !util.IsRequestKeepAlive(req.RawReq) || util.IsDeadConnection(auto.forward_conn) {
+			if nil != err || !util.IsResponseKeepAlive(resp) || !util.IsRequestKeepAlive(req.RawReq) {
 				conn.LocalRawConn.Close()
 				auto.Close()
 				conn.State = STATE_SESSION_CLOSE

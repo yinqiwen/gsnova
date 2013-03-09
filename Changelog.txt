@@ -1,5 +1,14 @@
 GSnova Changelog
 ===================
+Changes in version 0.21.0(2013.03.10)
+-------------------------------------------
+** Features
+   * [C4]: Multi Range Fetch Support
+   
+** Improvement
+   * Fix for  issue 379
+   * C4 Performance improvement
+
 Changes in version 0.20.3(2013.02.20)
 -------------------------------------------
 ** Features

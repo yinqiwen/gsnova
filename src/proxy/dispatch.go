@@ -10,6 +10,8 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"time"
+	"util"
 )
 
 const (
@@ -167,11 +169,34 @@ func (session *SessionConnection) process() error {
 	}
 
 	readRequest := func() (*http.Request, error) {
-		req, e := http.ReadRequest(session.LocalBufferConn)
-		if nil != req {
-			req.Header.Del("Proxy-Connection")
+		for {
+			needCheckRemote := false
+			if nil != session.RemoteConn {
+				forward, ok := session.RemoteConn.(*ForwardConnection)
+				if ok {
+					if forward.IsClosed() {
+						return nil, fmt.Errorf("Remote conn closed.")
+					}
+					needCheckRemote = true
+				}
+			}
+			if needCheckRemote {
+				session.LocalRawConn.SetReadDeadline(time.Now().Add(1 * time.Second))
+			}
+			req, e := http.ReadRequest(session.LocalBufferConn)
+			if nil != req {
+				req.Header.Del("Proxy-Connection")
+			}
+			if needCheckRemote {
+				var zero time.Time
+				session.LocalRawConn.SetReadDeadline(zero)
+			}
+			if nil != e && util.IsTimeoutError(e) {
+				continue
+			}
+			return req, e
 		}
-		return req, e
+		return nil, nil
 	}
 
 	switch session.State {

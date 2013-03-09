@@ -288,7 +288,7 @@ func (gae *GAEHttpConnection) requestEvent(client *http.Client, conn *SessionCon
 	return nil, nil
 }
 
-func (gae *GAEHttpConnection) doRangeFetch(req *http.Request) (*http.Response, error) {
+func (gae *GAEHttpConnection) doRangeFetch(req *http.Request, firstChunkRes *http.Response) (*http.Response, error) {
 	task := new(rangeFetchTask)
 	task.FetchLimit = int(gae_cfg.FetchLimitSize)
 	task.FetchWorkerNum = int(gae_cfg.ConcurrentRangeFetcher)
@@ -312,7 +312,7 @@ func (gae *GAEHttpConnection) doRangeFetch(req *http.Request) (*http.Response, e
 		}
 		return nil, err
 	}
-	pres, err := task.SyncGet(req, fetch)
+	pres, err := task.SyncGet(req, firstChunkRes, fetch)
 	if nil == err {
 		err = pres.Write(gae.sess.LocalRawConn)
 		if nil != err {
@@ -328,20 +328,21 @@ func (gae *GAEHttpConnection) doRangeFetch(req *http.Request) (*http.Response, e
 func (gae *GAEHttpConnection) handleHttpRes(conn *SessionConnection, req *event.HTTPRequestEvent, ev *event.HTTPResponseEvent) (*http.Response, error) {
 	originRange := req.RawReq.Header.Get("Range")
 	contentRange := ev.GetHeader("Content-Range")
-	if len(contentRange) > 0 {
+	if ev.Status == 206 && len(contentRange) > 0 && strings.EqualFold(req.Method, "GET") {
 		_, end, length := util.ParseContentRangeHeaderValue(contentRange)
-		if len(originRange) == 0 {
-			ev.Status = 200
-			ev.RemoveHeader("Content-Range")
-		} else {
+		if len(originRange) > 0 {
 			_, oe := util.ParseRangeHeaderValue(originRange)
 			if oe > 0 {
 				length = oe + 1
 			}
 		}
 		if length > end+1 {
-			_, err := gae.doRangeFetch(req.RawReq)
+			_, err := gae.doRangeFetch(req.RawReq, ev.ToResponse())
 			return nil, err
+		}
+		if len(originRange) == 0 {
+			ev.Status = 200
+			ev.RemoveHeader("Content-Range")
 		}
 	}
 	httpres := ev.ToResponse()
@@ -394,7 +395,7 @@ func (gae *GAEHttpConnection) Request(conn *SessionConnection, ev event.Event) (
 			if strings.EqualFold(httpreq.Method, "GET") {
 				if hostPatternMatched(gae_cfg.InjectRange, httpreq.RawReq.Host) || gae.inject_range {
 					//rangeHeader := httpreq.GetHeader("Range")
-					httpres, err = gae.doRangeFetch(httpreq.RawReq)
+					httpres, err = gae.doRangeFetch(httpreq.RawReq, nil)
 					requestProxyed = true
 				}
 			}

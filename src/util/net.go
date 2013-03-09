@@ -31,6 +31,9 @@ func IPv42Int(ip string) (int64, error) {
 }
 
 func IsDeadConnection(c net.Conn) bool {
+	if nil == c {
+		return true
+	}
 	c.SetReadDeadline(time.Now().Add(1 * time.Millisecond))
 	_, err := c.Read(make([]byte, 0))
 	if err != nil {

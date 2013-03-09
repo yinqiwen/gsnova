@@ -301,27 +301,31 @@ func cloneHttpReq(req *http.Request) *http.Request {
 	return &clonereq
 }
 
-func (r *rangeFetchTask) SyncGet(req *http.Request, fetch func(*http.Request) (*http.Response, error)) (*http.Response, error) {
+func (r *rangeFetchTask) SyncGet(req *http.Request, firstChunkRes *http.Response, fetch func(*http.Request) (*http.Response, error)) (*http.Response, error) {
 	r.processRequest(req)
 	if len(r.originRangeHader) > 0 {
 		if r.contentEnd > 0 && r.contentEnd-r.contentBegin < r.FetchLimit {
 			return fetch(req)
 		}
 	}
-	freq := cloneHttpReq(req)
-	freq.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", r.contentBegin, r.contentBegin+r.FetchLimit-1))
-	r.rangeState = STATE_WAIT_HEAD_RES
-	res, err := fetch(freq)
-	if nil != err {
-		return res, err
+	if nil == firstChunkRes {
+		freq := cloneHttpReq(req)
+		freq.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", r.contentBegin, r.contentBegin+r.FetchLimit-1))
+		r.rangeState = STATE_WAIT_HEAD_RES
+		res, err := fetch(freq)
+		if nil != err {
+			return res, err
+		}
+		firstChunkRes = res
 	}
-	if res.StatusCode != 206 {
-		return res, nil
+
+	if firstChunkRes.StatusCode != 206 {
+		return firstChunkRes, nil
 	}
 	//log.Printf("Session[%d]Recv res:%d %v\n", r.SessionID, res.StatusCode, res.Header)
-	err = r.processResponse(res)
+	err := r.processResponse(firstChunkRes)
 	if nil != err {
-		return res, err
+		return firstChunkRes, err
 	}
 	r.rangeState = STATE_WAIT_RANGE_GET_RES
 	var loop_fetch func()
