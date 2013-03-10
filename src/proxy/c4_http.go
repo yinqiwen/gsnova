@@ -127,12 +127,12 @@ func (p *pullWorker) loop() {
 		}
 		log.Printf("Pull worker:%d start working\n", p.index)
 		resp, err := c4HttpClient.Do(req)
-		
 
 		if nil != err || resp.StatusCode != 200 {
+			log.Printf("Pull worker:%d recv invalid res:%v\n", p.index, resp)
 			time.Sleep(1 * time.Second)
 		} else {
-		    //log.Printf("Got chunked %v %v\n", resp.TransferEncoding, resp.Header)
+			//log.Printf("Got chunked %v %v\n", resp.TransferEncoding, resp.Header)
 			cumulate.fillContent(resp.Body)
 		}
 		if nil != resp && nil != resp.Body {

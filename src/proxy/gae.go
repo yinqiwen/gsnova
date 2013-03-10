@@ -293,9 +293,9 @@ func (gae *GAEHttpConnection) doRangeFetch(req *http.Request, firstChunkRes *htt
 	task.FetchLimit = int(gae_cfg.FetchLimitSize)
 	task.FetchWorkerNum = int(gae_cfg.ConcurrentRangeFetcher)
 	task.SessionID = gae.sess.SessionID
-	task.TaskValidation = func() bool {
-		return !util.IsDeadConnection(gae.sess.LocalRawConn)
-	}
+//	task.TaskValidation = func() bool {
+//		return !util.IsDeadConnection(gae.sess.LocalRawConn)
+//	}
 	gae.rangeWorker = task
 	fetch := func(preq *http.Request) (*http.Response, error) {
 		ev := new(event.HTTPRequestEvent)
@@ -308,7 +308,8 @@ func (gae *GAEHttpConnection) doRangeFetch(req *http.Request, firstChunkRes *htt
 		}
 		if nil == err {
 			httpresev := xres.(*event.HTTPResponseEvent)
-			return httpresev.ToResponse(), nil
+			httpres := httpresev.ToResponse()
+			return httpres, err
 		}
 		return nil, err
 	}

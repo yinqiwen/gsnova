@@ -1,6 +1,14 @@
 GSnova Changelog
 ===================
-Changes in version 0.21.0(2013.03.10)
+Changes in version 0.21.0.1(2013.03.10)
+-------------------------------------------
+** Features
+   * 
+   
+** Improvement
+   * [GAE] Better try mechanism for multi range fetch
+
+Changes in version 0.21.0(2013.03.09)
 -------------------------------------------
 ** Features
    * [C4]: Multi Range Fetch Support

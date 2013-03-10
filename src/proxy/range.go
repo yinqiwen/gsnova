@@ -6,9 +6,11 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 	"util"
 )
 
@@ -143,7 +145,7 @@ func (r *rangeFetchTask) processResponse(res *http.Response) error {
 		}
 	}
 	if r.rangeState != STATE_WAIT_NORMAL_RES && res.StatusCode != 206 {
-		return fmt.Errorf("Expected 206response, but got %d", res.StatusCode)
+		return fmt.Errorf("Expected 206 response, but got %d", res.StatusCode)
 	}
 	switch r.rangeState {
 	case STATE_WAIT_NORMAL_RES:
@@ -225,10 +227,11 @@ func (r *rangeFetchTask) ProcessAyncResponse(res *http.Response, httpWrite func(
 		location := res.Header.Get("Location")
 		xrange := res.Header.Get("X-Range")
 		if len(location) > 0 && len(xrange) > 0 {
-			r.req.RequestURI = location
-			r.req.Header.Set("X-Snova-HCE", "1")
-			r.req.Header.Set("Range", xrange)
-			httpWrite(r.req)
+		    freq := cloneHttpReq(r.req)
+			freq.RequestURI = location
+			freq.Header.Set("X-Snova-HCE", "1")
+			freq.Header.Set("Range", xrange)
+			httpWrite(freq)
 			return nil, nil
 		}
 	}
@@ -284,7 +287,7 @@ func (r *rangeFetchTask) AyncGet(req *http.Request, httpWrite func(*http.Request
 		}
 	}
 	freq := cloneHttpReq(req)
-	freq.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", r.contentBegin, r.contentBegin+r.FetchLimit-1))
+	freq.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", r.contentBegin, r.contentBegin+r.FetchLimit/4-1))
 	freq.Header.Set("X-Snova-HCE", "1")
 	r.rangeState = STATE_WAIT_HEAD_RES
 	return httpWrite(freq)
@@ -310,7 +313,7 @@ func (r *rangeFetchTask) SyncGet(req *http.Request, firstChunkRes *http.Response
 	}
 	if nil == firstChunkRes {
 		freq := cloneHttpReq(req)
-		freq.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", r.contentBegin, r.contentBegin+r.FetchLimit-1))
+		freq.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", r.contentBegin, r.contentBegin+r.FetchLimit/4-1))
 		r.rangeState = STATE_WAIT_HEAD_RES
 		res, err := fetch(freq)
 		if nil != err {
@@ -337,32 +340,58 @@ func (r *rangeFetchTask) SyncGet(req *http.Request, firstChunkRes *http.Response
 		rangeHeader := fmt.Sprintf("bytes=%d-%d", begin, end)
 		clonereq.Header.Set("Range", rangeHeader)
 		log.Printf("Session[%d]Fetch range:%s\n", r.SessionID, rangeHeader)
-		res, err := fetch(clonereq)
-		//log.Printf("Fetch range res:%v\n", res)
-		if nil == err && res.StatusCode == 206 {
-			err = r.processResponse(res)
-			if nil != err {
-				r.Close()
-				log.Printf("Session[%d]Range Fetch:%s failed:%v\n", r.SessionID, rangeHeader, err)
-			}
-		} else {
-			if nil == err && res.StatusCode == 302 {
-				location := res.Header.Get("Location")
-				if len(location) > 0 {
-					clonereq.RequestURI = location
+		var res *http.Response
+		var err error
+		retyCount := 1
+		for retyCount < 4 {
+			res, err = fetch(clonereq)
+			if nil == err {
+				if res.StatusCode == 206 {
+					break
+				}
+				if res.StatusCode == 302 {
+					location := res.Header.Get("Location")
+					log.Printf("Session[%d]Range fetch:%s redirect to %s\n", r.SessionID, rangeHeader, location)
+					if len(location) > 0 {
+						clonereq.RequestURI = location
+					}
+				} else {
+					log.Printf("Session[%d]Range fetch:%s failed with error response %d %v\n", r.SessionID, rangeHeader, res.StatusCode, res.Header)
+					if res.StatusCode == 408 {
+						r.FetchWorkerNum = 1
+						log.Printf("Session[%d]Reduce fetch worker num to 1 since server is too busy.\n", r.SessionID)
+						waittime := 1 * time.Second
+						testreq := &http.Request{
+							Method:        "GET",
+							URL:           &url.URL{Scheme: "http", Host: "www.google.com", Path: "/"},
+							Header:        make(http.Header),
+							ContentLength: 0,
+						}
+						for {
+							time.Sleep(waittime)
+							tmpres, tmperr := fetch(testreq)
+							if nil == tmperr && tmpres.StatusCode == 408 {
+								waittime *= 2
+								continue
+							}
+							break
+						}
+					}
 				}
 			}
-			//try again
-			res, err = fetch(clonereq)
-			if nil != err {
-				log.Printf("###Recv error:%v\n", err)
-				r.Close()
-				atomic.AddInt32(&r.rangeWorker, -1)
-				return
-			}
+			retyCount++
+		}
+
+		if nil == err {
+			err = r.processResponse(res)
 		}
 		atomic.AddInt32(&r.rangeWorker, -1)
-		loop_fetch()
+		if nil == err {
+			loop_fetch()
+		} else {
+			log.Printf("Session[%d]Range Fetch:%s failed:%v\n", r.SessionID, rangeHeader, err)
+			r.Close()
+		}
 	}
 	loop_fetch = func() {
 		for !r.closed && int(r.rangeWorker) < r.FetchWorkerNum && r.rangePos < r.contentEnd && (r.rangePos-r.expectedRangePos) < r.FetchLimit*r.FetchWorkerNum*2 {
