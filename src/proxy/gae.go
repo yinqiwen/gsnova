@@ -288,14 +288,14 @@ func (gae *GAEHttpConnection) requestEvent(client *http.Client, conn *SessionCon
 	return nil, nil
 }
 
-func (gae *GAEHttpConnection) doRangeFetch(req *http.Request, firstChunkRes *http.Response) (*http.Response, error) {
+func (gae *GAEHttpConnection) doRangeFetch(req *http.Request, firstChunkRes *http.Response) {
 	task := new(rangeFetchTask)
 	task.FetchLimit = int(gae_cfg.FetchLimitSize)
 	task.FetchWorkerNum = int(gae_cfg.ConcurrentRangeFetcher)
 	task.SessionID = gae.sess.SessionID
-//	task.TaskValidation = func() bool {
-//		return !util.IsDeadConnection(gae.sess.LocalRawConn)
-//	}
+	//	task.TaskValidation = func() bool {
+	//		return !util.IsDeadConnection(gae.sess.LocalRawConn)
+	//	}
 	gae.rangeWorker = task
 	fetch := func(preq *http.Request) (*http.Response, error) {
 		ev := new(event.HTTPRequestEvent)
@@ -323,7 +323,13 @@ func (gae *GAEHttpConnection) doRangeFetch(req *http.Request, firstChunkRes *htt
 			pres.Body.Close()
 		}
 	}
-	return pres, err
+	if nil != err {
+		log.Printf("Session[%d]Range task failed for reason:%v\n", gae.sess.SessionID, err)
+	}
+	if nil != err || !util.IsResponseKeepAlive(pres) || !util.IsRequestKeepAlive(req) {
+		gae.sess.LocalRawConn.Close()
+		gae.sess.State = STATE_SESSION_CLOSE
+	}
 }
 
 func (gae *GAEHttpConnection) handleHttpRes(conn *SessionConnection, req *event.HTTPRequestEvent, ev *event.HTTPResponseEvent) (*http.Response, error) {
@@ -338,8 +344,8 @@ func (gae *GAEHttpConnection) handleHttpRes(conn *SessionConnection, req *event.
 			}
 		}
 		if length > end+1 {
-			_, err := gae.doRangeFetch(req.RawReq, ev.ToResponse())
-			return nil, err
+			go gae.doRangeFetch(req.RawReq, ev.ToResponse())
+			return nil, nil
 		}
 		if len(originRange) == 0 {
 			ev.Status = 200
@@ -391,32 +397,28 @@ func (gae *GAEHttpConnection) Request(conn *SessionConnection, ev event.Event) (
 			}
 
 			log.Printf("Session[%d]Request %s\n", httpreq.GetHash(), util.GetURLString(httpreq.RawReq, true))
-			requestProxyed := false
 			var httpres *http.Response
 			if strings.EqualFold(httpreq.Method, "GET") {
 				if hostPatternMatched(gae_cfg.InjectRange, httpreq.RawReq.Host) || gae.inject_range {
-					//rangeHeader := httpreq.GetHeader("Range")
-					httpres, err = gae.doRangeFetch(httpreq.RawReq, nil)
-					requestProxyed = true
+					conn.State = STATE_RECV_HTTP
+					go gae.doRangeFetch(httpreq.RawReq, nil)
+					return nil, nil
 				}
 			}
-			if !requestProxyed {
+			err, res = gae.requestEvent(gaeHttpClient, conn, ev)
+			if nil != err {
+				//try again
 				err, res = gae.requestEvent(gaeHttpClient, conn, ev)
-				if nil != err {
-					//try again
-					err, res = gae.requestEvent(gaeHttpClient, conn, ev)
-				}
-				if nil != err || nil == res {
-					return
-				}
-				conn.State = STATE_RECV_HTTP
-				httpresev := res.(*event.HTTPResponseEvent)
-				if httpresev.Status == 403 {
-					log.Printf("ERROR:Session[%d]Request %s %s is forbidon\n", httpreq.GetHash(), httpreq.Method, httpreq.RawReq.Host)
-				}
-				httpres, err = gae.handleHttpRes(conn, httpreq, httpresev)
 			}
-
+			if nil != err || nil == res {
+				return
+			}
+			conn.State = STATE_RECV_HTTP
+			httpresev := res.(*event.HTTPResponseEvent)
+			if httpresev.Status == 403 {
+				log.Printf("ERROR:Session[%d]Request %s %s is forbidon\n", httpreq.GetHash(), httpreq.Method, httpreq.RawReq.Host)
+			}
+			httpres, err = gae.handleHttpRes(conn, httpreq, httpresev)
 			//			if nil != httpres {
 			//				log.Printf("Session[%d]Response %d %v\n", httpreq.GetHash(), httpres.StatusCode, httpres.Header)
 			//			}

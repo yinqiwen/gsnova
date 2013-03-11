@@ -48,7 +48,6 @@ func (r *rangeBody) Read(p []byte) (n int, err error) {
 	if r.closed {
 		return 0, io.EOF
 	}
-	//log.Printf("#########\n")
 	if r.buf.Len() > 0 {
 		return r.buf.Read(p)
 	}
@@ -227,7 +226,7 @@ func (r *rangeFetchTask) ProcessAyncResponse(res *http.Response, httpWrite func(
 		location := res.Header.Get("Location")
 		xrange := res.Header.Get("X-Range")
 		if len(location) > 0 && len(xrange) > 0 {
-		    freq := cloneHttpReq(r.req)
+			freq := cloneHttpReq(r.req)
 			freq.RequestURI = location
 			freq.Header.Set("X-Snova-HCE", "1")
 			freq.Header.Set("Range", xrange)
@@ -342,8 +341,8 @@ func (r *rangeFetchTask) SyncGet(req *http.Request, firstChunkRes *http.Response
 		log.Printf("Session[%d]Fetch range:%s\n", r.SessionID, rangeHeader)
 		var res *http.Response
 		var err error
-		retyCount := 1
-		for retyCount < 4 {
+		retryCount := 1
+		for retryCount < 4 && !r.closed {
 			res, err = fetch(clonereq)
 			if nil == err {
 				if res.StatusCode == 206 {
@@ -357,7 +356,7 @@ func (r *rangeFetchTask) SyncGet(req *http.Request, firstChunkRes *http.Response
 					}
 				} else {
 					log.Printf("Session[%d]Range fetch:%s failed with error response %d %v\n", r.SessionID, rangeHeader, res.StatusCode, res.Header)
-					if res.StatusCode == 408 {
+					if res.StatusCode == 408 || res.StatusCode == 503 {
 						r.FetchWorkerNum = 1
 						log.Printf("Session[%d]Reduce fetch worker num to 1 since server is too busy.\n", r.SessionID)
 						waittime := 1 * time.Second
@@ -370,7 +369,7 @@ func (r *rangeFetchTask) SyncGet(req *http.Request, firstChunkRes *http.Response
 						for {
 							time.Sleep(waittime)
 							tmpres, tmperr := fetch(testreq)
-							if nil == tmperr && tmpres.StatusCode == 408 {
+							if nil == tmperr && (tmpres.StatusCode == 408 || tmpres.StatusCode == 503) {
 								waittime *= 2
 								continue
 							}
@@ -379,7 +378,7 @@ func (r *rangeFetchTask) SyncGet(req *http.Request, firstChunkRes *http.Response
 					}
 				}
 			}
-			retyCount++
+			retryCount++
 		}
 
 		if nil == err {
