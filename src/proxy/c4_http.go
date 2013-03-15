@@ -24,13 +24,14 @@ type pushWorker struct {
 	working bool
 	cache   bytes.Buffer
 	mutex   sync.Mutex
+	ch      chan []byte
 }
 
 func (p *pushWorker) offer(ev event.Event) {
 	p.mutex.Lock()
 	event.EncodeEvent(&p.cache, ev)
 	p.mutex.Unlock()
-	go p.tryWriteCache()
+	p.tryWriteCache()
 }
 
 func (p *pushWorker) tryWriteCache() {
@@ -42,7 +43,17 @@ func (p *pushWorker) tryWriteCache() {
 	p.cache.Read(tmp)
 	p.cache.Reset()
 	p.mutex.Unlock()
-	p.writeContent(tmp)
+	//p.writeContent(tmp)
+	p.ch <- tmp
+}
+
+func (p *pushWorker) loop() {
+	for {
+		select {
+		case content := <-p.ch:
+			p.writeContent(content)
+		}
+	}
 }
 
 func (p *pushWorker) writeContent(content []byte) {
@@ -179,8 +190,10 @@ func newHttpTunnelService(server string) *httpTunnelService {
 	for i, _ := range serv.puller {
 		serv.pusher[i] = new(pushWorker)
 		serv.pusher[i].index = i
+		serv.pusher[i].ch = make(chan []byte, 10)
 		u, _ = url.Parse(server)
 		serv.pusher[i].server = u
+		go serv.pusher[i].loop()
 	}
 	return serv
 }

@@ -335,7 +335,6 @@ func (r *rangeFetchTask) SyncGet(req *http.Request, firstChunkRes *http.Response
 
 	f = func(begin, end int) {
 		clonereq := cloneHttpReq(r.req)
-		clonereq.Method = "GET"
 		rangeHeader := fmt.Sprintf("bytes=%d-%d", begin, end)
 		clonereq.Header.Set("Range", rangeHeader)
 		log.Printf("Session[%d]Fetch range:%s\n", r.SessionID, rangeHeader)
@@ -358,7 +357,7 @@ func (r *rangeFetchTask) SyncGet(req *http.Request, firstChunkRes *http.Response
 					log.Printf("Session[%d]Range fetch:%s failed with error response %d %v\n", r.SessionID, rangeHeader, res.StatusCode, res.Header)
 					if res.StatusCode == 408 || res.StatusCode == 503 {
 						r.FetchWorkerNum = 1
-						log.Printf("Session[%d]Reduce fetch worker num to 1 since server is too busy.\n", r.SessionID)
+						log.Printf("Session[%d]Reduce fetch worker num to 1 since remote server is too busy.\n", r.SessionID)
 						waittime := 1 * time.Second
 						testreq := &http.Request{
 							Method:        "GET",
@@ -381,7 +380,7 @@ func (r *rangeFetchTask) SyncGet(req *http.Request, firstChunkRes *http.Response
 			retryCount++
 		}
 
-		if nil == err {
+		if nil == err{
 			err = r.processResponse(res)
 		}
 		atomic.AddInt32(&r.rangeWorker, -1)
