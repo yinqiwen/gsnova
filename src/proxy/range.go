@@ -210,7 +210,6 @@ func (r *rangeFetchTask) processResponse(res *http.Response) error {
 			if chunk, exist := r.chunks[r.expectedRangePos]; exist {
 				delete(r.chunks, r.expectedRangePos)
 				r.expectedRangePos += body.WriteHttpBody(chunk)
-				r.chunkMutex.Unlock()
 			} else {
 				if r.expectedRangePos < r.contentEnd {
 					log.Printf("Session[%d]Expect range chunk:%d\n", r.SessionID, r.expectedRangePos)
