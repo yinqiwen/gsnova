@@ -19,9 +19,9 @@ func isKeepAlive(header http.Header, protoMajor, protoMinor int) bool {
 	if strings.EqualFold(c, "close") {
 		return false
 	}
-	if protoMinor == 1 {
-		return true
-	}
+	//if protoMinor == 1 {
+	//	return true
+	//}
 	return strings.EqualFold(c, "keep-alive")
 }
 

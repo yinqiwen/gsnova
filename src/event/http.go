@@ -322,7 +322,7 @@ func (res *HTTPResponseEvent) ToResponse() *http.Response {
 	raw := new(http.Response)
 	raw.Proto = "HTTP"
 	raw.ProtoMajor = 1
-	raw.ProtoMinor = 1
+	raw.ProtoMinor = 0
 	//raw.Close = true
 	raw.ContentLength = int64(res.Content.Len())
 	raw.Header = make(http.Header)

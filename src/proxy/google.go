@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync/atomic"
 	"time"
 	"util"
@@ -77,7 +78,7 @@ func (google *GoogleConnection) Request(conn *SessionConnection, ev event.Event)
 				proxyURL, _ := url.Parse(googleLocalProxy)
 				proxyConn, err = net.Dial("tcp", proxyURL.Host)
 				addr, _ := getLocalHostMapping(GOOGLE_HTTPS)
-				
+
 				connreq := req.RawReq
 				connreq.Host = addr
 				if nil == err {
@@ -125,8 +126,8 @@ func (google *GoogleConnection) Request(conn *SessionConnection, ev event.Event)
 				return httpsGoogleClient.Do(req.RawReq)
 			}
 			resp, err = tryProxy()
-			if nil != err {
-				//try proxy
+			if nil != err && strings.EqualFold(req.Method, "GET") {
+				//try proxy again
 				resp, err = tryProxy()
 			}
 			if nil != err {
@@ -140,6 +141,7 @@ func (google *GoogleConnection) Request(conn *SessionConnection, ev event.Event)
 				conn.LocalRawConn.Close()
 				conn.State = STATE_SESSION_CLOSE
 			} else {
+			    log.Printf("Session[%d]Res %d %v\n", req.GetHash(), resp.StatusCode, resp.Header)
 				conn.State = STATE_RECV_HTTP
 			}
 		}
