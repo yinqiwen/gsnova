@@ -556,6 +556,7 @@ func initGAEConfig() {
 	if proxy, exist := common.Cfg.GetProperty("GAE", "Proxy"); exist {
 		gae_cfg.Proxy = proxy
 	}
+	
 }
 
 func (manager *GAE) fetchSharedAppIDs() (error, []string) {

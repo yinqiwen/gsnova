@@ -528,7 +528,6 @@ func SelectProxy(req *http.Request, conn *SessionConnection) ([]RemoteConnection
 	}
 
 	if need_select_proxy && !isHttpsConn && containsAttr(attrs, ATTR_REDIRECT_HTTPS) {
-	    log.Printf("#########Redirect for %s\n", req.Method)
 		redirectHttps(conn.LocalRawConn, req)
 		return nil, nil
 	}
