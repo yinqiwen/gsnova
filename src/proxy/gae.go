@@ -194,6 +194,9 @@ func (conn *GAEHttpConnection) Auth() error {
 		log.Printf("Type is  %d\n", res.GetType())
 		return fmt.Errorf("Invalid auth response.")
 	} else {
+		if len(authres.Token) == 0 {
+			return fmt.Errorf("%s", authres.Error)
+		}
 		log.Printf("Auth token is %s\n", authres.Token)
 		conn.authToken = authres.Token
 		conn.support_tunnel = len(authres.Version) > 0
@@ -401,7 +404,7 @@ func (gae *GAEHttpConnection) Request(conn *SessionConnection, ev event.Event) (
 			if strings.EqualFold(httpreq.Method, "GET") {
 				if hostPatternMatched(gae_cfg.InjectRange, httpreq.RawReq.Host) || gae.inject_range {
 					conn.State = STATE_RECV_HTTP
-					go gae.doRangeFetch(httpreq.RawReq, nil)
+					gae.doRangeFetch(httpreq.RawReq, nil)
 					return nil, nil
 				}
 			}

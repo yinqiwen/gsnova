@@ -45,17 +45,17 @@ func (r *rangeBody) WriteHttpBody(body io.Reader) int {
 }
 
 func (r *rangeBody) Read(p []byte) (n int, err error) {
-	if r.closed {
-		return 0, io.EOF
-	}
 	if r.buf.Len() > 0 {
 		return r.buf.Read(p)
+	}
+	if r.closed {
+		return 0, io.EOF
 	}
 	r.buf.Reset()
 	select {
 	case b := <-r.c:
 		if nil == b {
-			r.buf.Reset()
+			r.closed = true
 			return 0, io.EOF
 		}
 		r.buf = b
