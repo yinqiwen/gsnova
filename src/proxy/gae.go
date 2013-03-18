@@ -151,11 +151,12 @@ func (auth *GAEAuth) parse(line string) error {
 }
 
 type GAEHttpConnection struct {
-	auth               GAEAuth
+	//auth               GAEAuth
+	gaeAuth            *GAEAuth
 	support_tunnel     bool
 	over_tunnel        bool
 	inject_range       bool
-	authToken          string
+	//authToken          string
 	sess               *SessionConnection
 	manager            *GAE
 	tunnelChannel      chan event.Event
@@ -180,11 +181,12 @@ func (conn *GAEHttpConnection) GetConnectionManager() RemoteConnectionManager {
 	return conn.manager
 }
 
-func (conn *GAEHttpConnection) Auth() error {
+func (conn *GAEHttpConnection) Auth(auth *GAEAuth) error {
 	var authEvent event.AuthRequestEvent
-	authEvent.User = conn.auth.user
-	authEvent.Passwd = conn.auth.passwd
-	authEvent.Appid = conn.auth.appid
+	authEvent.User = auth.user
+	authEvent.Passwd = auth.passwd
+	authEvent.Appid = auth.appid
+	conn.gaeAuth = auth
 	err, res := conn.Request(nil, &authEvent)
 	if nil != err {
 		log.Println(err)
@@ -198,14 +200,17 @@ func (conn *GAEHttpConnection) Auth() error {
 			return fmt.Errorf("%s", authres.Error)
 		}
 		log.Printf("Auth token is %s\n", authres.Token)
-		conn.authToken = authres.Token
+		auth.token = authres.Token
 		conn.support_tunnel = len(authres.Version) > 0
 	}
 	return nil
 }
 
 func (gae *GAEHttpConnection) requestEvent(client *http.Client, conn *SessionConnection, ev event.Event) (err error, res event.Event) {
-	auth := &gae.auth
+	auth := gae.gaeAuth
+	if nil == auth {
+		auth = gae.manager.auths.Select().(*GAEAuth)
+	}
 	domain := auth.appid + ".appspot.com"
 	if strings.Contains(auth.appid, ".") {
 		domain = auth.appid
@@ -449,7 +454,7 @@ func (manager *GAE) shareAppId(appid, email string, operation uint32) error {
 	auth.user = ANONYMOUSE
 	auth.passwd = ANONYMOUSE
 	conn := new(GAEHttpConnection)
-	conn.auth = auth
+	//conn.auth = auth
 	conn.manager = manager
 	err, res := conn.Request(nil, &ev)
 	if nil != err {
@@ -472,7 +477,7 @@ func (manager *GAE) GetRemoteConnection(ev event.Event, attrs map[string]string)
 		return nil, fmt.Errorf("No GAE connection available.")
 	}
 	gae := new(GAEHttpConnection)
-	gae.authToken = gae.auth.token
+	//gae.authToken = gae.auth.token
 	gae.manager = manager
 
 	if containsAttr(attrs, ATTR_TUNNEL) {
@@ -483,21 +488,21 @@ func (manager *GAE) GetRemoteConnection(ev event.Event, attrs map[string]string)
 	if containsAttr(attrs, ATTR_RANGE) {
 		gae.inject_range = true
 	}
-	found := false
+	//found := false
 	if containsAttr(attrs, ATTR_APP) {
 		appid := attrs[ATTR_APP]
 		for _, tmp := range manager.auths.ArrayValues() {
 			auth := tmp.(*GAEAuth)
 			if auth.appid == appid {
-				gae.auth = *auth
-				found = true
+				gae.gaeAuth = auth
+				//found = true
 				break
 			}
 		}
 	}
-	if !found {
-		gae.auth = *(manager.auths.Select().(*GAEAuth))
-	}
+	//	if !found {
+	//		gae.auth = *(manager.auths.Select().(*GAEAuth))
+	//	}
 
 	total_gae_conn_num = total_gae_conn_num + 1
 	return gae, nil
@@ -556,7 +561,7 @@ func initGAEConfig() {
 	if proxy, exist := common.Cfg.GetProperty("GAE", "Proxy"); exist {
 		gae_cfg.Proxy = proxy
 	}
-	
+
 }
 
 func (manager *GAE) fetchSharedAppIDs() (error, []string) {
@@ -565,7 +570,7 @@ func (manager *GAE) fetchSharedAppIDs() (error, []string) {
 	auth.user = ANONYMOUSE
 	auth.passwd = ANONYMOUSE
 	conn := new(GAEHttpConnection)
-	conn.auth = auth
+	conn.gaeAuth = &auth
 	conn.manager = manager
 	var req event.RequestAppIDEvent
 	err, res := conn.Request(nil, &req)
@@ -624,22 +629,21 @@ func (manager *GAE) Init() error {
 	}
 	for _, auth := range authArray {
 		conn := new(GAEHttpConnection)
-
-		conn.auth = *auth
+		//conn.auth = *auth
 		conn.manager = manager
-		err := conn.Auth()
+		err := conn.Auth(auth)
 		if nil != err {
 			conn.Close()
 			//try again
 			log.Printf("Failed first to auth appid:%s\n", err.Error())
-			err = conn.Auth()
+			err = conn.Auth(auth)
 		}
 		if nil != err {
 			log.Printf("Failed to auth appid:%s\n", err.Error())
 			continue
 		}
-		auth.token = conn.authToken
-		conn.auth.token = conn.authToken
+		//auth.token = conn.authToken
+		//conn.auth.token = conn.authToken
 		total_gae_conn_num = total_gae_conn_num + 1
 		manager.auths.Add(auth)
 	}
