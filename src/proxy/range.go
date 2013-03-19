@@ -68,7 +68,7 @@ func (r *rangeBody) Close() error {
 	if !r.closed {
 		r.c <- nil
 	}
-	r.closed = true
+	//r.closed = true
 	return nil
 }
 
