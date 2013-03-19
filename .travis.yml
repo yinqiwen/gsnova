@@ -1,0 +1,4 @@
+language: go
+
+script:
+ - ./build.sh dist gsnova
