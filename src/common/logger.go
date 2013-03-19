@@ -5,8 +5,7 @@ import (
 	"io"
 	"log"
 	"os"
-	"syscall"
-	//"time"
+	//"syscall"
 )
 
 var logWriter *MultiWriter
@@ -49,7 +48,7 @@ func initLogWriter(path string) *MultiWriter {
 	} else {
 		writer.file = file
 		//Redirect crash stack dump to log file
-		syscall.Dup2(int(file.Fd()), 2)
+		//syscall.Dup2(int(file.Fd()), 2)
 	}
 	logWriter = writer
 	return writer
