@@ -152,10 +152,10 @@ func (auth *GAEAuth) parse(line string) error {
 
 type GAEHttpConnection struct {
 	//auth               GAEAuth
-	gaeAuth            *GAEAuth
-	support_tunnel     bool
-	over_tunnel        bool
-	inject_range       bool
+	gaeAuth        *GAEAuth
+	support_tunnel bool
+	over_tunnel    bool
+	inject_range   bool
 	//authToken          string
 	sess               *SessionConnection
 	manager            *GAE
@@ -244,6 +244,8 @@ func (gae *GAEHttpConnection) requestEvent(client *http.Client, conn *SessionCon
 	req := &http.Request{
 		Method:        "POST",
 		URL:           &url.URL{Scheme: scheme, Host: addr, Path: "/invoke"},
+		ProtoMajor:    1,
+		ProtoMinor:    1,
 		Host:          addr,
 		Header:        make(http.Header),
 		Body:          ioutil.NopCloser(&buf),

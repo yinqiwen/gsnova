@@ -3,6 +3,7 @@ package proxy
 import (
 	"bytes"
 	"common"
+	"crypto/tls"
 	"encoding/binary"
 	"errors"
 	"event"
@@ -476,9 +477,13 @@ func (manager *C4) Init() error {
 	manager.servers = &util.ListSelector{}
 
 	c4HttpClient = new(http.Client)
+	tlcfg := &tls.Config{}
+	tlcfg.InsecureSkipVerify = true
+
 	tr := &http.Transport{
 		DisableCompression:  true,
 		MaxIdleConnsPerHost: 20,
+		TLSClientConfig:     tlcfg,
 		Proxy: func(req *http.Request) (*url.URL, error) {
 			if len(c4_cfg.Proxy) == 0 {
 				return nil, nil

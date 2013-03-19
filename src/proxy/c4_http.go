@@ -62,14 +62,18 @@ func (p *pushWorker) writeContent(content []byte) {
 	if !strings.HasSuffix(p.server.Path, "push") {
 		p.server.Path = p.server.Path + "push"
 	}
+
 	req := &http.Request{
 		Method:        "POST",
 		URL:           p.server,
+		ProtoMajor:    1,
+		ProtoMinor:    1,
 		Host:          p.server.Host,
 		Header:        make(http.Header),
 		Body:          ioutil.NopCloser(buf),
 		ContentLength: int64(buf.Len()),
 	}
+
 	if c4_cfg.Encrypter == event.ENCRYPTER_RC4 {
 		tmp := []byte(common.RC4Key)
 		cipher, _ := rc4.NewCipher(tmp)
@@ -124,6 +128,8 @@ func (p *pullWorker) loop() {
 		req := &http.Request{
 			Method:        "POST",
 			URL:           p.server,
+			ProtoMajor:    1,
+			ProtoMinor:    1,
 			Host:          p.server.Host,
 			Header:        make(http.Header),
 			ContentLength: 0,
