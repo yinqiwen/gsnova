@@ -2,16 +2,18 @@ package common
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"os"
-	"io"
+	"syscall"
+	//"time"
 )
 
 var logWriter *MultiWriter
 
 type MultiWriter struct {
-	path string
-	file *os.File
+	path    string
+	file    *os.File
 	writers []io.Writer
 }
 
@@ -19,8 +21,8 @@ func (writer *MultiWriter) Write(p []byte) (n int, err error) {
 	fmt.Print(string(p))
 	if nil != writer.file {
 		_, err := writer.file.Write(p)
-		if nil != err{
-		   fmt.Printf("Failed to write logfile for reason:%v\n", err)
+		if nil != err {
+			fmt.Printf("Failed to write logfile for reason:%v\n", err)
 		}
 		fi, err := writer.file.Stat()
 		//5MB
@@ -31,8 +33,8 @@ func (writer *MultiWriter) Write(p []byte) (n int, err error) {
 			writer.file, _ = os.OpenFile(writer.path, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
 		}
 	}
-	for _, writer := range writer.writers{
-	   writer.Write(p)
+	for _, writer := range writer.writers {
+		writer.Write(p)
 	}
 	return len(p), nil
 }
@@ -46,13 +48,16 @@ func initLogWriter(path string) *MultiWriter {
 		fmt.Println(err)
 	} else {
 		writer.file = file
+		//Redirect crash stack dump to log file
+		syscall.Dup2(int(file.Fd()), 2)
 	}
 	logWriter = writer
 	return writer
 }
 
-func AddLogWriter(writer io.Writer){
-   logWriter.writers = append(logWriter.writers, writer)
+
+func AddLogWriter(writer io.Writer) {
+	logWriter.writers = append(logWriter.writers, writer)
 }
 
 func InitLogger() {

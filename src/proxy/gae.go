@@ -352,7 +352,7 @@ func (gae *GAEHttpConnection) handleHttpRes(conn *SessionConnection, req *event.
 			}
 		}
 		if length > end+1 {
-			go gae.doRangeFetch(req.RawReq, ev.ToResponse())
+			gae.doRangeFetch(req.RawReq, ev.ToResponse())
 			return nil, nil
 		}
 		if len(originRange) == 0 {
@@ -408,7 +408,7 @@ func (gae *GAEHttpConnection) Request(conn *SessionConnection, ev event.Event) (
 			var httpres *http.Response
 			if strings.EqualFold(httpreq.Method, "GET") {
 				if hostPatternMatched(gae_cfg.InjectRange, httpreq.RawReq.Host) || gae.inject_range {
-					conn.State = STATE_RECV_HTTP
+					//conn.State = STATE_RECV_HTTP
 					gae.doRangeFetch(httpreq.RawReq, nil)
 					return nil, nil
 				}

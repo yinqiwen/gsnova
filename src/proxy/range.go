@@ -127,11 +127,12 @@ func (r *rangeFetchTask) processRequest(req *http.Request) error {
 }
 
 func (r *rangeFetchTask) Close() {
+	r.closed = true
 	if nil != r.res && nil != r.res.Body {
 		r.chunks = make(map[int]io.ReadCloser)
 		r.res.Body.Close()
 	}
-	r.closed = true
+
 }
 
 func (r *rangeFetchTask) processResponse(res *http.Response) error {
@@ -375,6 +376,9 @@ func (r *rangeFetchTask) SyncGet(req *http.Request, firstChunkRes *http.Response
 								waittime *= 2
 								continue
 							}
+							if nil == tmperr && tmpres.StatusCode < 400 {
+								retryCount--
+							}
 							break
 						}
 					}
@@ -408,6 +412,6 @@ func (r *rangeFetchTask) SyncGet(req *http.Request, firstChunkRes *http.Response
 			go f(begin, end)
 		}
 	}
-	go loop_fetch()
+	loop_fetch()
 	return r.res, nil
 }
