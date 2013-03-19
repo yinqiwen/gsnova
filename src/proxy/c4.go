@@ -482,7 +482,7 @@ func (manager *C4) Init() error {
 
 	tr := &http.Transport{
 		DisableCompression:  true,
-		MaxIdleConnsPerHost: 20,
+		MaxIdleConnsPerHost: int(c4_cfg.MaxConn * 2),
 		TLSClientConfig:     tlcfg,
 		Proxy: func(req *http.Request) (*url.URL, error) {
 			if len(c4_cfg.Proxy) == 0 {

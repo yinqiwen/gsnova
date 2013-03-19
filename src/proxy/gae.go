@@ -258,11 +258,6 @@ func (gae *GAEHttpConnection) requestEvent(client *http.Client, conn *SessionCon
 	req.Close = false
 	req.Header.Set("Connection", "keep-alive")
 	req.Header.Set("Content-Type", "image/jpeg")
-	if proxyInfo, exist := common.Cfg.GetProperty("LocalProxy", "Proxy"); exist {
-		if strings.HasPrefix(proxyInfo, "http://") && strings.Contains(proxyInfo, "Google") {
-			req.Method = string(CRLFs) + "POST"
-		}
-	}
 
 	var response *http.Response
 	response, err = gaeHttpClient.Do(req)
@@ -274,8 +269,8 @@ func (gae *GAEHttpConnection) requestEvent(client *http.Client, conn *SessionCon
 			log.Printf("Session[%d]Invalid response:%d\n", ev.GetHash(), response.StatusCode)
 			return fmt.Errorf("Invalid response:%d", response.StatusCode), nil
 		} else {
-			buf := util.GetBuffer()
-			n, err := io.Copy(buf, response.Body)
+			var buf bytes.Buffer
+			n, err := io.Copy(&buf, response.Body)
 			if int64(n) < response.ContentLength {
 				return fmt.Errorf("No sufficient space in body."), nil
 			}
@@ -283,14 +278,13 @@ func (gae *GAEHttpConnection) requestEvent(client *http.Client, conn *SessionCon
 				return err, nil
 			}
 			response.Body.Close()
-			if !tags.Decode(buf) {
+			if !tags.Decode(&buf) {
 				return fmt.Errorf("Failed to decode event tag"), nil
 			}
-			err, res = event.DecodeEvent(buf)
+			err, res = event.DecodeEvent(&buf)
 			if nil == err {
 				res = event.ExtractEvent(res)
 			}
-			util.RecycleBuffer(buf)
 			return err, res
 		}
 	}

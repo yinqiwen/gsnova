@@ -197,6 +197,9 @@ func (r *rangeFetchTask) processResponse(res *http.Response) error {
 		}
 		return nil
 	case STATE_WAIT_RANGE_GET_RES:
+		if nil == res.Body {
+			return fmt.Errorf("Nil body for response:%d", res.StatusCode)
+		}
 		contentRange := res.Header.Get("Content-Range")
 		start, _, _ := util.ParseContentRangeHeaderValue(contentRange)
 		log.Printf("Session[%d]Recv range chunk:%s", r.SessionID, contentRange)
@@ -348,7 +351,7 @@ func (r *rangeFetchTask) SyncGet(req *http.Request, firstChunkRes *http.Response
 		for retryCount < 4 && !r.closed {
 			res, err = fetch(clonereq)
 			if nil == err {
-				if res.StatusCode == 206 {
+				if res.StatusCode == 206 && nil != res.Body {
 					break
 				}
 				if res.StatusCode == 302 {
