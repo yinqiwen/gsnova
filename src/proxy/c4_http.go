@@ -7,7 +7,7 @@ import (
 	"encoding/base64"
 	"event"
 	"fmt"
-	"io/ioutil"
+	//"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
@@ -63,16 +63,17 @@ func (p *pushWorker) writeContent(content []byte) {
 		p.server.Path = p.server.Path + "push"
 	}
 
-	req := &http.Request{
-		Method:        "POST",
-		URL:           p.server,
-		ProtoMajor:    1,
-		ProtoMinor:    1,
-		Host:          p.server.Host,
-		Header:        make(http.Header),
-		Body:          ioutil.NopCloser(buf),
-		ContentLength: int64(buf.Len()),
-	}
+//	req := &http.Request{
+//		Method:        "POST",
+//		URL:           p.server,
+//		ProtoMajor:    1,
+//		ProtoMinor:    1,
+//		Host:          p.server.Host,
+//		Header:        make(http.Header),
+//		Body:          ioutil.NopCloser(buf),
+//		ContentLength: int64(buf.Len()),
+//	}
+	req, _ := http.NewRequest("POST", p.server.String(), buf)
 
 	if c4_cfg.Encrypter == event.ENCRYPTER_RC4 {
 		tmp := []byte(common.RC4Key)
@@ -125,15 +126,16 @@ func (p *pullWorker) loop() {
 		p.server.Path = p.server.Path + "pull"
 	}
 	for {
-		req := &http.Request{
-			Method:        "POST",
-			URL:           p.server,
-			ProtoMajor:    1,
-			ProtoMinor:    1,
-			Host:          p.server.Host,
-			Header:        make(http.Header),
-			ContentLength: 0,
-		}
+		req, _ := http.NewRequest("POST", p.server.String(), nil)
+		//		req := &http.Request{
+		//			Method:        "POST",
+		//			URL:           p.server,
+		//			ProtoMajor:    1,
+		//			ProtoMinor:    1,
+		//			Host:          p.server.Host,
+		//			Header:        make(http.Header),
+		//			ContentLength: 0,
+		//		}
 
 		req.Header.Set("UserToken", userToken)
 		req.Header.Set("C4MiscInfo", fmt.Sprintf("%d_%d", p.index, c4_cfg.ReadTimeout))

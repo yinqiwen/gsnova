@@ -3,7 +3,7 @@ package util
 import (
 	"fmt"
 	//"log"
-	//"io"
+	"io"
 	"math"
 	"net"
 	"strconv"
@@ -34,15 +34,13 @@ func IsDeadConnection(c net.Conn) bool {
 	if nil == c {
 		return true
 	}
-	c.SetReadDeadline(time.Now().Add(1 * time.Millisecond))
-	_, err := c.Read(make([]byte, 0))
-	if err != nil {
-		if IsTimeoutError(err) {
-			var zero time.Time
-			c.SetReadDeadline(zero)
-			return false
-		}
+	c.SetReadDeadline(time.Now())
+	if _, err := c.Read(make([]byte, 0)); err == io.EOF {
+	    c.Close()
 		return true
+	} else {
+		var zero time.Time
+		c.SetReadDeadline(zero)
 	}
 	return false
 }

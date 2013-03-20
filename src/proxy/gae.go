@@ -322,6 +322,7 @@ func (gae *GAEHttpConnection) doRangeFetch(req *http.Request, firstChunkRes *htt
 		err = pres.Write(gae.sess.LocalRawConn)
 		if nil != err {
 			task.Close()
+			gae.rangeWorker = nil
 		}
 		if nil != pres.Body {
 			pres.Body.Close()
@@ -333,6 +334,7 @@ func (gae *GAEHttpConnection) doRangeFetch(req *http.Request, firstChunkRes *htt
 	if nil != err || !util.IsResponseKeepAlive(pres) || !util.IsRequestKeepAlive(req) {
 		gae.sess.LocalRawConn.Close()
 		gae.sess.State = STATE_SESSION_CLOSE
+		gae.Close()
 	}
 }
 
@@ -429,6 +431,7 @@ func (gae *GAEHttpConnection) Request(conn *SessionConnection, ev event.Event) (
 			if nil != err || !util.IsResponseKeepAlive(httpres) || !util.IsRequestKeepAlive(httpreq.RawReq) {
 				conn.LocalRawConn.Close()
 				conn.State = STATE_SESSION_CLOSE
+				gae.Close()
 			}
 			return err, nil
 		}
