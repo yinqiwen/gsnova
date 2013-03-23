@@ -79,6 +79,16 @@ func EncodeBytesValue(buf *bytes.Buffer, v []byte) {
 	}
 }
 
+func EncodeByteBufferValue(buf *bytes.Buffer, v *bytes.Buffer) {
+	if nil == v {
+		EncodeUInt64Value(buf, 0)
+	} else {
+		EncodeUInt64Value(buf, uint64(v.Len()))
+		buf.ReadFrom(v)
+		//buf.Write(v)
+	}
+}
+
 func EncodeStringValue(buf *bytes.Buffer, v string) {
 	EncodeUInt64Value(buf, uint64(len(v)))
 	buf.Write([]byte(v))

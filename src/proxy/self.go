@@ -178,9 +178,8 @@ func shareHandler(w http.ResponseWriter, req *http.Request) {
 
 func statHandler(w http.ResponseWriter, req *http.Request) {
 	runtime.GC()
-	var stat runtime.MemStats
-	runtime.GC()
-	runtime.ReadMemStats(&stat)
+	//var stat runtime.MemStats
+	//runtime.ReadMemStats(&stat)
 	var buf bytes.Buffer
 	buf.WriteString(fmt.Sprintf("HostMappingSize: %d\n", len(hostMapping)))
 	buf.WriteString(fmt.Sprintf("BlockVerifyCacheSize: %d\n", len(blockVerifyCache)))

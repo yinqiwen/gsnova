@@ -41,6 +41,7 @@ type C4Config struct {
 	ConcurrentRangeFetcher uint32
 	Proxy                  string
 	MultiRangeFetchEnable  bool
+	UseSysDNS              bool
 }
 
 var c4_cfg *C4Config
@@ -446,6 +447,11 @@ func initC4Config() {
 	if enable, exist := common.Cfg.GetIntProperty("C4", "MultiRangeFetchEnable"); exist {
 		c4_cfg.MultiRangeFetchEnable = (enable != 0)
 	}
+	
+	c4_cfg.UseSysDNS = false
+	if enable, exist := common.Cfg.GetIntProperty("C4", "UseSysDNS"); exist {
+		c4_cfg.UseSysDNS = (enable != 0)
+	}
 
 	c4_cfg.InjectRange = []*regexp.Regexp{}
 	if ranges, exist := common.Cfg.GetProperty("C4", "InjectRange"); exist {
@@ -480,10 +486,18 @@ func (manager *C4) Init() error {
 	tlcfg := &tls.Config{}
 	tlcfg.InsecureSkipVerify = true
 
+	dial := func(n, addr string) (net.Conn, error) {
+		if len(c4_cfg.Proxy) == 0 && !c4_cfg.UseSysDNS{
+			remote := getAddressMapping(addr)
+			return net.Dial(n, remote)
+		}
+		return net.Dial(n, addr)
+	}
 	tr := &http.Transport{
 		DisableCompression:  true,
 		MaxIdleConnsPerHost: int(c4_cfg.MaxConn * 2),
 		TLSClientConfig:     tlcfg,
+		Dial:                dial,
 		Proxy: func(req *http.Request) (*url.URL, error) {
 			if len(c4_cfg.Proxy) == 0 {
 				return nil, nil
@@ -494,7 +508,7 @@ func (manager *C4) Init() error {
 	c4HttpClient.Transport = tr
 
 	for i := uint32(0); i < c4_cfg.MaxConn; i++ {
-		c4WriteCBChannels[i] = make(chan event.Event, 10)
+		c4WriteCBChannels[i] = make(chan event.Event, 100)
 		go writeCBLoop(i)
 	}
 

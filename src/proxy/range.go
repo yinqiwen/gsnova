@@ -75,7 +75,7 @@ func (r *rangeBody) Close() error {
 func newRangeBody() *rangeBody {
 	body := new(rangeBody)
 	body.buf = new(bytes.Buffer)
-	body.c = make(chan *bytes.Buffer, 100)
+	body.c = make(chan *bytes.Buffer, 5)
 	return body
 }
 
@@ -118,6 +118,7 @@ func (r *rangeFetchTask) processRequest(req *http.Request) error {
 	}
 	r.chunks = make(map[int]io.ReadCloser)
 	if len(rangeHeader) > 0 {
+		log.Printf("Session[%d]Start with range:%s ", r.SessionID, rangeHeader)
 		r.originRangeHader = rangeHeader
 		r.contentBegin, r.contentEnd = util.ParseRangeHeaderValue(rangeHeader)
 		r.rangePos = r.contentBegin
@@ -132,7 +133,6 @@ func (r *rangeFetchTask) Close() {
 		r.chunks = make(map[int]io.ReadCloser)
 		r.res.Body.Close()
 	}
-
 }
 
 func (r *rangeFetchTask) processResponse(res *http.Response) error {
@@ -160,6 +160,7 @@ func (r *rangeFetchTask) processResponse(res *http.Response) error {
 		}
 		if r.contentEnd == -1 {
 			r.contentEnd = int(res.ContentLength) - 1
+			r.originRangeHader = ""
 		}
 		resbody := res.Body
 		r.res = res
@@ -179,8 +180,7 @@ func (r *rangeFetchTask) processResponse(res *http.Response) error {
 			rb := newRangeBody()
 			r.res.Body = rb
 		}
-
-		log.Printf("Session[%d]Recv first range chunk:%s, %d %d ", r.SessionID, contentRangeHeader, r.contentEnd, r.contentBegin)
+		//log.Printf("Session[%d]Recv first range chunk:%s, %d %d ", r.SessionID, contentRangeHeader, r.contentEnd, r.contentBegin)
 		if nil != resbody && r.res.StatusCode < 300 {
 			var n int
 			rb := r.res.Body.(*rangeBody)
@@ -329,6 +329,7 @@ func (r *rangeFetchTask) SyncGet(req *http.Request, firstChunkRes *http.Response
 	}
 
 	if firstChunkRes.StatusCode != 206 {
+		log.Printf("Session[%d]Recv res:%d %v\n", r.SessionID, firstChunkRes.StatusCode, firstChunkRes.Header)
 		return firstChunkRes, nil
 	}
 	//log.Printf("Session[%d]Recv res:%d %v\n", r.SessionID, res.StatusCode, res.Header)

@@ -1,5 +1,16 @@
 GSnova Changelog
 ===================
+Changes in version 0.22.0(2013.03.23)
+-------------------------------------------
+** Features
+   * [GAE] Remove google appengine dependency in Java code.
+   * [GAE] New Java deployer(No appengine SDK dependency).
+   * [GAE] Refactor user/pass mechanism.
+   * [C4] NodeJS server compatible with v0.6.x
+   
+** Improvement
+   * Bug fix
+
 Changes in version 0.21.0.1(2013.03.10)
 -------------------------------------------
 ** Features

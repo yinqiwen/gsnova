@@ -63,16 +63,16 @@ func (p *pushWorker) writeContent(content []byte) {
 		p.server.Path = p.server.Path + "push"
 	}
 
-//	req := &http.Request{
-//		Method:        "POST",
-//		URL:           p.server,
-//		ProtoMajor:    1,
-//		ProtoMinor:    1,
-//		Host:          p.server.Host,
-//		Header:        make(http.Header),
-//		Body:          ioutil.NopCloser(buf),
-//		ContentLength: int64(buf.Len()),
-//	}
+	//	req := &http.Request{
+	//		Method:        "POST",
+	//		URL:           p.server,
+	//		ProtoMajor:    1,
+	//		ProtoMinor:    1,
+	//		Host:          p.server.Host,
+	//		Header:        make(http.Header),
+	//		Body:          ioutil.NopCloser(buf),
+	//		ContentLength: int64(buf.Len()),
+	//	}
 	req, _ := http.NewRequest("POST", p.server.String(), buf)
 
 	if c4_cfg.Encrypter == event.ENCRYPTER_RC4 {
@@ -144,11 +144,11 @@ func (p *pullWorker) loop() {
 		if len(c4_cfg.UA) > 0 {
 			req.Header.Set("User-Agent", c4_cfg.UA)
 		}
-		log.Printf("Pull worker:%d start working\n", p.index)
+		log.Printf("Pull worker[%s]:%d start working\n", p.server.Host, p.index)
 		resp, err := c4HttpClient.Do(req)
 
 		if nil != err || resp.StatusCode != 200 {
-			log.Printf("Pull worker:%d recv invalid res:%v\n", p.index, resp)
+			log.Printf("Pull worker[%s]:%d recv invalid res:%v\n", p.server.Host, p.index, resp)
 			time.Sleep(1 * time.Second)
 		} else {
 			//log.Printf("Got chunked %v %v\n", resp.TransferEncoding, resp.Header)
@@ -157,7 +157,7 @@ func (p *pullWorker) loop() {
 		if nil != resp && nil != resp.Body {
 			resp.Body.Close()
 		}
-		log.Printf("Pull worker:%d stop working\n", p.index)
+		log.Printf("Pull worker[%s]:%d stop working\n", p.server.Host, p.index)
 	}
 }
 

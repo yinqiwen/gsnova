@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-VERSION="0.21.0"
+VERSION="0.22.0"
 
 #this part is copied from ANT's script
 # OS specific support.  $var _must_ be set to either true or false.
