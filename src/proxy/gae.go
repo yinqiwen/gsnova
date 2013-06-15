@@ -16,6 +16,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 	"util"
 )
 
@@ -98,10 +99,11 @@ func initGAEClient() {
 			Proxy: func(req *http.Request) (*url.URL, error) {
 				return url.Parse(gae_cfg.Proxy)
 			},
-			Dial:                dial,
-			TLSClientConfig:     tlcfg,
-			DisableCompression:  true,
-			MaxIdleConnsPerHost: int(gae_cfg.ConnectionPoolSize),
+			Dial:                  dial,
+			TLSClientConfig:       tlcfg,
+			DisableCompression:    true,
+			MaxIdleConnsPerHost:   int(gae_cfg.ConnectionPoolSize),
+			ResponseHeaderTimeout: 15 * time.Second,
 		}
 		client.Transport = tr
 	} else {
@@ -111,10 +113,11 @@ func initGAEClient() {
 			}
 		}
 		tr := &http.Transport{
-			Dial:                dial,
-			TLSClientConfig:     tlcfg,
-			DisableCompression:  true,
-			MaxIdleConnsPerHost: int(gae_cfg.ConnectionPoolSize),
+			Dial:                  dial,
+			TLSClientConfig:       tlcfg,
+			DisableCompression:    true,
+			MaxIdleConnsPerHost:   int(gae_cfg.ConnectionPoolSize),
+			ResponseHeaderTimeout: 15 * time.Second,
 		}
 		client.Transport = tr
 	}
@@ -122,10 +125,11 @@ func initGAEClient() {
 }
 
 type GAEAuth struct {
-	appid  string
-	user   string
-	passwd string
-	token  string
+	appid          string
+	user           string
+	passwd         string
+	token          string
+	support_tunnel bool
 }
 
 func (auth *GAEAuth) parse(line string) error {
@@ -201,7 +205,8 @@ func (conn *GAEHttpConnection) Auth(auth *GAEAuth) error {
 		}
 		log.Printf("Auth token is %s\n", authres.Token)
 		auth.token = authres.Token
-		conn.support_tunnel = len(authres.Version) > 0
+		auth.support_tunnel = authres.Capability > 0
+		log.Printf("Support tunnel:%v\n", auth.support_tunnel)
 	}
 	return nil
 }
@@ -297,9 +302,9 @@ func (gae *GAEHttpConnection) doRangeFetch(req *http.Request, firstChunkRes *htt
 	task.FetchLimit = int(gae_cfg.FetchLimitSize)
 	task.FetchWorkerNum = int(gae_cfg.ConcurrentRangeFetcher)
 	task.SessionID = gae.sess.SessionID
-	task.TaskValidation = func() bool {
-		return !util.IsDeadConnection(gae.sess.LocalRawConn)
-	}
+	//	task.TaskValidation = func() bool {
+	//		return !util.IsDeadConnection(gae.sess.LocalRawConn)
+	//	}
 	gae.rangeWorker = task
 	fetch := func(preq *http.Request) (*http.Response, error) {
 		ev := new(event.HTTPRequestEvent)
@@ -369,14 +374,17 @@ func (gae *GAEHttpConnection) Request(conn *SessionConnection, ev event.Event) (
 	if gae.over_tunnel {
 		return gae.requestOverTunnel(conn, ev)
 	}
+	if nil == gae.gaeAuth {
+		gae.gaeAuth = gae.manager.auths.Select().(*GAEAuth)
+	}
 	if ev.GetType() == event.HTTP_REQUEST_EVENT_TYPE {
 		httpreq := ev.(*event.HTTPRequestEvent)
 		if strings.EqualFold(httpreq.Method, "CONNECT") {
-			//try https over tunnel
-			if gae.support_tunnel {
-				gae.over_tunnel = true
-				return gae.requestOverTunnel(conn, ev)
-			}
+//			//try https over tunnel
+//			if gae.gaeAuth.support_tunnel {
+//				gae.over_tunnel = true
+//				return gae.requestOverTunnel(conn, ev)
+//			}
 			log.Printf("Session[%d]Request %s\n", httpreq.GetHash(), util.GetURLString(httpreq.RawReq, true))
 			conn.LocalRawConn.Write([]byte("HTTP/1.1 200 Connection established\r\n\r\n"))
 			tlscfg, err := common.TLSConfig(httpreq.GetHeader("Host"))

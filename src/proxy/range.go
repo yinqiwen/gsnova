@@ -180,7 +180,7 @@ func (r *rangeFetchTask) processResponse(res *http.Response) error {
 			rb := newRangeBody()
 			r.res.Body = rb
 		}
-		//log.Printf("Session[%d]Recv first range chunk:%s, %d %d ", r.SessionID, contentRangeHeader, r.contentEnd, r.contentBegin)
+		log.Printf("Session[%d]Recv first range chunk:%s, %d %d ", r.SessionID, contentRangeHeader, r.contentEnd, r.contentBegin)
 		if nil != resbody && r.res.StatusCode < 300 {
 			var n int
 			rb := r.res.Body.(*rangeBody)

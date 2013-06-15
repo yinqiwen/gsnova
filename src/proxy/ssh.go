@@ -115,12 +115,17 @@ func (conn *SSHConnection) Request(sess *SessionConnection, ev event.Event) (err
 			log.Printf("Session[%d]Request %s\n", req.GetHash(), util.GetURLString(req.RawReq, true))
 			err := req.RawReq.Write(conn.proxy_conn)
 			if nil != err {
+				conn.ssh_conn.CloseConn()
 				return err, nil
 			}
+			conn.proxy_conn.SetReadDeadline(time.Now().Add(10*time.Second))
 			resp, err := http.ReadResponse(conn.proxy_conn_reader, req.RawReq)
 			if err != nil {
+				conn.ssh_conn.CloseConn()
 				return err, nil
 			}
+			var zero time.Time
+			conn.proxy_conn.SetReadDeadline(zero)
 			err = resp.Write(sess.LocalRawConn)
 			if nil == err {
 				err = resp.Body.Close()
@@ -192,6 +197,13 @@ func (conn *SSHRawConnection) RemoteResolve(name string) ([]net.IP, error) {
 		return nil, err
 	}
 	return nil, nil
+}
+
+func (conn *SSHRawConnection) CloseConn() {
+	if nil != conn.clientConn {
+		conn.clientConn.Close()
+		conn.clientConn = nil
+	}
 }
 
 func (conn *SSHRawConnection) GetClientConn(reconnect bool) (*ssh.ClientConn, error) {

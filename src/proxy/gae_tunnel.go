@@ -51,6 +51,7 @@ func (gae *GAEHttpConnection) handleTunnelResponse(conn *SessionConnection, ev e
 	switch ev.GetType() {
 	case event.EVENT_TCP_CONNECTION_TYPE:
 		cev := ev.(*event.SocketConnectionEvent)
+		log.Printf("[%d]Recv conn event:%v.\n", ev.GetHash(), cev.Status)
 		if cev.Status == event.TCP_CONN_CLOSED {
 			if gae.tunnel_remote_addr == cev.Addr {
 				conn.Close()
@@ -73,7 +74,7 @@ func (gae *GAEHttpConnection) requestOverTunnel(conn *SessionConnection, ev even
 	if nil == gae.tunnelChannel {
 		gae.tunnelChannel = make(chan event.Event)
 		go gae.tunnel_write(conn)
-		go gae.tunnel_read(conn)
+		//go gae.tunnel_read(conn)
 	}
 	switch ev.GetType() {
 	case event.HTTP_REQUEST_EVENT_TYPE:

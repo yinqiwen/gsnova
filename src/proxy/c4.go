@@ -18,6 +18,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 	"util"
 )
 
@@ -447,7 +448,7 @@ func initC4Config() {
 	if enable, exist := common.Cfg.GetIntProperty("C4", "MultiRangeFetchEnable"); exist {
 		c4_cfg.MultiRangeFetchEnable = (enable != 0)
 	}
-	
+
 	c4_cfg.UseSysDNS = false
 	if enable, exist := common.Cfg.GetIntProperty("C4", "UseSysDNS"); exist {
 		c4_cfg.UseSysDNS = (enable != 0)
@@ -487,7 +488,7 @@ func (manager *C4) Init() error {
 	tlcfg.InsecureSkipVerify = true
 
 	dial := func(n, addr string) (net.Conn, error) {
-		if len(c4_cfg.Proxy) == 0 && !c4_cfg.UseSysDNS{
+		if len(c4_cfg.Proxy) == 0 && !c4_cfg.UseSysDNS {
 			remote := getAddressMapping(addr)
 			return net.Dial(n, remote)
 		}
@@ -504,6 +505,7 @@ func (manager *C4) Init() error {
 			}
 			return url.Parse(c4_cfg.Proxy)
 		},
+		ResponseHeaderTimeout: 10 * time.Second,
 	}
 	c4HttpClient.Transport = tr
 
