@@ -1,5 +1,13 @@
 GSnova Changelog
 ===================
+Changes in version 0.22.1(2013.06.15)
+-------------------------------------------
+** Features
+   * NA
+   
+** Improvement
+   * Use Go1.1.1 to compile
+
 Changes in version 0.22.0(2013.03.23)
 -------------------------------------------
 ** Features

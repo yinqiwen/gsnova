@@ -247,6 +247,7 @@ func initGoogleHttpClients() {
 		Dial:                httpDial,
 		Proxy:               proxyFunc,
 		MaxIdleConnsPerHost: 20,
+		ResponseHeaderTimeout: 10 * time.Second,
 	}
 
 	httpsGoogleClient.Transport = &http.Transport{
@@ -254,6 +255,7 @@ func initGoogleHttpClients() {
 		Dial:                httpsDial,
 		Proxy:               proxyFunc,
 		MaxIdleConnsPerHost: 20,
+		ResponseHeaderTimeout: 10 * time.Second,
 	}
 }
 
