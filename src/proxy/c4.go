@@ -505,7 +505,7 @@ func (manager *C4) Init() error {
 			}
 			return url.Parse(c4_cfg.Proxy)
 		},
-		ResponseHeaderTimeout: 10 * time.Second,
+		ResponseHeaderTimeout: time.Duration(c4_cfg.ReadTimeout + 1) * time.Second,
 	}
 	c4HttpClient.Transport = tr
 

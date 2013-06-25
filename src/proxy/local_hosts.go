@@ -91,7 +91,6 @@ func getLocalHostMapping(host string) (string, bool) {
 		}
 		return t, true
 	}
-
 	h, exist := mapping[host]
 	if exist {
 		return selectHost(h)

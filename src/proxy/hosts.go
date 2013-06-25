@@ -112,8 +112,10 @@ func lookupAvailableAddress(hostport string) (string, bool) {
 	if nil != err {
 		return hostport, false
 	}
-	if addr, exist := trustedDNSQuery(host, port); exist {
-		return net.JoinHostPort(addr, port), true
+	if nil == net.ParseIP(host) {
+		if addr, exist := trustedDNSQuery(host, port); exist {
+			return net.JoinHostPort(addr, port), true
+		}
 	}
 	v, exist := getLocalHostMapping(host)
 	if !exist {

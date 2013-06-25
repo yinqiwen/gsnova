@@ -72,9 +72,11 @@ func (conn *ForwardConnection) dialRemote(addr string, lookup_trusted_dns bool) 
 	//			lookup_trusted_dns = true
 	//		}
 	//	}
+	orgin_addr := addr
+	addr = getAddressMapping(orgin_addr)
 	if lookup_trusted_dns {
 		if newaddr, success := lookupAvailableAddress(addr); !success {
-			return nil, fmt.Errorf("No available IP found for %s", addr)
+			return nil, fmt.Errorf("No available IP found for %s", orgin_addr)
 		} else {
 			log.Printf("Found %s for %s\n", newaddr, addr)
 			addr = newaddr
