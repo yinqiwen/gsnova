@@ -190,7 +190,7 @@ func getGoogleHostport(isHttps bool) string {
 		addr = net.JoinHostPort(addr, "443")
 	}
 	if !preferIP {
-		addr, _ = lookupAvailableAddress(addr)
+		addr, _ = lookupAvailableAddress(addr, true)
 	}
 	return addr
 }

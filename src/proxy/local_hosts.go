@@ -107,7 +107,7 @@ func getAddressMapping(addr string) string {
 	v := strings.Split(addr, ":")
 	if len(v) == 2 {
 		tmp, _ := getLocalHostMapping(v[0])
-		addr, _ = lookupAvailableAddress(net.JoinHostPort(tmp, v[1]))
+		addr, _ = lookupAvailableAddress(net.JoinHostPort(tmp, v[1]), true)
 		return addr
 	}
 	return addr
@@ -129,7 +129,7 @@ func getLocalUrlMapping(addr string) string {
 		} else {
 			l.Host = net.JoinHostPort(l.Host, "80")
 		}
-		l.Host, _ = lookupAvailableAddress(l.Host)
+		l.Host, _ = lookupAvailableAddress(l.Host, true)
 	}
 
 	return l.String()

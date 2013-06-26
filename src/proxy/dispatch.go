@@ -47,6 +47,7 @@ const (
 	ATTR_TUNNEL         = "Tunnel"
 	ATTR_RANGE          = "Range"
 	ATTR_SYS_DNS        = "SysDNS"
+	ATTR_PREFER_HOSTS   = "PreferHosts"
 	ATTR_APP            = "App"
 
 	MODE_HTTP    = "http"
