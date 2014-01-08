@@ -28,9 +28,10 @@ func loadLocalHostMapping(file string) error {
 	}
 	props, exist := ini.GetTagProperties("")
 	if exist {
-		for k, v := range props {
+		for k, _ := range props {
 			selector := &util.ListSelector{}
-			hs := strings.Split(v, "|")
+			vs, _ := ini.GetProperty("", k)
+			hs := strings.Split(vs, "|")
 			for _, h := range hs {
 				selector.Add(h)
 			}

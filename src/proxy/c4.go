@@ -7,12 +7,13 @@ import (
 	"encoding/binary"
 	"errors"
 	"event"
-	//"fmt"
+	_ "fmt"
 	"io"
 	"log"
 	"net"
 	"net/http"
 	"net/url"
+	_ "os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -505,7 +506,7 @@ func (manager *C4) Init() error {
 			}
 			return url.Parse(c4_cfg.Proxy)
 		},
-		ResponseHeaderTimeout: time.Duration(c4_cfg.ReadTimeout + 1) * time.Second,
+		ResponseHeaderTimeout: time.Duration(c4_cfg.ReadTimeout+1) * time.Second,
 	}
 	c4HttpClient.Transport = tr
 
@@ -514,11 +515,30 @@ func (manager *C4) Init() error {
 		go writeCBLoop(i)
 	}
 
+	workers := make([]string, 0)
+	// new style config syntax
+	wl, _ := common.Cfg.GetPropertyList("C4", "WorkerNode")
+	for _, worker := range wl {
+		workers = append(workers, worker)
+	}
+
+	// old style config syntax
 	index := 0
 	for {
 		v, exist := common.Cfg.GetProperty("C4", "WorkerNode["+strconv.Itoa(index)+"]")
 		if !exist || len(v) == 0 {
-			break
+			// don't exit if there's less than 10 index ...
+			if index > 9 {
+				break
+			}
+		} else {
+			workers = append(workers, v)
+		}
+		index = index + 1
+	}
+	for _, v := range workers {
+		if len(v) == 0 {
+			continue
 		}
 		if !strings.Contains(v, "://") {
 			v = "http://" + v
@@ -527,13 +547,12 @@ func (manager *C4) Init() error {
 			v = v + "/"
 		}
 		manager.servers.Add(v)
-		index = index + 1
 		if strings.HasPrefix(v, "ws://") {
 			initC4WebsocketChannel(v)
 		}
 		manager.loginC4(v)
 	}
-	if index == 0 {
+	if len(workers) == 0 {
 		C4Enable = false
 		return errors.New("No configed C4 server.")
 	}
