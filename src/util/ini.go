@@ -3,19 +3,21 @@ package util
 import (
 	"bufio"
 	"bytes"
+	_ "fmt"
 	"io"
 	"os"
 	"strconv"
 	"strings"
 )
 
+type Stringlist []string
 type Ini struct {
-	props map[string]map[string]string
+	props map[string]map[string]Stringlist
 }
 
 func NewIni() *Ini {
 	ini := new(Ini)
-	ini.props = make(map[string]map[string]string)
+	ini.props = make(map[string]map[string]Stringlist)
 	return ini
 }
 
@@ -51,12 +53,12 @@ func (ini *Ini) Load(is io.Reader) (err error) {
 					value := strings.TrimSpace(line[idx+1:])
 					ini.SetProperty(currenttag, key, value)
 				}
-//				splits := strings.Split(line, "=")
-//				if len(splits) >= 2 {
-//					key := strings.TrimSpace(splits[0])
-//					value := strings.TrimSpace(splits[1])
-//					ini.SetProperty(currenttag, key, value)
-//				}
+				//				splits := strings.Split(line, "=")
+				//				if len(splits) >= 2 {
+				//					key := strings.TrimSpace(splits[0])
+				//					value := strings.TrimSpace(splits[1])
+				//					ini.SetProperty(currenttag, key, value)
+				//				}
 			}
 		}
 	}
@@ -66,8 +68,10 @@ func (ini *Ini) Load(is io.Reader) (err error) {
 func (ini *Ini) Save(os io.Writer) {
 	if _, ok := ini.props[""]; ok {
 		for k1, v1 := range ini.props[""] {
-			line := k1 + " = " + v1 + "\r\n"
-			os.Write([]byte(line))
+			for _, v := range v1 {
+				line := k1 + " = " + v + "\r\n"
+				os.Write([]byte(line))
+			}
 		}
 		os.Write([]byte("\r\n"))
 	}
@@ -76,8 +80,10 @@ func (ini *Ini) Save(os io.Writer) {
 			k = "[" + k + "]\r\n"
 			os.Write([]byte(k))
 			for k1, v1 := range xm {
-				line := k1 + " = " + v1 + "\r\n"
-				os.Write([]byte(line))
+				for _, v := range v1 {
+					line := k1 + " = " + v + "\r\n"
+					os.Write([]byte(line))
+				}
 			}
 			os.Write([]byte("\r\n"))
 		}
@@ -86,17 +92,28 @@ func (ini *Ini) Save(os io.Writer) {
 
 func (ini *Ini) SetProperty(tag, key, value string) {
 	if nil == ini.props[tag] {
-		ini.props[tag] = make(map[string]string)
+		ini.props[tag] = make(map[string]Stringlist)
 	}
-	ini.props[tag][key] = value
+	ini.props[tag][key] = append(ini.props[tag][key], value)
 }
 
-func (ini *Ini) GetProperty(tag, key string) (value string, exist bool) {
+func (ini *Ini) GetPropertyList(tag, key string) (value Stringlist, exist bool) {
 	if m, ok := ini.props[tag]; !ok {
 		exist = false
 		return
 	} else {
 		value, exist = m[key]
+	}
+	return
+}
+
+func (ini *Ini) GetProperty(tag, key string) (value string, exist bool) {
+	var vl Stringlist
+	vl, exist = ini.GetPropertyList(tag, key)
+	if len(vl) > 0 {
+		value = vl[0]
+	} else {
+		return "", false
 	}
 	return
 }
@@ -125,7 +142,7 @@ func (ini *Ini) GetBoolProperty(tag, key string) (value bool, exist bool) {
 	return
 }
 
-func (ini *Ini) GetTagProperties(tag string) (map[string]string, bool) {
+func (ini *Ini) GetTagProperties(tag string) (map[string]Stringlist, bool) {
 	v, exist := ini.props[tag]
 	return v, exist
 }

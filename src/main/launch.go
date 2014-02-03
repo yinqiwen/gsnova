@@ -13,8 +13,6 @@ import (
 	"remote"
 	"runtime"
 	"sync/atomic"
-	"time"
-	"util"
 )
 
 const (
@@ -119,12 +117,6 @@ func main() {
 	addr, exist := common.Cfg.GetProperty("LocalServer", "Listen")
 	if !exist {
 		log.Fatalln("No config [LocalServer]->Listen found")
-	}
-	if v, exist := common.Cfg.GetBoolProperty("Misc", "AutoOpenWebUI"); !exist || v {
-		go func() {
-			time.Sleep(1 * time.Second)
-			util.OpenBrowser("http://localhost:" + common.ProxyPort + "/")
-		}()
 	}
 	testEntry()
 	startLocalProxyServer(addr, proxy.GLOBAL_PROXY_SERVER)
