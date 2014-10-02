@@ -77,7 +77,7 @@ main()
 {
     if [ "x$1" = "xdist" ]; then
 	    shift
-        build_dist $*
+        build_dist gsnova
 	else
 		build_product $*
 	fi	
