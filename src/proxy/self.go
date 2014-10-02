@@ -43,7 +43,7 @@ func InitSelfWebServer() {
 		http.FileServer(http.Dir(common.Home+"/web")).ServeHTTP(w, r)
 	})
 	http.HandleFunc("/pac/gfwlist", func(w http.ResponseWriter, r *http.Request) {
-		r.URL.Path = "/spac/snova-gfwlist.pac"
+		r.URL.Path = "/conf/snova-gfwlist.pac"
 		w.Header().Set("Connection", "close")
 		w.Header().Set("Content-Type", "application/x-ns-proxy-autoconfig")
 		w.Header().Set("Content-Disposition", "attachment;filename=snova-gfwlist.pac")

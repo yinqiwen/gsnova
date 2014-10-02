@@ -76,6 +76,8 @@ func initGAEClient() {
 		var conn net.Conn
 		for i := 0; i < 3; i++ {
 			remote = getAddressMapping(addr)
+//			remote = "193.134.255.241:443"
+			log.Printf("Dial %s:%s\n", n,remote)
 			conn, err = net.DialTimeout(n, remote, connTimeoutSecs)
 			if err != nil {
 				expireBlockVerifyCache(addr)
@@ -598,7 +600,7 @@ func (manager *GAE) Init() error {
 			return fmt.Errorf("GAE not inited since [GAE] Enable=0")
 		}
 	}
-	log.Println("Init GAE.")
+	
 	singleton_gae = manager
 	RegisteRemoteConnManager(manager)
 	initGAEConfig()
@@ -658,5 +660,6 @@ func (manager *GAE) Init() error {
 		GAEEnable = false
 		return fmt.Errorf("No valid appid found.")
 	}
+	log.Println("Init GAE module success")
 	return nil
 }

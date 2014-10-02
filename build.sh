@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-VERSION="0.22.1"
+VERSION="0.23.0"
 
 #this part is copied from ANT's script
 # OS specific support.  $var _must_ be set to either true or false.
@@ -22,7 +22,6 @@ fi
 build_product()
 {
    export GOPATH="$GSNOVA_DIR"
-   go get -u github.com/yinqiwen/godns
    cd src
    #mv common/constants.go{,.bak}
    rm common/constants.go
@@ -43,8 +42,7 @@ build_dist()
    
    cd $GSNOVA_DIR
    DIST_DIR=$GSNOVA_DIR/${1}-${VERSION}
-   mkdir -p $DIST_DIR/cert
-   mkdir -p $DIST_DIR/spac
+   mkdir -p $DIST_DIR/conf
    mkdir -p $DIST_DIR/hosts
    
    OS="`go env GOOS`"
@@ -58,21 +56,17 @@ build_dist()
    cp $GSNOVA_DIR/README.md $DIST_DIR
    cp $GSNOVA_DIR/*.txt $DIST_DIR
    cp $GSNOVA_DIR/bin/main $DIST_DIR/$exename
-   cp $GSNOVA_DIR/conf/*_hosts.conf $DIST_DIR/hosts
-   cp $GSNOVA_DIR/conf/Fake* $DIST_DIR/cert
-   cp $GSNOVA_DIR/conf/*_spac.json $DIST_DIR/spac
-   cp $GSNOVA_DIR/conf/user-gfwlist.txt $DIST_DIR/spac
+   cp $GSNOVA_DIR/conf/hosts.conf $DIST_DIR/hosts
+   cp $GSNOVA_DIR/conf/Fake* $DIST_DIR/conf
+   cp $GSNOVA_DIR/conf/spac.json $DIST_DIR/conf
+   cp $GSNOVA_DIR/conf/user-gfwlist.txt $DIST_DIR/conf
+   cp $GSNOVA_DIR/conf/gsnova.conf $DIST_DIR/conf
    cp -R $GSNOVA_DIR/web $DIST_DIR
-   cp $GSNOVA_DIR/conf/"$1".conf $DIST_DIR
    if [ "$OS" = "windows" ]; then
       zip -r "$1"_"$VERSION"_"$OS"_"$ARCH".zip ${1}-${VERSION}/*
    else
       chmod 744 $DIST_DIR/gsnova
-      chmod 600 $DIST_DIR/gsnova.conf
-      chmod 644 $DIST_DIR/*.txt
-      chmod -R 644 $DIST_DIR/cert/*
-      chmod -R 644 $DIST_DIR/hosts/*
-      chmod -R 644 $DIST_DIR/spac/*
+      chmod -R 644 $DIST_DIR/conf/*
       #chmod -R 644 $DIST_DIR/web/*
       tar czf ${1}_${VERSION}_${OS}_${ARCH}.tar.gz ${1}-${VERSION}
    fi

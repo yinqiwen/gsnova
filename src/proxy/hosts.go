@@ -9,16 +9,15 @@ import (
 	"net/http"
 	"os"
 	"regexp"
-	"strconv"
+//	"strconv"
 	"strings"
 	"time"
-	"util"
+//	"util"
 )
 
 const (
 	DNS_CACHE_FILE     = "DNSCache.json"
-	USER_HOSTS_FILE    = "user_hosts.conf"
-	CLOUD_HOSTS_FILE   = "cloud_hosts.conf"
+	USER_HOSTS_FILE    = "hosts.conf"
 	HOSTS_DISABLE      = 0
 	HOSTS_ENABLE_HTTPS = 1
 	HOSTS_ENABLE_ALL   = 2
@@ -45,7 +44,7 @@ func loadDiskHostFile() {
 	if nil == err {
 		for _, file := range files {
 			switch file.Name() {
-			case USER_HOSTS_FILE, CLOUD_HOSTS_FILE:
+			case USER_HOSTS_FILE:
 				continue
 			}
 			content, err := ioutil.ReadFile(common.Home + "hosts/" + file.Name())
@@ -82,25 +81,26 @@ func loadDiskHostFile() {
 func loadHostFile() {
 	hostMapping = make(map[string]string)
 	loadDiskHostFile()
-	for index, urlstr := range repoUrls {
-		resp, err := util.HttpGet(urlstr, "")
-		if err != nil {
-			if addr, exist := common.Cfg.GetProperty("LocalServer", "Listen"); exist {
-				_, port, _ := net.SplitHostPort(addr)
-				resp, err = util.HttpGet(urlstr, "http://"+net.JoinHostPort("127.0.0.1", port))
-			}
-		}
-		if err != nil || resp.StatusCode != 200 {
-			log.Printf("Failed to fetch host from %s\n", urlstr)
-		} else {
-			body, err := ioutil.ReadAll(resp.Body)
-			if nil == err {
-				hf := common.Home + "hosts/" + "hosts_" + strconv.Itoa(index) + ".txt"
-				ioutil.WriteFile(hf, body, 0755)
-			}
-		}
-	}
-	loadDiskHostFile()
+	loadLocalHostMappings()
+//	for index, urlstr := range repoUrls {
+//		resp, err := util.HttpGet(urlstr, "")
+//		if err != nil {
+//			if addr, exist := common.Cfg.GetProperty("LocalServer", "Listen"); exist {
+//				_, port, _ := net.SplitHostPort(addr)
+//				resp, err = util.HttpGet(urlstr, "http://"+net.JoinHostPort("127.0.0.1", port))
+//			}
+//		}
+//		if err != nil || resp.StatusCode != 200 {
+//			log.Printf("Failed to fetch host from %s\n", urlstr)
+//		} else {
+//			body, err := ioutil.ReadAll(resp.Body)
+//			if nil == err {
+//				hf := common.Home + "hosts/" + "hosts_" + strconv.Itoa(index) + ".txt"
+//				ioutil.WriteFile(hf, body, 0755)
+//			}
+//		}
+//	}
+//	loadDiskHostFile()
 }
 
 func isExceptHost(host string) bool {
@@ -150,10 +150,10 @@ func hostNeedInjectRange(host string) bool {
 }
 
 func InitHosts() error {
-	loadLocalHostMappings()
-	if cloud_hosts, exist := common.Cfg.GetProperty("Hosts", "CloudHosts"); exist {
-		go fetchCloudHosts(cloud_hosts)
-	}
+	
+//	if cloud_hosts, exist := common.Cfg.GetProperty("Hosts", "CloudHosts"); exist {
+//		go fetchCloudHosts(cloud_hosts)
+//	}
 
 	if enable, exist := common.Cfg.GetIntProperty("Hosts", "Enable"); exist {
 		hostsEnable = int(enable)
@@ -161,7 +161,7 @@ func InitHosts() error {
 			return nil
 		}
 	}
-	log.Println("Init AutoHost.")
+	
 	os.Mkdir(common.Home+"hosts/", 0755)
 	if dnsserver, exist := common.Cfg.GetProperty("Hosts", "TrustedDNS"); exist {
 		trustedDNS = strings.Split(dnsserver, "|")
@@ -191,15 +191,16 @@ func InitHosts() error {
 		exceptHosts = initHostMatchRegex(pattern)
 	}
 	repoUrls = make([]string, 0)
-	index := 0
-	for {
-		v, exist := common.Cfg.GetProperty("Hosts", "CloudHostsRepo["+strconv.Itoa(index)+"]")
-		if !exist || len(v) == 0 {
-			break
-		}
-		repoUrls = append(repoUrls, v)
-		index++
-	}
+//	index := 0
+//	for {
+//		v, exist := common.Cfg.GetProperty("Hosts", "CloudHostsRepo["+strconv.Itoa(index)+"]")
+//		if !exist || len(v) == 0 {
+//			break
+//		}
+//		repoUrls = append(repoUrls, v)
+//		index++
+//	}
 	go loadHostFile()
+	log.Println("Init AutoHost module success")
 	return nil
 }

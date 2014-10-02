@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// +build darwin freebsd linux netbsd openbsd
+// +build darwin dragonfly freebsd linux netbsd openbsd plan9
 
 package test
 
@@ -10,14 +10,9 @@ package test
 
 import (
 	"bytes"
-	"crypto"
-	"crypto/dsa"
-	"crypto/rsa"
-	"crypto/x509"
-	"encoding/pem"
-	"errors"
-	"io"
+	"fmt"
 	"io/ioutil"
+	"log"
 	"net"
 	"os"
 	"os/exec"
@@ -25,16 +20,16 @@ import (
 	"path/filepath"
 	"testing"
 	"text/template"
-	"time"
 
 	"code.google.com/p/go.crypto/ssh"
+	"code.google.com/p/go.crypto/ssh/testdata"
 )
 
 const sshd_config = `
 Protocol 2
-HostKey {{.Dir}}/ssh_host_rsa_key
-HostKey {{.Dir}}/ssh_host_dsa_key
-HostKey {{.Dir}}/ssh_host_ecdsa_key
+HostKey {{.Dir}}/id_rsa
+HostKey {{.Dir}}/id_dsa
+HostKey {{.Dir}}/id_ecdsa
 Pidfile {{.Dir}}/sshd.pid
 #UsePrivilegeSeparation no
 KeyRegenerationInterval 3600
@@ -46,23 +41,14 @@ PermitRootLogin no
 StrictModes no
 RSAAuthentication yes
 PubkeyAuthentication yes
-AuthorizedKeysFile	{{.Dir}}/authorized_keys
+AuthorizedKeysFile	{{.Dir}}/id_user.pub
+TrustedUserCAKeys {{.Dir}}/id_ecdsa.pub
 IgnoreRhosts yes
 RhostsRSAAuthentication no
 HostbasedAuthentication no
 `
 
-var (
-	configTmpl template.Template
-	sshd       string // path to sshd
-	rsakey     *rsa.PrivateKey
-)
-
-func init() {
-	template.Must(configTmpl.Parse(sshd_config))
-	block, _ := pem.Decode([]byte(testClientPrivateKey))
-	rsakey, _ = x509.ParsePKCS1PrivateKey(block.Bytes)
-}
+var configTmpl = template.Must(template.New("").Parse(sshd_config))
 
 type server struct {
 	t          *testing.T
@@ -70,6 +56,9 @@ type server struct {
 	configfile string
 	cmd        *exec.Cmd
 	output     bytes.Buffer // holds stderr from sshd process
+
+	// Client half of the network connection.
+	clientConn net.Conn
 }
 
 func username() string {
@@ -79,6 +68,7 @@ func username() string {
 	} else {
 		// user.Current() currently requires cgo. If an error is
 		// returned attempt to get the username from the environment.
+		log.Printf("user.Current: %v; falling back on $USER", err)
 		username = os.Getenv("USER")
 	}
 	if username == "" {
@@ -87,72 +77,156 @@ func username() string {
 	return username
 }
 
+type storedHostKey struct {
+	// keys map from an algorithm string to binary key data.
+	keys map[string][]byte
+
+	// checkCount counts the Check calls. Used for testing
+	// rekeying.
+	checkCount int
+}
+
+func (k *storedHostKey) Add(key ssh.PublicKey) {
+	if k.keys == nil {
+		k.keys = map[string][]byte{}
+	}
+	k.keys[key.Type()] = key.Marshal()
+}
+
+func (k *storedHostKey) Check(addr string, remote net.Addr, key ssh.PublicKey) error {
+	k.checkCount++
+	algo := key.Type()
+
+	if k.keys == nil || bytes.Compare(key.Marshal(), k.keys[algo]) != 0 {
+		return fmt.Errorf("host key mismatch. Got %q, want %q", key, k.keys[algo])
+	}
+	return nil
+}
+
+func hostKeyDB() *storedHostKey {
+	keyChecker := &storedHostKey{}
+	keyChecker.Add(testPublicKeys["ecdsa"])
+	keyChecker.Add(testPublicKeys["rsa"])
+	keyChecker.Add(testPublicKeys["dsa"])
+	return keyChecker
+}
+
 func clientConfig() *ssh.ClientConfig {
-	kc := new(keychain)
-	kc.keys = append(kc.keys, rsakey)
 	config := &ssh.ClientConfig{
 		User: username(),
-		Auth: []ssh.ClientAuth{
-			ssh.ClientAuthKeyring(kc),
+		Auth: []ssh.AuthMethod{
+			ssh.PublicKeys(testSigners["user"]),
 		},
+		HostKeyCallback: hostKeyDB().Check,
 	}
 	return config
 }
 
-func (s *server) Dial(config *ssh.ClientConfig) *ssh.ClientConn {
-	s.cmd = exec.Command("sshd", "-f", s.configfile, "-i")
-	stdin, err := s.cmd.StdinPipe()
+// unixConnection creates two halves of a connected net.UnixConn.  It
+// is used for connecting the Go SSH client with sshd without opening
+// ports.
+func unixConnection() (*net.UnixConn, *net.UnixConn, error) {
+	dir, err := ioutil.TempDir("", "unixConnection")
 	if err != nil {
-		s.t.Fatal(err)
+		return nil, nil, err
 	}
-	stdout, err := s.cmd.StdoutPipe()
+	defer os.Remove(dir)
+
+	addr := filepath.Join(dir, "ssh")
+	listener, err := net.Listen("unix", addr)
 	if err != nil {
-		s.t.Fatal(err)
+		return nil, nil, err
 	}
-	s.cmd.Stderr = os.Stderr // &s.output
-	err = s.cmd.Start()
+	defer listener.Close()
+	c1, err := net.Dial("unix", addr)
 	if err != nil {
-		s.t.FailNow()
+		return nil, nil, err
+	}
+
+	c2, err := listener.Accept()
+	if err != nil {
+		c1.Close()
+		return nil, nil, err
+	}
+
+	return c1.(*net.UnixConn), c2.(*net.UnixConn), nil
+}
+
+func (s *server) TryDial(config *ssh.ClientConfig) (*ssh.Client, error) {
+	sshd, err := exec.LookPath("sshd")
+	if err != nil {
+		s.t.Skipf("skipping test: %v", err)
+	}
+
+	c1, c2, err := unixConnection()
+	if err != nil {
+		s.t.Fatalf("unixConnection: %v", err)
+	}
+
+	s.cmd = exec.Command(sshd, "-f", s.configfile, "-i", "-e")
+	f, err := c2.File()
+	if err != nil {
+		s.t.Fatalf("UnixConn.File: %v", err)
+	}
+	defer f.Close()
+	s.cmd.Stdin = f
+	s.cmd.Stdout = f
+	s.cmd.Stderr = &s.output
+	if err := s.cmd.Start(); err != nil {
+		s.t.Fail()
 		s.Shutdown()
-		s.t.Fatal(err)
+		s.t.Fatalf("s.cmd.Start: %v", err)
 	}
-	conn, err := ssh.Client(&client{stdin, stdout}, config)
+	s.clientConn = c1
+	conn, chans, reqs, err := ssh.NewClientConn(c1, "", config)
 	if err != nil {
-		s.t.FailNow()
+		return nil, err
+	}
+	return ssh.NewClient(conn, chans, reqs), nil
+}
+
+func (s *server) Dial(config *ssh.ClientConfig) *ssh.Client {
+	conn, err := s.TryDial(config)
+	if err != nil {
+		s.t.Fail()
 		s.Shutdown()
-		s.t.Fatal(err)
+		s.t.Fatalf("ssh.Client: %v", err)
 	}
 	return conn
 }
 
 func (s *server) Shutdown() {
-	if s.cmd.Process != nil {
-		if err := s.cmd.Process.Kill(); err != nil {
-			s.t.Error(err)
-		}
+	if s.cmd != nil && s.cmd.Process != nil {
+		// Don't check for errors; if it fails it's most
+		// likely "os: process already finished", and we don't
+		// care about that. Use os.Interrupt, so child
+		// processes are killed too.
+		s.cmd.Process.Signal(os.Interrupt)
+		s.cmd.Wait()
 	}
 	if s.t.Failed() {
 		// log any output from sshd process
-		s.t.Log(s.output.String())
+		s.t.Logf("sshd: %s", s.output.String())
 	}
 	s.cleanup()
 }
 
-// client wraps a pair of Reader/WriteClosers to implement the
-// net.Conn interface.
-type client struct {
-	io.WriteCloser
-	io.Reader
+func writeFile(path string, contents []byte) {
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0600)
+	if err != nil {
+		panic(err)
+	}
+	defer f.Close()
+	if _, err := f.Write(contents); err != nil {
+		panic(err)
+	}
 }
-
-func (c *client) LocalAddr() net.Addr              { return nil }
-func (c *client) RemoteAddr() net.Addr             { return nil }
-func (c *client) SetDeadline(time.Time) error      { return nil }
-func (c *client) SetReadDeadline(time.Time) error  { return nil }
-func (c *client) SetWriteDeadline(time.Time) error { return nil }
 
 // newServer returns a new mock ssh server.
 func newServer(t *testing.T) *server {
+	if testing.Short() {
+		t.Skip("skipping test due to -short")
+	}
 	dir, err := ioutil.TempDir("", "sshtest")
 	if err != nil {
 		t.Fatal(err)
@@ -169,15 +243,10 @@ func newServer(t *testing.T) *server {
 	}
 	f.Close()
 
-	for k, v := range keys {
-		f, err := os.OpenFile(filepath.Join(dir, k), os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0600)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if _, err := f.Write([]byte(v)); err != nil {
-			t.Fatal(err)
-		}
-		f.Close()
+	for k, v := range testdata.PEMBytes {
+		filename := "id_" + k
+		writeFile(filepath.Join(dir, filename), v)
+		writeFile(filepath.Join(dir, filename+".pub"), ssh.MarshalAuthorizedKey(testPublicKeys[k]))
 	}
 
 	return &server{
@@ -189,51 +258,4 @@ func newServer(t *testing.T) *server {
 			}
 		},
 	}
-}
-
-// keychain implements the ClientKeyring interface
-type keychain struct {
-	keys []interface{}
-}
-
-func (k *keychain) Key(i int) (interface{}, error) {
-	if i < 0 || i >= len(k.keys) {
-		return nil, nil
-	}
-	switch key := k.keys[i].(type) {
-	case *rsa.PrivateKey:
-		return &key.PublicKey, nil
-	case *dsa.PrivateKey:
-		return &key.PublicKey, nil
-	}
-	panic("unknown key type")
-}
-
-func (k *keychain) Sign(i int, rand io.Reader, data []byte) (sig []byte, err error) {
-	hashFunc := crypto.SHA1
-	h := hashFunc.New()
-	h.Write(data)
-	digest := h.Sum(nil)
-	switch key := k.keys[i].(type) {
-	case *rsa.PrivateKey:
-		return rsa.SignPKCS1v15(rand, key, hashFunc, digest)
-	}
-	return nil, errors.New("ssh: unknown key type")
-}
-
-func (k *keychain) loadPEM(file string) error {
-	buf, err := ioutil.ReadFile(file)
-	if err != nil {
-		return err
-	}
-	block, _ := pem.Decode(buf)
-	if block == nil {
-		return errors.New("ssh: no key found")
-	}
-	r, err := x509.ParsePKCS1PrivateKey(block.Bytes)
-	if err != nil {
-		return err
-	}
-	k.keys = append(k.keys, r)
-	return nil
 }

@@ -34,8 +34,8 @@ func randBytes() (bytes []byte) {
 }
 
 func LoadRootCA() error {
-	cert := Home + "cert/Fake-ACRoot-Certificate.cer"
-	key := Home + "cert/Fake-ACRoot-Key.pem"
+	cert := Home + "conf/Fake-ACRoot-Certificate.cer"
+	key := Home + "conf/Fake-ACRoot-Key.pem"
 	root_cert, err := tls.LoadX509KeyPair(cert, key)
 	if nil == err {
 		RootCert = root_cert
@@ -67,9 +67,9 @@ func getTLSCert(host string) (tls.Certificate, error) {
 		return cert, nil
 	}
 
-	os.Mkdir(Home+"cert/host/", 0755)
-	cf := Home + "cert/host/" + host + ".cert"
-	kf := Home + "cert/host/" + host + ".key"
+	os.Mkdir(Home+"conf/host/", 0755)
+	cf := Home + "conf/host/" + host + ".cert"
+	kf := Home + "conf/host/" + host + ".key"
 	_, err := os.Stat(cf)
 	if err == nil {
 		tls_cer, err = tls.LoadX509KeyPair(cf, kf)

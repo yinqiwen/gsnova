@@ -203,6 +203,7 @@ func initGoogleHttpClients() {
 	tlcfg.InsecureSkipVerify = true
 	commonDial := func(n, addr string, isHttps bool) (net.Conn, error) {
 		remote := getGoogleHostport(isHttps)
+		log.Printf("Connect google server:%s\n", remote)
 		conn, err := net.DialTimeout(n, remote, connTimeoutSecs)
 		if err != nil {
 			expireBlockVerifyCache(remote)
@@ -266,7 +267,7 @@ func InitGoogle() error {
 			return nil
 		}
 	}
-	log.Println("Init Google.")
+	
 	if prefer, exist := common.Cfg.GetBoolProperty("Google", "PreferIP"); exist {
 		preferIP = prefer
 	}
@@ -287,6 +288,7 @@ func InitGoogle() error {
 	httpGoogleManager = newGoogle(GOOGLE_HTTP_NAME)
 	httpsGoogleManager = newGoogle(GOOGLE_HTTPS_NAME)
 	initGoogleHttpClients()
+	log.Println("Init Google Module Success")
 	return nil
 }
 

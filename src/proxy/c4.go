@@ -37,6 +37,7 @@ type C4Config struct {
 	ReadTimeout            uint32
 	MaxConn                uint32
 	WSConnKeepAlive        uint32
+	WSReadTimeout          uint32
 	InjectRange            []*regexp.Regexp
 	FetchLimitSize         uint32
 	ConcurrentRangeFetcher uint32
@@ -57,6 +58,44 @@ type C4CumulateTask struct {
 	buffer   bytes.Buffer
 }
 
+func (task *C4CumulateTask) fillReadContent(content []byte) error {
+	task.buffer.Write(content)
+	for {
+		if task.chunkLen < 0 && task.buffer.Len() >= 4 {
+			err := binary.Read(&task.buffer, binary.BigEndian, &task.chunkLen)
+			if nil != err {
+				log.Printf("#################%v\n", err)
+				break
+			}
+		}
+		if task.chunkLen >= 0 && task.buffer.Len() >= int(task.chunkLen) {
+			content := task.buffer.Next(int(task.chunkLen))
+			tmp := bytes.NewBuffer(content)
+			err, evv := event.DecodeEvent(tmp)
+			if nil == err {
+				evv = event.ExtractEvent(evv)
+				idx := evv.GetHash() % uint32(len(c4WriteCBChannels))
+				c4WriteCBChannels[idx] <- evv
+				//					c4 := getC4Session(evv.GetHash())
+				//					if nil == c4 {
+				//						if evv.GetType() != event.EVENT_TCP_CONNECTION_TYPE {
+				//							log.Printf("[ERROR]No C4 session found for %d with type:%T\n", evv.GetHash(), evv)
+				//						}
+				//					} else {
+				//						c4.handleTunnelResponse(c4.sess, evv)
+				//					}
+			} else {
+				log.Printf("[ERROR]Decode event failed %v with content len:%d\n", err, task.chunkLen)
+			}
+			task.buffer.Truncate(task.buffer.Len())
+			task.chunkLen = -1
+		} else {
+			break
+		}
+	}
+	return nil
+}
+
 func (task *C4CumulateTask) fillContent(reader io.Reader) error {
 	data := make([]byte, 8192)
 	for {
@@ -64,40 +103,7 @@ func (task *C4CumulateTask) fillContent(reader io.Reader) error {
 		if nil != err {
 			return err
 		}
-		task.buffer.Write(data[0:n])
-		for {
-			if task.chunkLen < 0 && task.buffer.Len() >= 4 {
-				err = binary.Read(&task.buffer, binary.BigEndian, &task.chunkLen)
-				if nil != err {
-					log.Printf("#################%v\n", err)
-					break
-				}
-			}
-			if task.chunkLen >= 0 && task.buffer.Len() >= int(task.chunkLen) {
-				content := task.buffer.Next(int(task.chunkLen))
-				tmp := bytes.NewBuffer(content)
-				err, evv := event.DecodeEvent(tmp)
-				if nil == err {
-					evv = event.ExtractEvent(evv)
-					idx := evv.GetHash() % uint32(len(c4WriteCBChannels))
-					c4WriteCBChannels[idx] <- evv
-					//					c4 := getC4Session(evv.GetHash())
-					//					if nil == c4 {
-					//						if evv.GetType() != event.EVENT_TCP_CONNECTION_TYPE {
-					//							log.Printf("[ERROR]No C4 session found for %d with type:%T\n", evv.GetHash(), evv)
-					//						}
-					//					} else {
-					//						c4.handleTunnelResponse(c4.sess, evv)
-					//					}
-				} else {
-					log.Printf("[ERROR]Decode event failed %v with content len:%d\n", err, task.chunkLen)
-				}
-				task.buffer.Truncate(task.buffer.Len())
-				task.chunkLen = -1
-			} else {
-				break
-			}
-		}
+		task.fillReadContent(data[0:n])
 	}
 	return nil
 }
@@ -138,7 +144,7 @@ func wrapC4RequestEvent(ev event.Event) event.Event {
 
 func (c4 *C4RemoteSession) offerRequestEvent(ev event.Event) {
 	ev = wrapC4RequestEvent(ev)
-	isWsServer := strings.HasPrefix(c4.server, "ws://")
+	isWsServer := strings.HasPrefix(c4.server, "ws://") || strings.HasPrefix(c4.server, "wss://")
 	if isWsServer {
 		wsOfferEvent(c4.server, ev)
 		return
@@ -358,6 +364,7 @@ func (manager *C4) loginC4(server string) {
 	conn.server = server
 	login := &event.UserLoginEvent{}
 	login.User = userToken
+	login.SetHash(101)
 	conn.offerRequestEvent(login)
 }
 
@@ -432,6 +439,10 @@ func initC4Config() {
 	if num, exist := common.Cfg.GetIntProperty("C4", "WSConnKeepAlive"); exist {
 		c4_cfg.WSConnKeepAlive = uint32(num)
 	}
+	c4_cfg.WSReadTimeout = 5
+	if num, exist := common.Cfg.GetIntProperty("C4", "WSReadTimeout"); exist {
+		c4_cfg.WSReadTimeout = uint32(num)
+	}
 	if tmp, exist := common.Cfg.GetProperty("C4", "Proxy"); exist {
 		c4_cfg.Proxy = tmp
 	}
@@ -505,7 +516,7 @@ func (manager *C4) Init() error {
 			}
 			return url.Parse(c4_cfg.Proxy)
 		},
-		ResponseHeaderTimeout: time.Duration(c4_cfg.ReadTimeout + 1) * time.Second,
+		ResponseHeaderTimeout: time.Duration(c4_cfg.ReadTimeout+1) * time.Second,
 	}
 	c4HttpClient.Transport = tr
 
@@ -528,7 +539,7 @@ func (manager *C4) Init() error {
 		}
 		manager.servers.Add(v)
 		index = index + 1
-		if strings.HasPrefix(v, "ws://") {
+		if strings.HasPrefix(v, "ws://") || strings.HasPrefix(v, "wss://") {
 			initC4WebsocketChannel(v)
 		}
 		manager.loginC4(v)

@@ -52,50 +52,149 @@ func TestClose(t *testing.T) {
 }
 
 var keyPressTests = []struct {
-	in   string
-	line string
-	err  error
+	in             string
+	line           string
+	err            error
+	throwAwayLines int
 }{
 	{
-		"",
-		"",
-		io.EOF,
+		err: io.EOF,
 	},
 	{
-		"\r",
-		"",
-		nil,
+		in:   "\r",
+		line: "",
 	},
 	{
-		"foo\r",
-		"foo",
-		nil,
+		in:   "foo\r",
+		line: "foo",
 	},
 	{
-		"a\x1b[Cb\r", // right
-		"ab",
-		nil,
+		in:   "a\x1b[Cb\r", // right
+		line: "ab",
 	},
 	{
-		"a\x1b[Db\r", // left
-		"ba",
-		nil,
+		in:   "a\x1b[Db\r", // left
+		line: "ba",
 	},
 	{
-		"a\177b\r", // backspace
-		"b",
-		nil,
+		in:   "a\177b\r", // backspace
+		line: "b",
+	},
+	{
+		in: "\x1b[A\r", // up
+	},
+	{
+		in: "\x1b[B\r", // down
+	},
+	{
+		in:   "line\x1b[A\x1b[B\r", // up then down
+		line: "line",
+	},
+	{
+		in:             "line1\rline2\x1b[A\r", // recall previous line.
+		line:           "line1",
+		throwAwayLines: 1,
+	},
+	{
+		// recall two previous lines and append.
+		in:             "line1\rline2\rline3\x1b[A\x1b[Axxx\r",
+		line:           "line1xxx",
+		throwAwayLines: 2,
+	},
+	{
+		// Ctrl-A to move to beginning of line followed by ^K to kill
+		// line.
+		in:   "a b \001\013\r",
+		line: "",
+	},
+	{
+		// Ctrl-A to move to beginning of line, Ctrl-E to move to end,
+		// finally ^K to kill nothing.
+		in:   "a b \001\005\013\r",
+		line: "a b ",
+	},
+	{
+		in:   "\027\r",
+		line: "",
+	},
+	{
+		in:   "a\027\r",
+		line: "",
+	},
+	{
+		in:   "a \027\r",
+		line: "",
+	},
+	{
+		in:   "a b\027\r",
+		line: "a ",
+	},
+	{
+		in:   "a b \027\r",
+		line: "a ",
+	},
+	{
+		in:   "one two thr\x1b[D\027\r",
+		line: "one two r",
+	},
+	{
+		in:   "\013\r",
+		line: "",
+	},
+	{
+		in:   "a\013\r",
+		line: "a",
+	},
+	{
+		in:   "ab\x1b[D\013\r",
+		line: "a",
+	},
+	{
+		in:   "Ξεσκεπάζω\r",
+		line: "Ξεσκεπάζω",
+	},
+	{
+		in:             "£\r\x1b[A\177\r", // non-ASCII char, enter, up, backspace.
+		line:           "",
+		throwAwayLines: 1,
+	},
+	{
+		in:             "£\r££\x1b[A\x1b[B\177\r", // non-ASCII char, enter, 2x non-ASCII, up, down, backspace, enter.
+		line:           "£",
+		throwAwayLines: 1,
+	},
+	{
+		// Ctrl-D at the end of the line should be ignored.
+		in:   "a\004\r",
+		line: "a",
+	},
+	{
+		// a, b, left, Ctrl-D should erase the b.
+		in:   "ab\x1b[D\004\r",
+		line: "a",
+	},
+	{
+		// a, b, c, d, left, left, ^U should erase to the beginning of
+		// the line.
+		in:   "abcd\x1b[D\x1b[D\025\r",
+		line: "cd",
 	},
 }
 
 func TestKeyPresses(t *testing.T) {
 	for i, test := range keyPressTests {
-		for j := 0; j < len(test.in); j++ {
+		for j := 1; j < len(test.in); j++ {
 			c := &MockTerminal{
 				toSend:       []byte(test.in),
 				bytesPerRead: j,
 			}
 			ss := NewTerminal(c, "> ")
+			for k := 0; k < test.throwAwayLines; k++ {
+				_, err := ss.ReadLine()
+				if err != nil {
+					t.Errorf("Throwaway line %d from test %d resulted in error: %s", k, i, err)
+				}
+			}
 			line, err := ss.ReadLine()
 			if line != test.line {
 				t.Errorf("Line resulting from test %d (%d bytes per read) was '%s', expected '%s'", i, j, line, test.line)
@@ -106,5 +205,21 @@ func TestKeyPresses(t *testing.T) {
 				break
 			}
 		}
+	}
+}
+
+func TestPasswordNotSaved(t *testing.T) {
+	c := &MockTerminal{
+		toSend:       []byte("password\r\x1b[A\r"),
+		bytesPerRead: 1,
+	}
+	ss := NewTerminal(c, "> ")
+	pw, _ := ss.ReadPassword("> ")
+	if pw != "password" {
+		t.Fatalf("failed to read password, got %s", pw)
+	}
+	line, _ := ss.ReadLine()
+	if len(line) > 0 {
+		t.Fatalf("password was saved in history")
 	}
 }

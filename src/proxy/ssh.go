@@ -8,8 +8,6 @@ import (
 	"crypto/dsa"
 	"crypto/rsa"
 	_ "crypto/sha1"
-	"crypto/x509"
-	"encoding/pem"
 	"errors"
 	"event"
 	"fmt"
@@ -118,7 +116,7 @@ func (conn *SSHConnection) Request(sess *SessionConnection, ev event.Event) (err
 				conn.ssh_conn.CloseConn()
 				return err, nil
 			}
-			conn.proxy_conn.SetReadDeadline(time.Now().Add(10*time.Second))
+			conn.proxy_conn.SetReadDeadline(time.Now().Add(10 * time.Second))
 			resp, err := http.ReadResponse(conn.proxy_conn_reader, req.RawReq)
 			if err != nil {
 				conn.ssh_conn.CloseConn()
@@ -178,7 +176,7 @@ func (manager *SSH) GetName() string {
 type SSHRawConnection struct {
 	ClientConfig *ssh.ClientConfig
 	Server       string
-	clientConn   *ssh.ClientConn
+	clientConn   *ssh.Client
 }
 
 func (conn *SSHRawConnection) RemoteResolve(name string) ([]net.IP, error) {
@@ -206,7 +204,7 @@ func (conn *SSHRawConnection) CloseConn() {
 	}
 }
 
-func (conn *SSHRawConnection) GetClientConn(reconnect bool) (*ssh.ClientConn, error) {
+func (conn *SSHRawConnection) GetClientConn(reconnect bool) (*ssh.Client, error) {
 	if !reconnect && nil != conn.clientConn {
 		return conn.clientConn, nil
 	} else {
@@ -223,8 +221,14 @@ func (conn *SSHRawConnection) GetClientConn(reconnect bool) (*ssh.ClientConn, er
 		if c, err := dial("tcp", conn.Server); nil != err {
 			return nil, err
 		} else {
-			conn.clientConn, err = ssh.Client(c, conn.ClientConfig)
-			return conn.clientConn, err
+			//conn.clientConn, err = ssh.Client(c, conn.ClientConfig)
+			c, chans, reqs, err := ssh.NewClientConn(c, conn.Server, conn.ClientConfig)
+			if err != nil {
+				return nil, err
+			}
+			conn.clientConn = ssh.NewClient(c, chans, reqs)
+			return conn.clientConn, nil
+			//return conn.clientConn, err
 		}
 	}
 	return nil, nil
@@ -308,42 +312,34 @@ func InitSSH() error {
 				if pass, exist := u.User.Password(); exist {
 					ssh_conn.ClientConfig = &ssh.ClientConfig{
 						User: u.User.Username(),
-						Auth: []ssh.ClientAuth{
-							ssh.ClientAuthPassword(password(pass)),
+						Auth: []ssh.AuthMethod{
+							ssh.Password(pass),
 						},
 					}
 				} else {
 					if identify := u.Query().Get("i"); len(identify) > 0 {
+
+					
+
 						if content, err := ioutil.ReadFile(identify); nil != err {
 							log.Printf("Invalid SSH identify path:%s for reason:%v.\n", identify, err)
 							continue
 						} else {
-							block, _ := pem.Decode([]byte(content))
-							if nil == block {
-								log.Printf("Invalid pem content for path:%s.\n", identify)
+							privateKey, err := ssh.ParseRawPrivateKey([]byte(content))
+							if nil != err {
+								log.Printf("Invalid pem content for path:%s with reason:%v\n", identify, err)
 								continue
 							}
-							clientKeychain := new(keychain)
-							if strings.Contains(block.Type, "RSA") {
-								rsakey, err := x509.ParsePKCS1PrivateKey(block.Bytes)
-								if err != nil {
-									log.Printf("Invalid RSA private key for %v.\n", err)
-									continue
-								}
-								clientKeychain.keys = append(clientKeychain.keys, rsakey)
-							} else {
-								dsakey, err := util.DecodeDSAPrivateKEy(block.Bytes)
-								if err != nil {
-									log.Printf("Invalid DSA private key for %v.\n", err)
-									continue
-								}
-								clientKeychain.keys = append(clientKeychain.keys, dsakey)
+							signer, err := ssh.NewSignerFromKey(privateKey)
+							if nil != err {
+								log.Printf("Failed to signer:%v\n", err)
+								continue
 							}
 
 							ssh_conn.ClientConfig = &ssh.ClientConfig{
 								User: u.User.Username(),
-								Auth: []ssh.ClientAuth{
-									ssh.ClientAuthKeyring(clientKeychain),
+								Auth: []ssh.AuthMethod{
+									ssh.PublicKeys(signer),
 								},
 							}
 						}

@@ -1,5 +1,13 @@
 GSnova Changelog
 ===================
+Changes in version 0.23.0(2013.10.02)
+-------------------------------------------
+** Features
+   * [C4]Add websocket support
+   
+** Improvement
+   * Use Go1.3.3 to compile
+
 Changes in version 0.22.1(2013.06.15)
 -------------------------------------------
 ** Features

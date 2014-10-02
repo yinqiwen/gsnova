@@ -63,7 +63,7 @@ func main() {
 	common.Home, _ = filepath.Split(path)
 
 	as_server := flag.Bool("server", false, "Run as remote proxy server")
-	conf := flag.String("file", common.Home+common.Product+".conf", "Specify config file for gsnova")
+	conf := flag.String("file", common.Home + "/conf/gsnova.conf", "Specify config file for gsnova")
 	event.Init()
 	flag.Parse()
 	if *as_server {

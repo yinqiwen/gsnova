@@ -232,7 +232,7 @@ func generatePAC(url, date, content string) string {
 	pac.DefaultString = "DIRECT"
 	jscode := []string{}
 
-	if usercontent, err := ioutil.ReadFile(common.Home + "spac/user-gfwlist.txt"); nil == err {
+	if usercontent, err := ioutil.ReadFile(common.Home + "conf/user-gfwlist.txt"); nil == err {
 		content = content + "\n" + string(usercontent)
 	}
 
@@ -341,7 +341,7 @@ func loadIPRangeFile(ipRepo string) {
 		return
 	}
 	time.Sleep(5 * time.Second)
-	hf := common.Home + "spac/" + "iprange.txt"
+	hf := common.Home + "conf/" + "iprange.txt"
 	_, err := os.Stat(hf)
 	if nil != err {
 		var zero time.Time
@@ -365,12 +365,12 @@ func generatePACFromGFWList(url string) {
 	time.Sleep(5 * time.Second)
 	log.Printf("Generate PAC from  gfwlist %s\n", url)
 	load_gfwlist_rule()
-	gfwlist_txt := common.Home + "spac/snova-gfwlist.txt"
+	gfwlist_txt := common.Home + "conf/snova-gfwlist.txt"
 	var file_ts time.Time
 	if fi, err := os.Stat(gfwlist_txt); nil == err {
 		file_ts = fi.ModTime()
 	}
-	hf := common.Home + "spac/snova-gfwlist.pac"
+	hf := common.Home + "conf/snova-gfwlist.pac"
 	body, last_mod_date, err := util.FetchLateastContent(url, common.ProxyPort, file_ts, false)
 	if nil == err {
 		content := []byte{}
@@ -406,13 +406,12 @@ func PostInitSpac() {
 
 func InitSpac() {
 	spac = &SpacConfig{}
-	os.Mkdir(common.Home+"spac/", 0755)
 	spac.defaultRule, _ = common.Cfg.GetProperty("SPAC", "Default")
 	if len(spac.defaultRule) == 0 {
 		spac.defaultRule = GAE_NAME
 	}
 	//user script has higher priority
-	spac_script_path = []string{common.Home + "spac/user_pre_spac.json", common.Home + "spac/cloud_spac.json", common.Home + "spac/user_spac.json"}
+	spac_script_path = []string{common.Home + "conf/spac.json"}
 	spac.rules = make([]*JsonRule, 0)
 	if enable, exist := common.Cfg.GetIntProperty("SPAC", "Enable"); exist {
 		spac_enable = (enable == 1)
@@ -425,9 +424,9 @@ func InitSpac() {
 		pac_proxy = addr
 	}
 
-	if addr, exist := common.Cfg.GetProperty("SPAC", "CloudRule"); exist {
-		go fetchCloudSpacScript(addr)
-	}
+//	if addr, exist := common.Cfg.GetProperty("SPAC", "CloudRule"); exist {
+//		go fetchCloudSpacScript(addr)
+//	}
 	if url, exist := common.Cfg.GetProperty("SPAC", "IPRangeRepo"); exist {
 		go loadIPRangeFile(strings.TrimSpace(url))
 	}

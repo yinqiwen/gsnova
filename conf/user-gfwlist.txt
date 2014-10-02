@@ -5,3 +5,6 @@ www.voachinese.com
 *.google.com.*
 *.google.com
 *.googlecode.com
+*.googleusercontent.com
+*.gstatic.com
+*.googleapis.com
