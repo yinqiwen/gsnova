@@ -67,9 +67,9 @@ func getTLSCert(host string) (tls.Certificate, error) {
 		return cert, nil
 	}
 
-	os.Mkdir(Home+"conf/host/", 0755)
-	cf := Home + "conf/host/" + host + ".cert"
-	kf := Home + "conf/host/" + host + ".key"
+	os.Mkdir(Home+"conf/cert/", 0755)
+	cf := Home + "conf/cert/" + host + ".cert"
+	kf := Home + "conf/cert/" + host + ".key"
 	_, err := os.Stat(cf)
 	if err == nil {
 		tls_cer, err = tls.LoadX509KeyPair(cf, kf)

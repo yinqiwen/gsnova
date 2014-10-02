@@ -373,8 +373,8 @@ func (gae *GAEHttpConnection) handleHttpRes(conn *SessionConnection, req *event.
 func (gae *GAEHttpConnection) Request(conn *SessionConnection, ev event.Event) (err error, res event.Event) {
 	gae.closed = false
 	gae.sess = conn
-	if gae.over_tunnel {
-		return gae.requestOverTunnel(conn, ev)
+	if gae.manager.auths == nil {
+		return fmt.Errorf("GAE not inited"), nil
 	}
 	if nil == gae.gaeAuth {
 		gae.gaeAuth = gae.manager.auths.Select().(*GAEAuth)
