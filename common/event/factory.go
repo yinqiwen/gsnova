@@ -52,7 +52,3 @@ func NewEventInstance(eventType uint16) (err error, ev Event) {
 	}
 	return
 }
-
-func init() {
-
-}

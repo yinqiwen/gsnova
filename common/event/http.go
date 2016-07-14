@@ -2,6 +2,8 @@ package event
 
 import (
 	"bytes"
+	"fmt"
+	"log"
 	//"fmt"
 	//"net"
 	"io"
@@ -106,13 +108,37 @@ func (req *HTTPRequestEvent) Decode(buffer *bytes.Buffer) (err error) {
 	return req.DoDecode(buffer)
 }
 
+func (req *HTTPRequestEvent) GetHost() string {
+	host := req.Headers.Get("Host")
+	return host
+}
+
 func (req *HTTPRequestEvent) ToRequest() (*http.Request, error) {
+	if !strings.Contains(req.URL, "://") {
+		req.URL = "http://" + req.Headers.Get("Host") + req.URL
+	}
+	fmt.Printf("%v\n", req.Headers)
 	httpReq, err := http.NewRequest(req.Method, req.URL, NewHTTPBody(req.GetContentLength(), req.Content))
 	if nil != err {
 		return nil, err
 	}
 	httpReq.Header = req.Headers
 	return httpReq, nil
+}
+
+func (req *HTTPRequestEvent) HTTPEncode() []byte {
+	var buffer bytes.Buffer
+	fmt.Fprintf(&buffer, "%s %s HTTP/1.1\r\n", req.Method, req.URL)
+	for hn, hvs := range req.Headers {
+		for _, hv := range hvs {
+			fmt.Fprintf(&buffer, "%s:%s\r\n", hn, hv)
+		}
+	}
+	fmt.Fprintf(&buffer, "\r\n")
+	if len(req.Content) > 0 {
+		buffer.Write(req.Content)
+	}
+	return buffer.Bytes()
 }
 
 type HTTPResponseEvent struct {
@@ -179,18 +205,40 @@ func (res *HTTPResponseEvent) Decode(buffer *bytes.Buffer) (err error) {
 // 	return raw
 // }
 
-func (res *HTTPResponseEvent) ToResponse() *http.Response {
+func (res *HTTPResponseEvent) ToResponse(body bool) *http.Response {
 	raw := new(http.Response)
 	raw.Header = res.Headers
+	raw.ProtoMajor = 1
+	raw.ProtoMinor = 1
 	raw.StatusCode = int(res.StatusCode)
-	raw.Body = NewHTTPBody(res.GetContentLength(), res.Content)
+	raw.Status = http.StatusText(raw.StatusCode)
+	raw.TransferEncoding = res.Headers["TransferEncoding"]
+	if body {
+		raw.Body = NewHTTPBody(res.GetContentLength(), res.Content)
+	}
 	return raw
+}
+
+func (res *HTTPResponseEvent) Write(w io.Writer) (int, error) {
+	var buf bytes.Buffer
+	fmt.Fprintf(&buf, "HTTP/1.1 %d %s\r\n", res.StatusCode, http.StatusText(int(res.StatusCode)))
+	res.Headers.Write(&buf)
+	buf.Write([]byte("\r\n"))
+	log.Printf("### %s", string(buf.Bytes()))
+	buf.Write(res.Content)
+	return w.Write(buf.Bytes())
 }
 
 func NewHTTPResponseEvent(res *http.Response) *HTTPResponseEvent {
 	ev := new(HTTPResponseEvent)
 	ev.Headers = res.Header
 	ev.StatusCode = uint32(res.StatusCode)
+	if res.ContentLength >= 0 {
+		ev.Headers.Set("Content-Length", fmt.Sprintf("%d", res.ContentLength))
+	}
+	if len(res.TransferEncoding) > 0 {
+		ev.Headers["Transfer-Encoding"] = res.TransferEncoding
+	}
 	if res.ContentLength != 0 {
 		readLen := 8092
 		if res.ContentLength > 0 && res.ContentLength < int64(readLen) {
@@ -198,6 +246,28 @@ func NewHTTPResponseEvent(res *http.Response) *HTTPResponseEvent {
 		}
 		body := make([]byte, readLen)
 		n, _ := res.Body.Read(body)
+		ev.Content = body[0:n]
+	}
+	return ev
+}
+
+func NewHTTPRequestEvent(req *http.Request) *HTTPRequestEvent {
+	ev := new(HTTPRequestEvent)
+	ev.Headers = req.Header
+	ev.Method = req.Method
+	ev.URL = req.URL.String()
+	if strings.HasPrefix(ev.URL, "http://") {
+		ev.URL = ev.URL[7:]
+		ev.URL = ev.URL[len(req.Host):]
+	}
+	ev.Headers.Set("Host", req.Host)
+	if req.ContentLength != 0 {
+		readLen := 8092
+		if req.ContentLength > 0 && req.ContentLength < int64(readLen) {
+			readLen = int(req.ContentLength)
+		}
+		body := make([]byte, readLen)
+		n, _ := req.Body.Read(body)
 		ev.Content = body[0:n]
 	}
 	return ev

@@ -1,21 +1,37 @@
 package event
 
-import "time"
+import (
+	"errors"
+	"io"
+	"time"
+)
+
+var EventReadTimeout = errors.New("EventQueue read timeout")
 
 type EventQueue struct {
-	queue chan Event
+	closed bool
+	queue  chan Event
 }
 
 func (q *EventQueue) Publish(ev Event) {
 	q.queue <- ev
 }
+func (q *EventQueue) Close() {
+	if !q.closed {
+		q.closed = true
+		close(q.queue)
+	}
+}
 
-func (q *EventQueue) Read() Event {
+func (q *EventQueue) Read(timeout time.Duration) (Event, error) {
 	select {
 	case ev := <-q.queue:
-		return ev
-	case <-time.After(time.Second * 1):
-		return nil
+		if nil == ev {
+			return nil, io.EOF
+		}
+		return ev, nil
+	case <-time.After(timeout):
+		return nil, EventReadTimeout
 	}
 }
 
