@@ -71,7 +71,7 @@ func websocketInvoke(w http.ResponseWriter, r *http.Request) {
 						queue := getEventQueue(authedUser, connIndex, true)
 						go func() {
 							for !wsClosed {
-								ev, err := queue.Read(1 * time.Second)
+								ev, err := queue.Peek(1 * time.Second)
 								if nil != err {
 									continue
 								}
@@ -80,6 +80,8 @@ func websocketInvoke(w http.ResponseWriter, r *http.Request) {
 								err = ws.WriteMessage(websocket.BinaryMessage, buf.Bytes())
 								if nil != err {
 									log.Printf("Websoket write error:%v", err)
+								} else {
+									queue.ReadPeek()
 								}
 							}
 						}()

@@ -113,11 +113,10 @@ func (req *HTTPRequestEvent) GetHost() string {
 	return host
 }
 
-func (req *HTTPRequestEvent) ToRequest() (*http.Request, error) {
+func (req *HTTPRequestEvent) ToRequest(schema string) (*http.Request, error) {
 	if !strings.Contains(req.URL, "://") {
-		req.URL = "http://" + req.Headers.Get("Host") + req.URL
+		req.URL = schema + "://" + req.Headers.Get("Host") + req.URL
 	}
-	fmt.Printf("%v\n", req.Headers)
 	httpReq, err := http.NewRequest(req.Method, req.URL, NewHTTPBody(req.GetContentLength(), req.Content))
 	if nil != err {
 		return nil, err
