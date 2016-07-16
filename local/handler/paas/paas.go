@@ -32,6 +32,12 @@ func (p *PaasProxy) Init() error {
 	return nil
 }
 
+func (p *PaasProxy) Features() proxy.Feature {
+	var f proxy.Feature
+	f.MaxRequestBody = -1
+	return f
+}
+
 func (p *PaasProxy) Serve(session *proxy.ProxySession, ev event.Event) error {
 	if nil == session.Channel {
 		session.Channel = p.cs.Select()

@@ -4,6 +4,12 @@ import (
 	"bytes"
 )
 
+const (
+	ErrTooLargeResponse   = 1001
+	ErrInvalidHttpRequest = 1002
+	ErrRemoteProxyTimeout = 1003
+)
+
 type ErrorEvent struct {
 	EventHeader
 	Code   int64

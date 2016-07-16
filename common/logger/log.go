@@ -51,14 +51,10 @@ func IsDebugEnable() bool {
 	return true
 }
 
-type LoggerConfig struct {
-	Output []string
-}
-
-func InitLogger(cfg *LoggerConfig) {
+func InitLogger(output []string) {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	ws := make([]io.Writer, 0)
-	for _, name := range cfg.Output {
+	for _, name := range output {
 		if strings.EqualFold(name, "stdout") {
 			ws = append(ws, os.Stdout)
 		} else if strings.EqualFold(name, "stderr") {

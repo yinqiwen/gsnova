@@ -15,6 +15,8 @@ import (
 
 	"math/rand"
 
+	_ "github.com/yinqiwen/gsnova/local/handler/direct"
+	_ "github.com/yinqiwen/gsnova/local/handler/gae"
 	_ "github.com/yinqiwen/gsnova/local/handler/paas"
 	"github.com/yinqiwen/gsnova/local/proxy"
 )
@@ -32,7 +34,7 @@ func main() {
 	data, _ := ioutil.ReadFile(*conf)
 	err = json.Unmarshal(data, &proxy.GConf)
 	if nil != err {
-		fmt.Printf("Failed to unmarshal json to config for reason:%v\n", err)
+		fmt.Printf("Failed to unmarshal json:%s to config for reason:%v", data, err)
 		return
 	}
 	if proxy.GConf.User == "" {
@@ -40,7 +42,6 @@ func main() {
 		rand.Read(b)
 		proxy.GConf.User = string(b)
 	}
-
-	logger.InitLogger(&proxy.GConf.Log)
+	logger.InitLogger(proxy.GConf.Log)
 	proxy.Init()
 }

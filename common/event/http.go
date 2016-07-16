@@ -235,9 +235,6 @@ func NewHTTPResponseEvent(res *http.Response) *HTTPResponseEvent {
 	if res.ContentLength >= 0 {
 		ev.Headers.Set("Content-Length", fmt.Sprintf("%d", res.ContentLength))
 	}
-	if len(res.TransferEncoding) > 0 {
-		ev.Headers["Transfer-Encoding"] = res.TransferEncoding
-	}
 	if res.ContentLength != 0 {
 		readLen := 8092
 		if res.ContentLength > 0 && res.ContentLength < int64(readLen) {

@@ -6,8 +6,13 @@ import (
 	"github.com/yinqiwen/gsnova/common/event"
 )
 
+type Feature struct {
+	MaxRequestBody int
+}
+
 type Proxy interface {
 	Init() error
+	Features() Feature
 	Serve(session *ProxySession, ev event.Event) error
 }
 
@@ -27,6 +32,8 @@ func getProxyByName(name string) Proxy {
 }
 
 func Init() error {
+	GConf.init()
+	event.SetDefaultRC4Key(GConf.RC4Key)
 	for name, p := range proxyTable {
 		err := p.Init()
 		if nil != err {

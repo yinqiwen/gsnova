@@ -7,7 +7,7 @@ import (
 )
 
 type ProxyChannel interface {
-	Write(event.Event) error
+	Write(event.Event) (event.Event, error)
 }
 
 type ProxyChannelTable struct {

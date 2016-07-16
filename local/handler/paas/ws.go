@@ -39,7 +39,6 @@ func (wc *websocketChannel) reopen() error {
 	var auth event.AuthEvent
 	auth.Index = uint32(wc.idx)
 	auth.User = proxy.GConf.User
-	auth.Token = proxy.GConf.Passwd
 	auth.Reauth = wc.reconnect
 	wc.reconnect = true
 	err = writeEvent(c, &auth)
@@ -126,9 +125,9 @@ func (wc *websocketChannel) processRead() {
 	}
 }
 
-func (wc *websocketChannel) Write(ev event.Event) error {
+func (wc *websocketChannel) Write(ev event.Event) (event.Event, error) {
 	wc.ch <- ev
-	return nil
+	return nil, nil
 }
 
 func newWebsocketChannel(url string, idx int) *websocketChannel {

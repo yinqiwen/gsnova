@@ -4,65 +4,47 @@ import (
 	"bytes"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/yinqiwen/gsnova/common/event"
+	"github.com/yinqiwen/gsnova/remote"
 
 	"appengine"
 	"appengine/urlfetch"
 )
 
 func fetch(context appengine.Context, ev *event.HTTPRequestEvent) event.Event {
-	errorResponse := new(event.HTTPResponseEvent)
-	req := ev.ToRequest("http")
+	errorResponse := new(event.ErrorEvent)
+	errorResponse.SetId(ev.GetId())
+	req, err := ev.ToRequest("")
 
-	if req == nil {
-		errorResponse.Status = 400
-		fillErrorResponse(errorResponse, "Invalid fetch url:"+ev.Url)
+	if nil != err {
+		errorResponse.Code = event.ErrInvalidHttpRequest
+		errorResponse.Reason = fmt.Sprintf("Invalid fetch url:%s with err:%v", ev.URL, err)
 		return errorResponse
 	}
 	var t urlfetch.Transport
 	t.Context = context
 	t.Deadline, _ = time.ParseDuration("10s")
 	t.AllowInvalidServerCertificate = true
-	//t := &transport
-	//t := &urlfetch.Transport{context, 0, true}
 	retryCount := 2
 	for retryCount > 0 {
 		resp, err := t.RoundTrip(req)
 		if err == nil {
-			res := buildHTTPResponseEvent(resp)
-			if res.Status == 302 {
-				rangeHeader := req.Header.Get("Range")
-				if len(rangeHeader) > 0 {
-					res.AddHeader("X-Range", rangeHeader)
-				}
-			}
+			res := event.NewHTTPResponseEvent(resp)
 			return res
 		}
-		context.Errorf("Failed to fetch URL[%s] for reason:%v", ev.Url, err)
+		context.Errorf("Failed to fetch URL[%s] for reason:%v", ev.URL, err)
 		retryCount--
 		if strings.EqualFold(req.Method, "GET") && strings.Contains(err.Error(), "RESPONSE_TOO_LARGE") {
-			rangeLimit := Cfg.RangeFetchLimit
-			rangestart := 0
-			rangeheader := req.Header.Get("Range")
-			if len(rangeheader) > 0 {
-				rangestart, _ = util.ParseRangeHeaderValue(rangeheader)
-			}
-			req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", rangestart, rangeLimit-1))
-		}
-		if strings.Contains(err.Error(), "RESPONSE_TOO_LARGE") {
-			time.Sleep(1 * time.Second)
-			return Fetch(context, ev)
+			errorResponse.Code = event.ErrTooLargeResponse
+			return errorResponse
 		}
 	}
-	errorResponse.Status = 408
-	fillErrorResponse(errorResponse, "Fetch timeout for url:"+ev.Url)
-	rangeHeader := req.Header.Get("Range")
-	if len(rangeHeader) > 0 {
-		errorResponse.SetHeader("X-Range", rangeHeader)
-	}
+	errorResponse.Code = event.ErrRemoteProxyTimeout
+	errorResponse.Reason = fmt.Sprintf("Fetch timeout for url:%s", ev.URL)
 	return errorResponse
 
 }
@@ -71,13 +53,82 @@ func httpInvoke(w http.ResponseWriter, r *http.Request) {
 	b := make([]byte, r.ContentLength)
 	r.Body.Read(b)
 	buf := bytes.NewBuffer(b)
+	ctx := appengine.NewContext(r)
 
+	err, ev := event.DecodeEvent(buf)
+	if nil != err {
+		ctx.Errorf("Decode auth event failed:%v", err)
+		return
+	}
+	if auth, ok := ev.(*event.AuthEvent); ok {
+		if !remote.ServerConf.VerifyUser(auth.User) {
+			return
+		}
+	} else {
+		ctx.Errorf("Expected auth event, but got %T", ev)
+		return
+	}
+
+	err, ev = event.DecodeEvent(buf)
+	if nil != err {
+		ctx.Errorf("Decode http request event failed:%v", err)
+		return
+	}
+	if req, ok := ev.(*event.HTTPRequestEvent); ok {
+		res := fetch(ctx, req)
+		var resbuf bytes.Buffer
+		event.EncodeEvent(&resbuf, res)
+		headers := w.Header()
+		headers.Add("Content-Type", "application/octet-stream")
+		headers.Add("Content-Length", strconv.Itoa(buf.Len()))
+		w.WriteHeader(http.StatusOK)
+		w.Write(resbuf.Bytes())
+	} else {
+		ctx.Errorf("Expected http request event, but got %T", ev)
+		return
+	}
 }
 
-func handler(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprint(w, "Hello, world!")
+func index(w http.ResponseWriter, r *http.Request) {
+	fmt.Fprint(w, html)
 }
 
 func init() {
 	http.HandleFunc("/invoke", httpInvoke)
+	http.HandleFunc("/", index)
 }
+
+const html = `
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+	"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+<head>
+	<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+	<title>GSnova GAE Server</title>
+</head>
+
+<body>
+  <div id="container">
+
+    <h1><a href="http://github.com/yinqiwen/gsnova">GSnova</a>
+      <span class="small">by <a href="http://twitter.com/yinqiwen">@yinqiwen</a></span></h1>
+
+    <div class="description">
+      Welcome to use GSnova GAE Server(V1.0)!
+    </div>
+
+	<h2>Code</h2>
+    <p>You can clone the project with <a href="http://git-scm.com">Git</a>
+      by running:
+      <pre>$ git clone git://github.com/yinqiwen/gsnova.git</pre>
+    </p>
+
+    <div class="footer">
+      get the source code on GitHub : <a href="http://github.com/yinqiwen/gsnova">yinqiwen/gsnova</a>
+    </div>
+
+  </div>
+</body>
+</html>
+`

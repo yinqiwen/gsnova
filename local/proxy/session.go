@@ -14,14 +14,22 @@ var sessionMutex sync.Mutex
 var sessionNotExist error
 
 type ProxySession struct {
-	id       uint32
-	queue    *event.EventQueue
-	Channel  ProxyChannel
-	Hijacked bool
+	id          uint32
+	queue       *event.EventQueue
+	Channel     ProxyChannel
+	Hijacked    bool
+	SSLHijacked bool
 }
 
 func (s *ProxySession) handle(ev event.Event) error {
 	s.queue.Publish(ev)
+	return nil
+}
+
+func (s *ProxySession) Close() error {
+	closeEv := &event.TCPCloseEvent{}
+	closeEv.SetId(s.id)
+	s.handle(closeEv)
 	return nil
 }
 

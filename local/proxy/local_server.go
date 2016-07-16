@@ -2,33 +2,18 @@ package proxy
 
 import (
 	"bufio"
+	"crypto/tls"
 	"io"
 	"log"
 	"net"
 	"net/http"
+	"strings"
 	"sync/atomic"
 	"time"
 
 	"github.com/yinqiwen/gsnova/common/event"
-	//"time"
+	"github.com/yinqiwen/gsnova/common/fakecert"
 )
-
-// var seed uint32 = 0
-
-// func handleConn(conn *net.TCPConn, proxyServerType int) {
-// 	sessionID := atomic.AddUint32(&seed, 1)
-// 	proxy.HandleConn(sessionID, conn, proxyServerType)
-// }
-
-// func handleServer(lp *net.TCPListener, proxyServerType int) {
-// 	for {
-// 		conn, err := lp.AcceptTCP()
-// 		if nil != err {
-// 			continue
-// 		}
-// 		go handleConn(conn, proxyServerType)
-// 	}
-// }
 
 type proxyHandler struct {
 	Config ProxyConfig
@@ -43,11 +28,7 @@ var seed uint32 = 0
 func serveProxyConn(conn *net.TCPConn, proxy ProxyConfig) {
 	bufconn := bufio.NewReader(conn)
 	defer conn.Close()
-	p := getProxyByName(proxy.Remote)
-	if nil == p {
-		log.Printf("No proxy found for %s", proxy.Remote)
-		return
-	}
+	var p Proxy
 	sid := atomic.AddUint32(&seed, 1)
 	queue := event.NewEventQueue()
 	go func() {
@@ -59,24 +40,20 @@ func serveProxyConn(conn *net.TCPConn, proxy ProxyConfig) {
 				}
 				return
 			}
-			log.Printf("Session:%d recv event:%T", sid, ev)
+			//log.Printf("Session:%d recv event:%T", sid, ev)
 			switch ev.(type) {
+			case *event.ErrorEvent:
+				err := ev.(*event.ErrorEvent)
+				log.Printf("[ERROR]Session:%d recv error %d:%s", err.Code, err.Reason)
+				conn.Close()
+				return
 			case *event.TCPCloseEvent:
 				conn.Close()
 				return
 			case *event.TCPChunkEvent:
 				conn.Write(ev.(*event.TCPChunkEvent).Content)
 			case *event.HTTPResponseEvent:
-				//res := ev.(*event.HTTPResponseEvent).ToResponse(false)
 				ev.(*event.HTTPResponseEvent).Write(conn)
-				// dump, err := httputil.DumpResponse(res, false)
-				// if err != nil {
-				// 	log.Printf("Failed to dump response:%v", err)
-				// } else {
-				// 	log.Printf("####%s %d", string(dump), ev.(*event.HTTPResponseEvent).GetContentLength())
-				// 	conn.Write(dump)
-				// 	conn.Write(ev.(*event.HTTPResponseEvent).Content)
-				// }
 			default:
 				log.Printf("Invalid event type:%T to process", ev)
 			}
@@ -100,30 +77,70 @@ func serveProxyConn(conn *net.TCPConn, proxy ProxyConfig) {
 		}
 		req, err := http.ReadRequest(bufconn)
 		if nil != err && err != io.EOF {
-			//if err != io.EOF {
 			log.Printf("Read request failed from proxy connection:%v", err)
-			//}
 			break
 		}
 		if err != nil {
 			queue.Close()
 			break
 		}
+		log.Printf("Session:%d request:%s %v", sid, req.Method, req.URL)
 		req.Header.Del("Proxy-Connection")
+		if nil == p {
+			for _, pac := range proxy.PAC {
+				if pac.Match(req) {
+					p = getProxyByName(pac.Remote)
+					break
+				}
+			}
+			if nil == p {
+				log.Printf("No proxy found.")
+				return
+			}
+		}
+
 		ev := event.NewHTTPRequestEvent(req)
 		ev.SetId(sid)
-		p.Serve(session, ev)
-		for nil != req.Body {
-			buffer := make([]byte, 8192)
-			n, err := req.Body.Read(buffer)
-			if nil != err {
-				break
+		maxBody := p.Features().MaxRequestBody
+		if maxBody > 0 && req.ContentLength > 0 {
+			if int64(maxBody) < req.ContentLength {
+				log.Printf("[ERROR]Too large request:%d for limit:%d", req.ContentLength, maxBody)
+				return
 			}
-			var chunk event.TCPChunkEvent
-			chunk.SetId(sid)
-			chunk.Content = buffer[0:n]
-			p.Serve(session, &chunk)
+			for int64(len(ev.Content)) < req.ContentLength {
+				buffer := make([]byte, 8192)
+				n, err := req.Body.Read(buffer)
+				if nil != err {
+					break
+				}
+				ev.Content = append(ev.Content, buffer[0:n]...)
+			}
 		}
+
+		p.Serve(session, ev)
+		if session.SSLHijacked && strings.EqualFold(req.Method, "Connect") {
+			tlscfg, err := fakecert.TLSConfig(req.Host)
+			if nil != err {
+				log.Printf("[ERROR]Failed to generate fake cert for %s:%v", req.Host, err)
+				return
+			}
+			tlsconn := tls.Server(conn, tlscfg)
+			bufconn.Reset(tlsconn)
+		}
+		if maxBody < 0 && req.ContentLength != 0 {
+			for nil != req.Body {
+				buffer := make([]byte, 8192)
+				n, err := req.Body.Read(buffer)
+				if nil != err {
+					break
+				}
+				var chunk event.TCPChunkEvent
+				chunk.SetId(sid)
+				chunk.Content = buffer[0:n]
+				p.Serve(session, &chunk)
+			}
+		}
+
 	}
 	tcpclose := &event.TCPCloseEvent{}
 	tcpclose.SetId(sid)

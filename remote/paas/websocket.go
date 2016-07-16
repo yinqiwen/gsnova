@@ -9,6 +9,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/yinqiwen/gsnova/common/event"
+	"github.com/yinqiwen/gsnova/remote"
 )
 
 var (
@@ -62,6 +63,11 @@ func websocketInvoke(w http.ResponseWriter, r *http.Request) {
 				if auth, ok := ev.(*event.AuthEvent); ok {
 					if len(authedUser) == 0 {
 						authedUser = auth.User
+						if !remote.ServerConf.VerifyUser(authedUser) {
+							wsClosed = true
+							ws.Close()
+							return
+						}
 						connIndex = int(auth.Index)
 						log.Printf("Recv connection:%d from user:%s", connIndex, authedUser)
 						if !auth.Reauth {
