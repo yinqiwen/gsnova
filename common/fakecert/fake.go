@@ -32,17 +32,16 @@ func randBytes() (bytes []byte) {
 	return
 }
 
-func LoadRootCA() error {
+func init() {
 	cert := "Fake-ACRoot-Certificate.cer"
 	key := "Fake-ACRoot-Key.pem"
 	root_cert, err := tls.LoadX509KeyPair(cert, key)
 	if nil == err {
 		RootCert = root_cert
 		X509RootCert, err = x509.ParseCertificate(root_cert.Certificate[0])
-		return err
+		return
 	}
 	log.Fatalf("Failed to load root cert:%v", err)
-	return err
 }
 
 func TLSConfig(host string) (*tls.Config, error) {
@@ -52,7 +51,7 @@ func TLSConfig(host string) (*tls.Config, error) {
 	}
 	cert, err := getTLSCert(host)
 	if nil != err {
-		log.Printf("Failed to get tls cert:%v\n", err)
+		log.Printf("Failed to get tls cert:%v", err)
 		return nil, err
 	}
 	cfg.Certificates = []tls.Certificate{cert}

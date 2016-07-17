@@ -50,26 +50,25 @@ func (msg *HTTPMessageEvent) IsKeepAlive() bool {
 }
 
 func (msg *HTTPMessageEvent) DoEncode(buffer *bytes.Buffer) {
-	EncodeUInt64Value(buffer, uint64(len(msg.Headers)))
 	for hn, hvs := range msg.Headers {
 		for _, hv := range hvs {
 			EncodeBytesValue(buffer, []byte(hn))
 			EncodeBytesValue(buffer, []byte(hv))
 		}
 	}
+	EncodeBytesValue(buffer, []byte("\r\n"))
 	EncodeBytesValue(buffer, msg.Content)
 }
 
 func (msg *HTTPMessageEvent) DoDecode(buffer *bytes.Buffer) error {
-	length, err := DecodeUInt32Value(buffer)
-	if err != nil {
-		return err
-	}
 	msg.Headers = make(http.Header)
-	for i := 0; i < int(length); i++ {
+	for {
 		headerName, err := DecodeBytesValue(buffer)
 		if err != nil {
 			return err
+		}
+		if string(headerName) == "\r\n" {
+			break
 		}
 		headerValue, err := DecodeBytesValue(buffer)
 		if err != nil {
@@ -77,7 +76,10 @@ func (msg *HTTPMessageEvent) DoDecode(buffer *bytes.Buffer) error {
 		}
 		msg.Headers.Add(string(headerName), string(headerValue))
 	}
+	var err error
+	log.Printf("####%d rest", len(buffer.Bytes()))
 	msg.Content, err = DecodeBytesValue(buffer)
+	log.Printf("####%d after", len(msg.Content))
 	if err != nil {
 		return err
 	}
@@ -223,8 +225,11 @@ func (res *HTTPResponseEvent) Write(w io.Writer) (int, error) {
 	fmt.Fprintf(&buf, "HTTP/1.1 %d %s\r\n", res.StatusCode, http.StatusText(int(res.StatusCode)))
 	res.Headers.Write(&buf)
 	buf.Write([]byte("\r\n"))
-	log.Printf("### %s", string(buf.Bytes()))
-	buf.Write(res.Content)
+	log.Printf("[%d]### %d  %s", res.GetId(), len(res.Content), string(buf.Bytes()))
+	if len(res.Content) > 0 {
+		buf.Write(res.Content)
+		//log.Printf("###  %s", string(res.Content))
+	}
 	return w.Write(buf.Bytes())
 }
 
@@ -236,7 +241,7 @@ func NewHTTPResponseEvent(res *http.Response) *HTTPResponseEvent {
 		ev.Headers.Set("Content-Length", fmt.Sprintf("%d", res.ContentLength))
 	}
 	if res.ContentLength != 0 {
-		readLen := 8092
+		readLen := 8192
 		if res.ContentLength > 0 && res.ContentLength < int64(readLen) {
 			readLen = int(res.ContentLength)
 		}

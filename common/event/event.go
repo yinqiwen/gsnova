@@ -6,8 +6,10 @@ import (
 	"encoding/binary"
 	"errors"
 	_ "fmt"
-	"github.com/golang/snappy"
+	"log"
 	"reflect"
+
+	"github.com/golang/snappy"
 )
 
 const (
@@ -128,6 +130,7 @@ func DecodeBytesValue(buf *bytes.Buffer) (b []byte, err error) {
 	if size, err = binary.ReadUvarint(buf); nil != err {
 		return
 	}
+	log.Printf("######size= %d", size)
 	b = make([]byte, size)
 	buf.Read(b)
 	return
