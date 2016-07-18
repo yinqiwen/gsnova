@@ -43,5 +43,7 @@ func Init() error {
 		}
 	}
 	startLocalServers()
+	ch := make(chan int)
+	<-ch
 	return nil
 }

@@ -3,7 +3,6 @@ package event
 import (
 	"bytes"
 	"fmt"
-	"log"
 	//"fmt"
 	//"net"
 	"io"
@@ -77,13 +76,10 @@ func (msg *HTTPMessageEvent) DoDecode(buffer *bytes.Buffer) error {
 		msg.Headers.Add(string(headerName), string(headerValue))
 	}
 	var err error
-	log.Printf("####%d rest", len(buffer.Bytes()))
 	msg.Content, err = DecodeBytesValue(buffer)
-	log.Printf("####%d after", len(msg.Content))
 	if err != nil {
 		return err
 	}
-	//msg.Content.Write(b)
 	return nil
 }
 
@@ -225,7 +221,7 @@ func (res *HTTPResponseEvent) Write(w io.Writer) (int, error) {
 	fmt.Fprintf(&buf, "HTTP/1.1 %d %s\r\n", res.StatusCode, http.StatusText(int(res.StatusCode)))
 	res.Headers.Write(&buf)
 	buf.Write([]byte("\r\n"))
-	log.Printf("[%d]### %d  %s", res.GetId(), len(res.Content), string(buf.Bytes()))
+	//log.Printf("[%d]### %d  %s", res.GetId(), len(res.Content), string(buf.Bytes()))
 	if len(res.Content) > 0 {
 		buf.Write(res.Content)
 		//log.Printf("###  %s", string(res.Content))

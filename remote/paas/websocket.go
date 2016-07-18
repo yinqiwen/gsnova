@@ -59,7 +59,7 @@ func websocketInvoke(w http.ResponseWriter, r *http.Request) {
 					log.Printf("Failed to decode event for reason:%v", err)
 					break
 				}
-				log.Printf("Recv event:%T in session:%d", ev, ev.GetId())
+				//log.Printf("Recv event:%T in session:%d", ev, ev.GetId())
 				if auth, ok := ev.(*event.AuthEvent); ok {
 					if len(authedUser) == 0 {
 						authedUser = auth.User
@@ -68,6 +68,7 @@ func websocketInvoke(w http.ResponseWriter, r *http.Request) {
 							ws.Close()
 							return
 						}
+						authedUser = authedUser + "@" + ev.(*event.AuthEvent).Mac
 						connIndex = int(auth.Index)
 						log.Printf("Recv connection:%d from user:%s", connIndex, authedUser)
 						if !auth.Reauth {
@@ -86,6 +87,7 @@ func websocketInvoke(w http.ResponseWriter, r *http.Request) {
 								err = ws.WriteMessage(websocket.BinaryMessage, buf.Bytes())
 								if nil != err {
 									log.Printf("Websoket write error:%v", err)
+									return
 								} else {
 									queue.ReadPeek()
 								}

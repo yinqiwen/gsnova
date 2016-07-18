@@ -34,6 +34,19 @@ func fetch(context appengine.Context, ev *event.HTTPRequestEvent) event.Event {
 		resp, err := t.RoundTrip(req)
 		if err == nil {
 			res := event.NewHTTPResponseEvent(resp)
+			for nil != resp.Body {
+				buffer := make([]byte, 8192)
+				n, er := resp.Body.Read(buffer)
+				if nil != er {
+					context.Errorf("Failed to read body for reason:%v", er)
+					break
+				}
+				res.Content = append(res.Content, buffer[0:n]...)
+			}
+			if resp.ContentLength != int64(len(res.Content)) {
+				context.Errorf("Failed to read body %d %d", resp.ContentLength, len(res.Content))
+			}
+			context.Errorf("%v %d %d", resp.Header.Get("Content-Length"), resp.ContentLength, len(res.Content))
 			return res
 		}
 		context.Errorf("Failed to fetch URL[%s] for reason:%v", ev.URL, err)
@@ -80,7 +93,7 @@ func httpInvoke(w http.ResponseWriter, r *http.Request) {
 		event.EncodeEvent(&resbuf, res)
 		headers := w.Header()
 		headers.Add("Content-Type", "application/octet-stream")
-		headers.Add("Content-Length", strconv.Itoa(buf.Len()))
+		headers.Add("Content-Length", strconv.Itoa(resbuf.Len()))
 		w.WriteHeader(http.StatusOK)
 		w.Write(resbuf.Bytes())
 	} else {

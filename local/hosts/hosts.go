@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"net"
 	"regexp"
 	"strings"
 	"sync"
@@ -29,27 +30,49 @@ func (h *hostMapping) Get() string {
 var hostMappingTable = make(map[string]*hostMapping)
 var mappingMutex sync.Mutex
 
-func GetHost(host string) string {
-	mappingMutex.Lock()
-	defer mappingMutex.Unlock()
+func getHost(host string) (string, bool) {
+	var ok bool
 	mapping, exist := hostMappingTable[host]
 	if exist {
-		return mapping.Get()
+		s := mapping.Get()
+		ok := true
+		if !strings.Contains(s, ".") { //alials name
+			s, ok = getHost(s)
+		}
+		return s, ok
 	}
 	for _, m := range hostMappingTable {
 		if nil != m.hostRegex {
 			if m.hostRegex.MatchString(host) {
-				hostMappingTable[host] = m
 				s := m.Get()
 				if !strings.Contains(s, ".") { //alials name
-					return GetHost(s)
+					s, ok = getHost(s)
 				} else {
-					return s
+					hostMappingTable[host] = m
+					ok = true
 				}
+				return s, ok
 			}
 		}
 	}
-	return host
+	return host, false
+}
+
+func GetHost(host string) string {
+	mappingMutex.Lock()
+	defer mappingMutex.Unlock()
+	s, _ := getHost(host)
+	return s
+}
+
+func InHosts(host string) bool {
+	mappingMutex.Lock()
+	defer mappingMutex.Unlock()
+	if strings.Contains(host, ":") {
+		host, _, _ = net.SplitHostPort(host)
+	}
+	_, ok := getHost(host)
+	return ok
 }
 
 func init() {

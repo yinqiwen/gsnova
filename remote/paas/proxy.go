@@ -57,6 +57,12 @@ func removeProxySession(s *ProxySession) {
 	delete(proxySessionMap, s.Id)
 	log.Printf("Remove sesion:%d, %d left", s.Id.Id, len(proxySessionMap))
 }
+func sessionExist(sid SessionId) bool {
+	sessionMutex.Lock()
+	defer sessionMutex.Unlock()
+	_, exist := proxySessionMap[sid]
+	return exist
+}
 
 func removeProxySessionsByConn(user string, connIndex int) {
 	sessionMutex.Lock()

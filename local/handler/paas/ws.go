@@ -36,12 +36,11 @@ func (wc *websocketChannel) reopen() error {
 		log.Printf("dial websocket error:%v", err)
 		return err
 	}
-	var auth event.AuthEvent
+	auth := proxy.NewAuthEvent()
 	auth.Index = uint32(wc.idx)
-	auth.User = proxy.GConf.User
 	auth.Reauth = wc.reconnect
 	wc.reconnect = true
-	err = writeEvent(c, &auth)
+	err = writeEvent(c, auth)
 	if nil != err {
 		return err
 	}

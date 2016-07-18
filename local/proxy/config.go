@@ -5,9 +5,37 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+
+	"github.com/yinqiwen/gsnova/local/hosts"
 )
 
 var GConf LocalConfig
+
+func matchHostnames(pattern, host string) bool {
+	host = strings.TrimSuffix(host, ".")
+	pattern = strings.TrimSuffix(pattern, ".")
+
+	if len(pattern) == 0 || len(host) == 0 {
+		return false
+	}
+
+	patternParts := strings.Split(pattern, ".")
+	hostParts := strings.Split(host, ".")
+
+	if len(patternParts) != len(hostParts) {
+		return false
+	}
+
+	for i, patternPart := range patternParts {
+		if i == 0 && patternPart == "*" {
+			continue
+		}
+		if patternPart != hostParts[i] {
+			return false
+		}
+	}
+	return true
+}
 
 type PAASConfig struct {
 	Enable         bool
@@ -26,11 +54,32 @@ type PACConfig struct {
 	Method []string
 	Host   []string
 	Path   []string
+	Rule   []string
 	Remote string
 
 	methodRegex []*regexp.Regexp
 	hostRegex   []*regexp.Regexp
 	pathRegex   []*regexp.Regexp
+}
+
+func (pac *PACConfig) ruleInHosts(req *http.Request) bool {
+	return hosts.InHosts(req.Host)
+}
+
+func (pac *PACConfig) matchRules(req *http.Request) bool {
+	if len(pac.Rule) == 0 {
+		return true
+	}
+	ok := true
+	for _, rule := range pac.Rule {
+		if strings.EqualFold(rule, "InHosts") {
+			ok = pac.ruleInHosts(req)
+			if !ok {
+				break
+			}
+		}
+	}
+	return ok
 }
 
 func MatchRegexs(str string, rules []*regexp.Regexp) bool {
@@ -64,7 +113,7 @@ func NewRegex(rules []string) ([]*regexp.Regexp, error) {
 }
 
 func (pac *PACConfig) Match(req *http.Request) bool {
-	return MatchRegexs(req.Host, pac.hostRegex) && MatchRegexs(req.Method, pac.methodRegex) && MatchRegexs(req.URL.Path, pac.pathRegex)
+	return pac.matchRules(req) && MatchRegexs(req.Host, pac.hostRegex) && MatchRegexs(req.Method, pac.methodRegex) && MatchRegexs(req.URL.Path, pac.pathRegex)
 }
 
 type ProxyConfig struct {
@@ -76,18 +125,18 @@ type LocalConfig struct {
 	Log       []string
 	UserAgent string
 	RC4Key    string
-	User      string
+	Auth      string
 	Proxy     []ProxyConfig
 	PAAS      PAASConfig
 	GAE       GAEConfig
 }
 
 func (cfg *LocalConfig) init() error {
-	for _, p := range cfg.Proxy {
-		for _, pac := range p.PAC {
-			pac.methodRegex, _ = NewRegex(pac.Method)
-			pac.hostRegex, _ = NewRegex(pac.Host)
-			pac.pathRegex, _ = NewRegex(pac.Path)
+	for i, _ := range cfg.Proxy {
+		for j, pac := range cfg.Proxy[i].PAC {
+			cfg.Proxy[i].PAC[j].methodRegex, _ = NewRegex(pac.Method)
+			cfg.Proxy[i].PAC[j].hostRegex, _ = NewRegex(pac.Host)
+			cfg.Proxy[i].PAC[j].pathRegex, _ = NewRegex(pac.Path)
 		}
 	}
 	return nil

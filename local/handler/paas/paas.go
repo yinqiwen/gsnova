@@ -57,9 +57,6 @@ func (p *PaasProxy) Serve(session *proxy.ProxySession, ev event.Event) error {
 			tcpOpen := &event.TCPOpenEvent{Addr: host}
 			tcpOpen.SetId(ev.GetId())
 			session.Channel.Write(tcpOpen)
-			ok := &event.TCPChunkEvent{Content: []byte("HTTP/1.1 200 Connection established\r\n\r\n")}
-			ok.SetId(ev.GetId())
-			proxy.HandleEvent(ok)
 		} else {
 			session.Channel.Write(ev)
 		}

@@ -48,28 +48,31 @@ func (p *GAEProxy) Serve(session *proxy.ProxySession, ev event.Event) error {
 		req := ev.(*event.HTTPRequestEvent)
 		if strings.EqualFold(ev.(*event.HTTPRequestEvent).Method, "Connect") {
 			session.SSLHijacked = true
-			host := ev.(*event.HTTPRequestEvent).Headers.Get("Host")
-			tcpOpen := &event.TCPOpenEvent{Addr: host}
-			tcpOpen.SetId(ev.GetId())
-			session.Channel.Write(tcpOpen)
-			ok := &event.TCPChunkEvent{Content: []byte("HTTP/1.1 200 Connection established\r\n\r\n")}
-			ok.SetId(ev.GetId())
-			proxy.HandleEvent(ok)
+			return nil
 		} else {
 			if session.SSLHijacked {
 				req.URL = "https://" + req.Headers.Get("Host") + req.URL
 			} else {
 				req.URL = "http://" + req.Headers.Get("Host") + req.URL
 				defer session.Close()
+
 			}
 			rangeFetch := false
 			rangeHeader := req.Headers.Get("Range")
-			if strings.EqualFold(req.Method, "Get") && proxy.MatchRegexs(req.GetHost(), p.injectRangeRegex) {
-				rangeFetch = true
-			}
 			if len(rangeHeader) > 0 {
 				rangeFetch = true
 			}
+			if !rangeFetch && strings.EqualFold(req.Method, "Get") && proxy.MatchRegexs(req.GetHost(), p.injectRangeRegex) {
+				rangeFetch = true
+			}
+			adjustResp := func(r *event.HTTPResponseEvent) {
+				r.Headers.Del("Transfer-Encoding")
+				lenh := r.Headers.Get("Content-Length")
+				if len(lenh) == 0 {
+					r.Headers.Set("Content-Length", fmt.Sprintf("%d", len(r.Content)))
+				}
+			}
+
 			if !rangeFetch {
 				rev, err := session.Channel.Write(req)
 				if nil != err {
@@ -77,6 +80,7 @@ func (p *GAEProxy) Serve(session *proxy.ProxySession, ev event.Event) error {
 					session.Close()
 					return err
 				}
+				rev.SetId(req.GetId())
 				switch rev.(type) {
 				case *event.ErrorEvent:
 					if rev.(*event.ErrorEvent).Code == event.ErrTooLargeResponse {
@@ -87,6 +91,9 @@ func (p *GAEProxy) Serve(session *proxy.ProxySession, ev event.Event) error {
 						return nil
 					}
 				case *event.HTTPResponseEvent:
+					res := rev.(*event.HTTPResponseEvent)
+					adjustResp(res)
+					//res.Headers.Set("Content-Length", fmt.Sprintf("%d", len(res.Content)))
 					proxy.HandleEvent(rev)
 					return nil
 				default:
@@ -101,9 +108,13 @@ func (p *GAEProxy) Serve(session *proxy.ProxySession, ev event.Event) error {
 					ConcurrentFetcher: 3,
 					C:                 session.Channel,
 				}
-				err := fetcher.Fetch(req)
+				rev, err := fetcher.Fetch(req)
 				if nil != err {
 					log.Printf("[ERROR]%v", err)
+				}
+				if nil != rev {
+					adjustResp(rev)
+					proxy.HandleEvent(rev)
 				}
 			}
 
@@ -119,6 +130,7 @@ func (p *GAEProxy) Serve(session *proxy.ProxySession, ev event.Event) error {
 var mygae GAEProxy
 
 func init() {
+	initGAEClient()
 	mygae.cs = proxy.NewProxyChannelTable()
 	proxy.RegisterProxy("GAE", &mygae)
 }

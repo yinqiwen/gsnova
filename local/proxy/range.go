@@ -3,6 +3,7 @@ package proxy
 import (
 	"fmt"
 	"log"
+	"net/http"
 	"sync/atomic"
 	"time"
 
@@ -10,7 +11,9 @@ import (
 )
 
 func rangeFetch(C ProxyChannel, req *event.HTTPRequestEvent, begin, end int64) (*event.HTTPResponseEvent, error) {
+	log.Printf("Session:%d range fetch %d-%d", req.GetId(), begin, end)
 	rangeReq := new(event.HTTPRequestEvent)
+	rangeReq.Headers = make(http.Header)
 	for k, v := range req.Headers {
 		rangeReq.Headers[k] = v
 	}
@@ -22,14 +25,15 @@ func rangeFetch(C ProxyChannel, req *event.HTTPRequestEvent, begin, end int64) (
 	if nil == err {
 		res, ok := ev.(*event.HTTPResponseEvent)
 		if ok {
-			if res.StatusCode == 206 {
-				return res, nil
-			}
+			res.SetId(req.GetId())
 			if res.StatusCode == 302 {
 				location := res.Headers.Get("Location")
 				log.Printf("Range fetch:%s redirect to %s", rangeReq.URL, location)
 				rangeReq.URL = location
 				return rangeFetch(C, rangeReq, begin, end)
+			}
+			if res.StatusCode < 400 {
+				return res, nil
 			}
 		}
 		err = fmt.Errorf("Invalid response:%d %v for range fetch", res.StatusCode, res.Headers)
@@ -64,7 +68,7 @@ type RangeFetcher struct {
 	C                 ProxyChannel
 }
 
-func (f *RangeFetcher) Fetch(req *event.HTTPRequestEvent) error {
+func (f *RangeFetcher) Fetch(req *event.HTTPRequestEvent) (*event.HTTPResponseEvent, error) {
 	firstRangeStart := int64(0)
 	firstRangeEnd := f.SingleFetchLimit
 	rangeHeader := req.Headers.Get("Range")
@@ -80,11 +84,14 @@ func (f *RangeFetcher) Fetch(req *event.HTTPRequestEvent) error {
 	}
 	first, err := rangeFetch(f.C, req, firstRangeStart, firstRangeEnd)
 	if nil != err {
-		return err
+		return nil, err
+	}
+	if first.StatusCode < 400 {
+		return first, nil
 	}
 	firstChunk := rangeResponseToChunk(first)
 	if nil == firstChunk {
-		return fmt.Errorf("Invalid first range response:%d %v", first.StatusCode, first.Headers)
+		return nil, fmt.Errorf("Invalid first range response:%d %v", first.StatusCode, first.Headers)
 	}
 	if total < 0 {
 		total = firstChunk.total
@@ -102,7 +109,7 @@ func (f *RangeFetcher) Fetch(req *event.HTTPRequestEvent) error {
 	res.Content = first.Content
 	HandleEvent(res)
 	if int64(len(res.Content)) == total {
-		return nil
+		return nil, nil
 	}
 	conccurrentNum := int32(0)
 	nextRangeStart := firstRangeEnd + 1
@@ -155,5 +162,6 @@ func (f *RangeFetcher) Fetch(req *event.HTTPRequestEvent) error {
 		}
 	}
 	close(chunkChannel)
-	return nil
+	log.Printf("Session:%d stop range fetch.", req.GetId())
+	return nil, nil
 }

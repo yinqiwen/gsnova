@@ -13,8 +13,6 @@ import (
 	"encoding/json"
 	"io/ioutil"
 
-	"math/rand"
-
 	_ "github.com/yinqiwen/gsnova/local/handler/direct"
 	_ "github.com/yinqiwen/gsnova/local/handler/gae"
 	_ "github.com/yinqiwen/gsnova/local/handler/paas"
@@ -36,11 +34,6 @@ func main() {
 	if nil != err {
 		fmt.Printf("Failed to unmarshal json:%s to config for reason:%v", data, err)
 		return
-	}
-	if proxy.GConf.User == "" {
-		b := make([]byte, 40)
-		rand.Read(b)
-		proxy.GConf.User = string(b)
 	}
 	logger.InitLogger(proxy.GConf.Log)
 	proxy.Init()

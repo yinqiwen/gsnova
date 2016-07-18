@@ -32,11 +32,11 @@ func initGAEClient() {
 		var remote string
 		var err error
 		var conn net.Conn
-		host, port, _ := net.SplitHostPort(addr)
+		host, _, _ := net.SplitHostPort(addr)
 		for i := 0; i < 3; i++ {
 			remote = hosts.GetHost(host)
-			log.Printf("SSL Dial %s:%d", remote, port)
-			conn, err = net.DialTimeout(n, remote, 5*time.Second)
+			//log.Printf("SSL Dial %s:%s", remote, port)
+			conn, err = net.DialTimeout(n, remote+":443", 5*time.Second)
 			if err == nil {
 				break
 			}
@@ -64,8 +64,7 @@ type httpChannel struct {
 
 func (h *httpChannel) Write(ev event.Event) (event.Event, error) {
 	var buf bytes.Buffer
-	auth := &event.AuthEvent{}
-	auth.User = proxy.GConf.User
+	auth := proxy.NewAuthEvent()
 	event.EncodeEvent(&buf, auth)
 	event.EncodeEvent(&buf, ev)
 	var gaehost string
