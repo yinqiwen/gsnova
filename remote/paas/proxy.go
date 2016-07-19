@@ -60,7 +60,7 @@ func removeProxySession(s *ProxySession) {
 	_, exist := proxySessionMap[s.Id]
 	if exist {
 		delete(proxySessionMap, s.Id)
-		s.vh <- nil
+		s.ch <- nil
 		close(s.ch)
 		log.Printf("Remove sesion:%d, %d left", s.Id.Id, len(proxySessionMap))
 	}

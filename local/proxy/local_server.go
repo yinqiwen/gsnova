@@ -98,7 +98,7 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 				return
 			}
 		}
-		reqUrl := req.URL.Path
+		reqUrl := req.URL.String()
 		if strings.EqualFold(req.Method, "Connect") {
 			reqUrl = req.URL.Host
 		} else {
