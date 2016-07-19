@@ -8,6 +8,7 @@ const (
 	ErrTooLargeResponse   = 1001
 	ErrInvalidHttpRequest = 1002
 	ErrRemoteProxyTimeout = 1003
+	ErrAuthFailed         = 1004
 )
 
 type ErrorEvent struct {
@@ -18,6 +19,7 @@ type ErrorEvent struct {
 
 func (ev *ErrorEvent) Encode(buffer *bytes.Buffer) {
 	EncodeInt64Value(buffer, ev.Code)
+	EncodeStringValue(buffer, ev.Reason)
 }
 func (ev *ErrorEvent) Decode(buffer *bytes.Buffer) (err error) {
 	ev.Code, err = DecodeInt64Value(buffer)

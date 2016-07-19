@@ -13,11 +13,11 @@ import (
 )
 
 type websocketChannel struct {
-	url       string
-	idx       int
-	conn      *websocket.Conn
-	ch        chan event.Event
-	reconnect bool
+	url      string
+	idx      int64
+	conn     *websocket.Conn
+	ch       chan event.Event
+	authCode int
 }
 
 func writeEvent(conn *websocket.Conn, ev event.Event) error {
@@ -37,9 +37,7 @@ func (wc *websocketChannel) reopen() error {
 		return err
 	}
 	auth := proxy.NewAuthEvent()
-	auth.Index = uint32(wc.idx)
-	auth.Reauth = wc.reconnect
-	wc.reconnect = true
+	auth.Index = wc.idx
 	err = writeEvent(c, auth)
 	if nil != err {
 		return err
@@ -116,7 +114,17 @@ func (wc *websocketChannel) processRead() {
 					log.Printf("Failed to decode event for reason:%v", err)
 					break
 				}
-				proxy.HandleEvent(ev)
+				if wc.idx < 0 {
+					if auth, ok := ev.(*event.ErrorEvent); ok {
+						wc.authCode = int(auth.Code)
+					} else {
+						log.Printf("[ERROR]Expected error event for auth all connection, but got %T.", ev)
+					}
+					wc.close()
+					return
+				} else {
+					proxy.HandleEvent(ev)
+				}
 			}
 		default:
 			log.Printf("Invalid websocket message type")
@@ -129,11 +137,23 @@ func (wc *websocketChannel) Write(ev event.Event) (event.Event, error) {
 	return nil, nil
 }
 
-func newWebsocketChannel(url string, idx int) *websocketChannel {
+func newWebsocketChannel(url string, idx int64) *websocketChannel {
 	wc := new(websocketChannel)
 	wc.url = url
 	wc.idx = idx
+	wc.authCode = -1
 	wc.ch = make(chan event.Event, 1)
 	wc.init()
+	if wc.idx < 0 {
+		start := time.Now()
+		for wc.authCode != 0 {
+			if time.Now().After(start.Add(5*time.Second)) || wc.authCode > 0 {
+				log.Printf("Server:%s auth failed", wc.url)
+				return nil
+			}
+			time.Sleep(1 * time.Millisecond)
+		}
+		log.Printf("Server:%s authed", wc.url)
+	}
 	return wc
 }

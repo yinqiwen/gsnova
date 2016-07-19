@@ -32,6 +32,12 @@ func websocketInvoke(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Error Upgrading to websockets", 400)
 		return
 	}
+
+	writeEvent := func(ev event.Event) error {
+		var buf bytes.Buffer
+		event.EncodeEvent(&buf, ev)
+		return ws.WriteMessage(websocket.BinaryMessage, buf.Bytes())
+	}
 	//log.Printf("###Recv websocket connection")
 	buf := bytes.NewBuffer(nil)
 	authedUser := ""
@@ -64,6 +70,10 @@ func websocketInvoke(w http.ResponseWriter, r *http.Request) {
 					if len(authedUser) == 0 {
 						authedUser = auth.User
 						if !remote.ServerConf.VerifyUser(authedUser) {
+							var authres event.ErrorEvent
+							authres.Code = event.ErrAuthFailed
+							authres.SetId(ev.GetId())
+							writeEvent(&authres)
 							wsClosed = true
 							ws.Close()
 							return
@@ -71,9 +81,15 @@ func websocketInvoke(w http.ResponseWriter, r *http.Request) {
 						authedUser = authedUser + "@" + ev.(*event.AuthEvent).Mac
 						connIndex = int(auth.Index)
 						log.Printf("Recv connection:%d from user:%s", connIndex, authedUser)
-						if !auth.Reauth {
-							removeProxySessionsByConn(authedUser, connIndex)
-							recreateEventQueue(authedUser, connIndex)
+						if auth.Index < 0 {
+							removeProxySessionsByUser(authedUser)
+							closeUserEventQueue(authedUser)
+							authedUser = ""
+							var authres event.ErrorEvent
+							authres.Code = 0
+							authres.SetId(ev.GetId())
+							writeEvent(&authres)
+							continue
 						}
 						queue := getEventQueue(authedUser, connIndex, true)
 						go func() {
@@ -82,9 +98,7 @@ func websocketInvoke(w http.ResponseWriter, r *http.Request) {
 								if nil != err {
 									continue
 								}
-								var buf bytes.Buffer
-								event.EncodeEvent(&buf, ev)
-								err = ws.WriteMessage(websocket.BinaryMessage, buf.Bytes())
+								err = writeEvent(ev)
 								if nil != err {
 									log.Printf("Websoket write error:%v", err)
 									return
@@ -105,9 +119,11 @@ func websocketInvoke(w http.ResponseWriter, r *http.Request) {
 				}
 				session := getProxySessionByEvent(authedUser, connIndex, ev)
 				if nil != session {
-					session.handle(ev)
+					session.offer(ev)
 				} else {
-					log.Printf("No session:%d found for event %T", ev.GetId(), ev)
+					if _, ok := ev.(*event.TCPCloseEvent); !ok {
+						log.Printf("No session:%d found for event %T", ev.GetId(), ev)
+					}
 				}
 			}
 		default:

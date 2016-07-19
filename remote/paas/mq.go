@@ -9,20 +9,17 @@ import (
 var queueTable map[string][]*event.EventQueue = make(map[string][]*event.EventQueue)
 var queueMutex sync.Mutex
 
-func recreateEventQueue(user string, idx int) {
+func closeUserEventQueue(user string) {
 	queueMutex.Lock()
 	defer queueMutex.Unlock()
+
 	qs := queueTable[user]
-	if len(qs) < (idx + 1) {
-		tmp := make([]*event.EventQueue, idx+1)
-		copy(tmp, qs)
-		qs = tmp
+	for _, q := range qs {
+		if nil != q {
+			q.Close()
+		}
 	}
-	q := qs[idx]
-	if nil != q {
-		q.Close()
-		qs[idx] = event.NewEventQueue()
-	}
+	delete(queueTable, user)
 }
 
 func getEventQueue(user string, idx int, createIfMissing bool) *event.EventQueue {

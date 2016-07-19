@@ -6,17 +6,15 @@ import (
 
 type AuthEvent struct {
 	EventHeader
-	User   string
-	Mac    string
-	Index  uint32
-	Reauth bool
+	User  string
+	Mac   string
+	Index int64
 }
 
 func (ev *AuthEvent) Encode(buffer *bytes.Buffer) {
 	EncodeStringValue(buffer, ev.User)
 	EncodeStringValue(buffer, ev.Mac)
-	EncodeUInt32Value(buffer, ev.Index)
-	EncodeBoolValue(buffer, ev.Reauth)
+	EncodeInt64Value(buffer, ev.Index)
 }
 func (ev *AuthEvent) Decode(buffer *bytes.Buffer) (err error) {
 	ev.User, err = DecodeStringValue(buffer)
@@ -27,10 +25,6 @@ func (ev *AuthEvent) Decode(buffer *bytes.Buffer) (err error) {
 	if nil != err {
 		return err
 	}
-	ev.Index, err = DecodeUInt32Value(buffer)
-	if nil != err {
-		return err
-	}
-	ev.Reauth, err = DecodeBoolValue(buffer)
+	ev.Index, err = DecodeInt64Value(buffer)
 	return err
 }

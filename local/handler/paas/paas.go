@@ -13,16 +13,26 @@ type PaasProxy struct {
 	cs *proxy.ProxyChannelTable
 }
 
+func newRemoteChannel(server string, idx int64) proxy.ProxyChannel {
+	if strings.HasPrefix(server, "ws://") || strings.HasPrefix(server, "wss://") {
+		return newWebsocketChannel(server, idx)
+	}
+	return nil
+}
+
 func (p *PaasProxy) Init() error {
 	if !proxy.GConf.PAAS.Enable {
 		return nil
 	}
 	for _, server := range proxy.GConf.PAAS.ServerList {
 		var channel proxy.ProxyChannel
+		first := newRemoteChannel(server, -1)
+		if nil == first {
+			log.Printf("[ERROR]Failed to connect %s", server)
+			continue
+		}
 		for i := 0; i < proxy.GConf.PAAS.ConnsPerServer; i++ {
-			if strings.HasPrefix(server, "ws://") || strings.HasPrefix(server, "wss://") {
-				channel = newWebsocketChannel(server, i)
-			}
+			channel = newRemoteChannel(server, int64(i))
 			//log.Printf("#####%s %d", server, itc)
 			if nil != channel {
 				p.cs.Add(channel)

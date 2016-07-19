@@ -25,6 +25,7 @@ type ProxySession struct {
 	CreateTime time.Time
 	conn       net.Conn
 	addr       string
+	ch         chan event.Event
 }
 
 func getProxySessionByEvent(user string, idx int, ev event.Event) *ProxySession {
@@ -47,6 +48,8 @@ func getProxySessionByEvent(user string, idx int, ev event.Event) *ProxySession 
 	p := new(ProxySession)
 	p.Id = sid
 	p.CreateTime = time.Now()
+	p.ch = make(chan event.Event, 10)
+	go p.processEvents()
 	proxySessionMap[sid] = p
 	return p
 }
@@ -54,8 +57,13 @@ func getProxySessionByEvent(user string, idx int, ev event.Event) *ProxySession 
 func removeProxySession(s *ProxySession) {
 	sessionMutex.Lock()
 	defer sessionMutex.Unlock()
-	delete(proxySessionMap, s.Id)
-	log.Printf("Remove sesion:%d, %d left", s.Id.Id, len(proxySessionMap))
+	_, exist := proxySessionMap[s.Id]
+	if exist {
+		delete(proxySessionMap, s.Id)
+		s.vh <- nil
+		close(s.ch)
+		log.Printf("Remove sesion:%d, %d left", s.Id.Id, len(proxySessionMap))
+	}
 }
 func sessionExist(sid SessionId) bool {
 	sessionMutex.Lock()
@@ -64,11 +72,11 @@ func sessionExist(sid SessionId) bool {
 	return exist
 }
 
-func removeProxySessionsByConn(user string, connIndex int) {
+func removeProxySessionsByUser(user string) {
 	sessionMutex.Lock()
 	defer sessionMutex.Unlock()
 	for k, s := range proxySessionMap {
-		if k.User == user && k.ConnIndex == connIndex {
+		if k.User == user {
 			s.close()
 			delete(proxySessionMap, k)
 		}
@@ -110,30 +118,17 @@ func (p *ProxySession) initialClose() {
 	removeProxySession(p)
 }
 
-// func (p *ProxySession) httpInvoke(req *http.Request) error {
-// 	p.request = req
-// 	res, err := http.DefaultClient.Do(req)
-// 	if nil != err {
-// 		log.Printf("%v", err)
-// 		ev := &event.TCPCloseEvent{}
-// 		p.publish(ev)
-// 		return err
-// 	}
-// 	p.response = res
-// 	ev := event.NewHTTPResponseEvent(res)
-// 	p.publish(ev)
-// 	for nil != res.Body {
-// 		buffer := make([]byte, 8192)
-// 		n, err := res.Body.Read(buffer)
-// 		if nil != err {
-// 			break
-// 		}
-// 		var chunk event.TCPChunkEvent
-// 		chunk.Content = buffer[0:n]
-// 		p.publish(&chunk)
-// 	}
-// 	return nil
-// }
+func (p *ProxySession) processEvents() {
+	for {
+		ev := <-p.ch
+		if nil != ev {
+			p.handle(ev)
+			//log.Printf("#####%d %v %v", ev.GetId(), ev, p.closed)
+		} else {
+			break
+		}
+	}
+}
 
 func (p *ProxySession) open(to string) error {
 	if p.conn != nil && to == p.addr {
@@ -184,9 +179,11 @@ func (p *ProxySession) readTCP() error {
 	}
 	return nil
 }
+func (p *ProxySession) offer(ev event.Event) {
+	p.ch <- ev
+}
 
 func (p *ProxySession) handle(ev event.Event) error {
-	//p.evQueue.Publish(ev)
 	switch ev.(type) {
 	case *event.TCPOpenEvent:
 		return p.open(ev.(*event.TCPOpenEvent).Addr)

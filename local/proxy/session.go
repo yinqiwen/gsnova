@@ -64,7 +64,9 @@ func closeProxySession(sid uint32) {
 func HandleEvent(ev event.Event) error {
 	session := getProxySession(ev.GetId())
 	if nil == session {
-		log.Printf("No session:%d found for %T", ev.GetId(), ev)
+		if _, ok := ev.(*event.TCPCloseEvent); !ok {
+			log.Printf("No session:%d found for %T", ev.GetId(), ev)
+		}
 		return sessionNotExist
 	}
 	return session.handle(ev)
