@@ -41,11 +41,13 @@ type PAASConfig struct {
 	Enable         bool
 	ServerList     []string
 	ConnsPerServer int
+	SNIProxy       string
 }
 
 type GAEConfig struct {
 	Enable         bool
 	ServerList     []string
+	TLSServerName  []string
 	InjectRange    []string
 	ConnsPerServer int
 }
@@ -86,6 +88,7 @@ func MatchRegexs(str string, rules []*regexp.Regexp) bool {
 	if len(rules) == 0 {
 		return true
 	}
+	str = strings.ToLower(str)
 	for _, regex := range rules {
 		if regex.MatchString(str) {
 			return true
@@ -99,7 +102,7 @@ func NewRegex(rules []string) ([]*regexp.Regexp, error) {
 		if originrule == "*" && len(rules) == 1 {
 			break
 		}
-		rule := strings.Replace(originrule, "*", ".*", -1)
+		rule := strings.Replace(strings.ToLower(originrule), "*", ".*", -1)
 		reg, err := regexp.Compile(rule)
 		if nil != err {
 			log.Printf("Invalid pattern:%s for reason:%v", originrule, err)

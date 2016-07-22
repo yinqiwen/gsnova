@@ -10,6 +10,8 @@ import (
 	"sync"
 )
 
+const SNIProxy = "sni_proxy"
+
 type hostMapping struct {
 	host      string
 	hostRegex *regexp.Regexp
@@ -23,7 +25,7 @@ func (h *hostMapping) Get() string {
 		c = 0
 	}
 	s := h.mapping[c]
-	h.cursor++
+	h.cursor = c + 1
 	return s
 }
 

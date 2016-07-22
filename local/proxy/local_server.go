@@ -92,6 +92,7 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 					proxyName = pac.Remote
 					break
 				}
+
 			}
 			if nil == p {
 				log.Printf("No proxy found.")

@@ -25,8 +25,6 @@ func initGAEClient() {
 		return
 	}
 	client := new(http.Client)
-	tlcfg := &tls.Config{}
-	tlcfg.InsecureSkipVerify = true
 
 	sslDial := func(n, addr string) (net.Conn, error) {
 		var remote string
@@ -44,12 +42,16 @@ func initGAEClient() {
 		if err != nil {
 			return nil, err
 		}
+		tlcfg := &tls.Config{}
+		tlcfg.InsecureSkipVerify = true
+		if len(proxy.GConf.GAE.TLSServerName) > 0 {
+			tlcfg.ServerName = proxy.GConf.GAE.TLSServerName[0]
+		}
 		return tls.Client(conn, tlcfg), nil
 	}
 
 	tr := &http.Transport{
 		Dial:                  sslDial,
-		TLSClientConfig:       tlcfg,
 		DisableCompression:    true,
 		MaxIdleConnsPerHost:   int(proxy.GConf.GAE.ConnsPerServer),
 		ResponseHeaderTimeout: 15 * time.Second,

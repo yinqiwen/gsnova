@@ -2,13 +2,16 @@ package paas
 
 import (
 	"bytes"
+	"crypto/tls"
 	"io"
 	"log"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/yinqiwen/gsnova/common/event"
+	"github.com/yinqiwen/gsnova/local/hosts"
 	"github.com/yinqiwen/gsnova/local/proxy"
 )
 
@@ -31,7 +34,14 @@ func (wc *websocketChannel) reopen() error {
 	if nil != err {
 		return err
 	}
-	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
+	u.Path = "/ws"
+	wsDialer := &websocket.Dialer{}
+	if strings.HasPrefix(wc.url, "wss://") && hosts.InHosts(hosts.SNIProxy) {
+		wsDialer.TLSClientConfig = &tls.Config{}
+		wsDialer.NetDial = paasDial
+	}
+
+	c, _, err := wsDialer.Dial(u.String(), nil)
 	if err != nil {
 		log.Printf("dial websocket error:%v", err)
 		return err
@@ -149,6 +159,7 @@ func newWebsocketChannel(url string, idx int64) *websocketChannel {
 		for wc.authCode != 0 {
 			if time.Now().After(start.Add(5*time.Second)) || wc.authCode > 0 {
 				log.Printf("Server:%s auth failed", wc.url)
+				wc.close()
 				return nil
 			}
 			time.Sleep(1 * time.Millisecond)

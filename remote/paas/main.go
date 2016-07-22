@@ -26,8 +26,8 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", indexCallback)
 	mux.HandleFunc("/ws", websocketInvoke)
-	mux.HandleFunc("/http/pull", httpPull)
-	mux.HandleFunc("/http/pulsh", httpPush)
+	mux.HandleFunc("/http/pull", httpInvoke)
+	mux.HandleFunc("/http/push", httpInvoke)
 
 	log.Println("Listening on " + host + ":" + port)
 	err := http.ListenAndServe(host+":"+port, mux)

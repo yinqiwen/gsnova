@@ -2,6 +2,8 @@ package main
 
 import (
 	//"fmt"
+	"bytes"
+	"fmt"
 	"log"
 	"net"
 	"strings"
@@ -9,10 +11,16 @@ import (
 	"time"
 
 	"github.com/yinqiwen/gsnova/common/event"
+	"github.com/yinqiwen/gsnova/remote"
 )
 
 var proxySessionMap map[SessionId]*ProxySession = make(map[SessionId]*ProxySession)
 var sessionMutex sync.Mutex
+
+type ConnContex struct {
+	User  string
+	Index int
+}
 
 type SessionId struct {
 	User      string
@@ -164,12 +172,13 @@ func (p *ProxySession) write(b []byte) (int, error) {
 
 func (p *ProxySession) readTCP() error {
 	for {
-		if nil == p.conn {
+		conn := p.conn
+		if nil == conn {
 			return nil
 		}
-		p.conn.SetReadDeadline(time.Now().Add(10 * time.Second))
+		conn.SetReadDeadline(time.Now().Add(10 * time.Second))
 		b := make([]byte, 8192)
-		n, err := p.conn.Read(b)
+		n, err := conn.Read(b)
 		if nil != err {
 			p.initialClose()
 			return err
@@ -214,4 +223,56 @@ func (p *ProxySession) handle(ev event.Event) error {
 		log.Printf("Invalid event type:%T to process", ev)
 	}
 	return nil
+}
+
+func handleRequestBuffer(reqbuf *bytes.Buffer, ctx *ConnContex) ([]event.Event, error) {
+	ress := make([]event.Event, 0)
+	for reqbuf.Len() > 0 {
+		err, ev := event.DecodeEvent(reqbuf)
+		if nil != err {
+			log.Printf("Failed to decode event for reason:%v", err)
+			return ress, err
+		}
+		if auth, ok := ev.(*event.AuthEvent); ok {
+			if len(ctx.User) == 0 {
+				if !remote.ServerConf.VerifyUser(auth.User) {
+					var authres event.ErrorEvent
+					authres.Code = event.ErrAuthFailed
+					authres.SetId(ev.GetId())
+					ress = append(ress, &authres)
+					return ress, nil
+				}
+				authedUser := auth.User
+				authedUser = authedUser + "@" + auth.Mac
+				log.Printf("Recv connection:%d from user:%s", auth.Index, authedUser)
+				if auth.Index < 0 {
+					removeProxySessionsByUser(authedUser)
+					closeUserEventQueue(authedUser)
+					var authres event.ErrorEvent
+					authres.Code = 0
+					authres.SetId(ev.GetId())
+					ress = append(ress, &authres)
+					continue
+				}
+				ctx.User = authedUser + "@" + ev.(*event.AuthEvent).Mac
+				ctx.Index = int(auth.Index)
+			} else {
+				return nil, fmt.Errorf("Duplicate auth event in same connection")
+			}
+			continue
+		} else {
+			if len(ctx.User) == 0 {
+				return nil, fmt.Errorf("Auth event MUST be first event.")
+			}
+		}
+		session := getProxySessionByEvent(ctx.User, ctx.Index, ev)
+		if nil != session {
+			session.offer(ev)
+		} else {
+			if _, ok := ev.(*event.TCPCloseEvent); !ok {
+				log.Printf("No session:%d found for event %T", ev.GetId(), ev)
+			}
+		}
+	}
+	return ress, nil
 }

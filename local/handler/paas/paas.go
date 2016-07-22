@@ -3,11 +3,26 @@ package paas
 import (
 	"fmt"
 	"log"
+	"net"
+	"net/http"
 	"strings"
+	"time"
 
 	"github.com/yinqiwen/gsnova/common/event"
+	"github.com/yinqiwen/gsnova/local/hosts"
 	"github.com/yinqiwen/gsnova/local/proxy"
 )
+
+func paasDial(network, addr string) (net.Conn, error) {
+	host, port, _ := net.SplitHostPort(addr)
+	if port == "443" && len(proxy.GConf.PAAS.SNIProxy) > 0 {
+		//host = hosts.GetHost(hosts.SNIProxy)
+		host = hosts.GetHost(proxy.GConf.PAAS.SNIProxy)
+		addr = host + ":" + port
+	}
+	log.Printf("[PAAS]Connect %s:%s", host, port)
+	return net.DialTimeout(network, addr, 3*time.Second)
+}
 
 type PaasProxy struct {
 	cs *proxy.ProxyChannelTable
@@ -16,6 +31,8 @@ type PaasProxy struct {
 func newRemoteChannel(server string, idx int64) proxy.ProxyChannel {
 	if strings.HasPrefix(server, "ws://") || strings.HasPrefix(server, "wss://") {
 		return newWebsocketChannel(server, idx)
+	} else if strings.HasPrefix(server, "http://") || strings.HasPrefix(server, "https://") {
+		return newHTTPChannel(server, idx)
 	}
 	return nil
 }
@@ -81,5 +98,13 @@ var mypaas PaasProxy
 
 func init() {
 	mypaas.cs = proxy.NewProxyChannelTable()
+	tr := &http.Transport{
+		Dial:                  paasDial,
+		DisableCompression:    true,
+		MaxIdleConnsPerHost:   2 * int(proxy.GConf.PAAS.ConnsPerServer),
+		ResponseHeaderTimeout: 15 * time.Second,
+	}
+	paasHttpClient = &http.Client{}
+	paasHttpClient.Transport = tr
 	proxy.RegisterProxy("PAAS", &mypaas)
 }

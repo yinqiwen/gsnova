@@ -16,7 +16,7 @@ type GAEProxy struct {
 }
 
 func (p *GAEProxy) Init() error {
-	if !proxy.GConf.PAAS.Enable {
+	if !proxy.GConf.GAE.Enable {
 		return nil
 	}
 	for _, server := range proxy.GConf.GAE.ServerList {
@@ -132,5 +132,6 @@ var mygae GAEProxy
 func init() {
 	initGAEClient()
 	mygae.cs = proxy.NewProxyChannelTable()
+	mygae.Init()
 	proxy.RegisterProxy("GAE", &mygae)
 }

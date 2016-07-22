@@ -9,7 +9,6 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/yinqiwen/gsnova/common/event"
-	"github.com/yinqiwen/gsnova/remote"
 )
 
 var (
@@ -40,9 +39,10 @@ func websocketInvoke(w http.ResponseWriter, r *http.Request) {
 	}
 	//log.Printf("###Recv websocket connection")
 	buf := bytes.NewBuffer(nil)
-	authedUser := ""
-	connIndex := 0
+	ctx := &ConnContex{}
 	wsClosed := false
+	var queue *event.EventQueue
+
 	for {
 		mt, data, err := ws.ReadMessage()
 		if err != nil {
@@ -59,71 +59,32 @@ func websocketInvoke(w http.ResponseWriter, r *http.Request) {
 			} else {
 				buf.Write(data)
 			}
-			for buf.Len() > 0 {
-				err, ev := event.DecodeEvent(buf)
-				if nil != err {
-					log.Printf("Failed to decode event for reason:%v", err)
-					break
-				}
-				//log.Printf("Recv event:%T in session:%d", ev, ev.GetId())
-				if auth, ok := ev.(*event.AuthEvent); ok {
-					if len(authedUser) == 0 {
-						authedUser = auth.User
-						if !remote.ServerConf.VerifyUser(authedUser) {
-							var authres event.ErrorEvent
-							authres.Code = event.ErrAuthFailed
-							authres.SetId(ev.GetId())
-							writeEvent(&authres)
-							wsClosed = true
-							ws.Close()
-							return
-						}
-						authedUser = authedUser + "@" + ev.(*event.AuthEvent).Mac
-						connIndex = int(auth.Index)
-						log.Printf("Recv connection:%d from user:%s", connIndex, authedUser)
-						if auth.Index < 0 {
-							removeProxySessionsByUser(authedUser)
-							closeUserEventQueue(authedUser)
-							authedUser = ""
-							var authres event.ErrorEvent
-							authres.Code = 0
-							authres.SetId(ev.GetId())
-							writeEvent(&authres)
-							continue
-						}
-						queue := getEventQueue(authedUser, connIndex, true)
-						go func() {
-							for !wsClosed {
-								ev, err := queue.Peek(1 * time.Second)
-								if nil != err {
-									continue
-								}
-								err = writeEvent(ev)
-								if nil != err {
-									log.Printf("Websoket write error:%v", err)
-									return
-								} else {
-									queue.ReadPeek()
-								}
+			ress, err := handleRequestBuffer(buf, ctx)
+			if nil != err {
+				log.Printf("[ERROR]connection %s:%d error:%v", ctx.User, ctx.Index, err)
+				ws.Close()
+				wsClosed = true
+			} else {
+				if nil == queue && len(ctx.User) > 0 && ctx.Index >= 0 {
+					queue = getEventQueue(ctx.User, ctx.Index, true)
+					go func() {
+						for !wsClosed {
+							ev, err := queue.Peek(1 * time.Millisecond)
+							if nil != err {
+								continue
 							}
-						}()
-					} else {
-						log.Printf("Duplicate auth event in same connection")
-					}
-					continue
-				} else {
-					if len(authedUser) == 0 {
-						log.Printf("Auth event MUST be first event.")
-						break
-					}
+							err = writeEvent(ev)
+							if nil != err {
+								log.Printf("Websoket write error:%v", err)
+								return
+							} else {
+								queue.ReadPeek()
+							}
+						}
+					}()
 				}
-				session := getProxySessionByEvent(authedUser, connIndex, ev)
-				if nil != session {
-					session.offer(ev)
-				} else {
-					if _, ok := ev.(*event.TCPCloseEvent); !ok {
-						log.Printf("No session:%d found for event %T", ev.GetId(), ev)
-					}
+				for _, res := range ress {
+					writeEvent(res)
 				}
 			}
 		default:
@@ -131,6 +92,7 @@ func websocketInvoke(w http.ResponseWriter, r *http.Request) {
 			ws.Close()
 		}
 	}
-	log.Printf("Close websocket connection:%d", connIndex)
+	wsClosed = true
+	log.Printf("Close websocket connection:%d", ctx.Index)
 	//ws.WriteMessage(websocket.CloseMessage, []byte{})
 }

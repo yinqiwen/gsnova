@@ -67,6 +67,9 @@ func newDirectChannel(req *event.HTTPRequestEvent, useTLS bool) (*directChannel,
 	if strings.Contains(host, ":") {
 		host, port, _ = net.SplitHostPort(host)
 	}
+	if strings.EqualFold(req.Method, "Connect") && hosts.InHosts(hosts.SNIProxy) {
+		host = hosts.SNIProxy
+	}
 	host = hosts.GetHost(host)
 	addr := host
 	if len(port) > 0 {
@@ -82,6 +85,7 @@ func newDirectChannel(req *event.HTTPRequestEvent, useTLS bool) (*directChannel,
 	c, err := net.DialTimeout("tcp", addr, 5*time.Second)
 	log.Printf("Session:%d connect %s for %s", req.GetId(), addr, req.GetHost())
 	if nil != err {
+		log.Printf("Failed to connect %s for %s with error:%v", addr, req.GetHost(), err)
 		return nil, err
 	}
 
@@ -89,7 +93,12 @@ func newDirectChannel(req *event.HTTPRequestEvent, useTLS bool) (*directChannel,
 	if useTLS && !strings.EqualFold(req.Method, "Connect") {
 		tlcfg := &tls.Config{}
 		tlcfg.InsecureSkipVerify = true
-		d.conn = tls.Client(c, tlcfg)
+		tlsconn := tls.Client(c, tlcfg)
+		err = tlsconn.Handshake()
+		if nil != err {
+			log.Printf("Failed to handshake with %s", addr)
+		}
+		d.conn = tlsconn
 	}
 	go d.read()
 	return d, nil
