@@ -10,7 +10,7 @@ import (
 	"github.com/yinqiwen/gsnova/common/event"
 )
 
-func rangeFetch(C ProxyChannel, req *event.HTTPRequestEvent, begin, end int64) (*event.HTTPResponseEvent, error) {
+func rangeFetch(C *RemoteChannel, req *event.HTTPRequestEvent, begin, end int64) (*event.HTTPResponseEvent, error) {
 	log.Printf("Session:%d range fetch %d-%d", req.GetId(), begin, end)
 	rangeReq := new(event.HTTPRequestEvent)
 	rangeReq.Headers = make(http.Header)
@@ -21,7 +21,7 @@ func rangeFetch(C ProxyChannel, req *event.HTTPRequestEvent, begin, end int64) (
 	rangeReq.Method = req.Method
 	rangeReq.SetId(req.GetId())
 	rangeReq.Headers.Set("Range", fmt.Sprintf("bytes=%d-%d", begin, end))
-	ev, err := C.Write(rangeReq)
+	ev, err := C.Request(rangeReq)
 	if nil == err {
 		res, ok := ev.(*event.HTTPResponseEvent)
 		if ok {
@@ -65,7 +65,7 @@ func rangeResponseToChunk(res *event.HTTPResponseEvent) *rangeChunk {
 type RangeFetcher struct {
 	SingleFetchLimit  int64
 	ConcurrentFetcher int32
-	C                 ProxyChannel
+	C                 *RemoteChannel
 }
 
 func (f *RangeFetcher) Fetch(req *event.HTTPRequestEvent) (*event.HTTPResponseEvent, error) {

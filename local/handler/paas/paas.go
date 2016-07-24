@@ -25,16 +25,16 @@ func paasDial(network, addr string) (net.Conn, error) {
 }
 
 type PaasProxy struct {
-	cs *proxy.ProxyChannelTable
+	cs *proxy.RemoteChannelTable
 }
 
-func newRemoteChannel(server string, idx int64) proxy.ProxyChannel {
+func newRemoteChannel(server string, idx int) (*proxy.RemoteChannel, error) {
 	if strings.HasPrefix(server, "ws://") || strings.HasPrefix(server, "wss://") {
 		return newWebsocketChannel(server, idx)
 	} else if strings.HasPrefix(server, "http://") || strings.HasPrefix(server, "https://") {
 		return newHTTPChannel(server, idx)
 	}
-	return nil
+	return nil, fmt.Errorf("Not supported url:%s", server)
 }
 
 func (p *PaasProxy) Init() error {
@@ -42,15 +42,18 @@ func (p *PaasProxy) Init() error {
 		return nil
 	}
 	for _, server := range proxy.GConf.PAAS.ServerList {
-		var channel proxy.ProxyChannel
-		first := newRemoteChannel(server, -1)
-		if nil == first {
-			log.Printf("[ERROR]Failed to connect %s", server)
+		var channel *proxy.RemoteChannel
+		_, err := newRemoteChannel(server, -1)
+		if nil != err {
+			log.Printf("[ERROR]Failed to connect %s for reason:%v", server, err)
 			continue
 		}
 		for i := 0; i < proxy.GConf.PAAS.ConnsPerServer; i++ {
-			channel = newRemoteChannel(server, int64(i))
-			//log.Printf("#####%s %d", server, itc)
+			channel, err = newRemoteChannel(server, i)
+			if nil != err {
+				log.Printf("[ERROR]Failed to connect [%d]%s for reason:%v", i, server, err)
+				continue
+			}
 			if nil != channel {
 				p.cs.Add(channel)
 			}
@@ -66,26 +69,26 @@ func (p *PaasProxy) Features() proxy.Feature {
 }
 
 func (p *PaasProxy) Serve(session *proxy.ProxySession, ev event.Event) error {
-	if nil == session.Channel {
-		session.Channel = p.cs.Select()
-		if session.Channel == nil {
+	if nil == session.Remote {
+		session.Remote = p.cs.Select()
+		if session.Remote == nil {
 			return fmt.Errorf("No proxy channel in PaasProxy")
 		}
 	}
 	switch ev.(type) {
 	case *event.TCPChunkEvent:
-		session.Channel.Write(ev)
+		session.Remote.Write(ev)
 	case *event.TCPCloseEvent:
-		session.Channel.Write(ev)
+		session.Remote.Write(ev)
 	case *event.HTTPRequestEvent:
 		if strings.EqualFold(ev.(*event.HTTPRequestEvent).Method, "Connect") {
 			session.Hijacked = true
 			host := ev.(*event.HTTPRequestEvent).Headers.Get("Host")
 			tcpOpen := &event.TCPOpenEvent{Addr: host}
 			tcpOpen.SetId(ev.GetId())
-			session.Channel.Write(tcpOpen)
+			session.Remote.Write(tcpOpen)
 		} else {
-			session.Channel.Write(ev)
+			session.Remote.Write(ev)
 		}
 	default:
 		log.Printf("Invalid event type:%T to process", ev)
@@ -97,7 +100,7 @@ func (p *PaasProxy) Serve(session *proxy.ProxySession, ev event.Event) error {
 var mypaas PaasProxy
 
 func init() {
-	mypaas.cs = proxy.NewProxyChannelTable()
+	mypaas.cs = proxy.NewRemoteChannelTable()
 	tr := &http.Transport{
 		Dial:                  paasDial,
 		DisableCompression:    true,
@@ -105,6 +108,7 @@ func init() {
 		ResponseHeaderTimeout: 15 * time.Second,
 	}
 	paasHttpClient = &http.Client{}
+	paasHttpClient.Timeout = 20 * time.Second
 	paasHttpClient.Transport = tr
 	proxy.RegisterProxy("PAAS", &mypaas)
 }

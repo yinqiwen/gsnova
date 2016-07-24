@@ -31,8 +31,9 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 	var p Proxy
 	sid := atomic.AddUint32(&seed, 1)
 	queue := event.NewEventQueue()
+	connClosed := false
 	go func() {
-		for {
+		for !connClosed {
 			ev, err := queue.Read(1 * time.Second)
 			if err != nil {
 				if err != io.EOF {
@@ -167,6 +168,7 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 		tcpclose.SetId(sid)
 		p.Serve(session, tcpclose)
 	}
+	connClosed = true
 }
 
 func startLocalProxyServer(proxy ProxyConfig) error {

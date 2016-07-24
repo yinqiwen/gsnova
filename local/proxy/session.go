@@ -16,7 +16,7 @@ var sessionNotExist error
 type ProxySession struct {
 	id          uint32
 	queue       *event.EventQueue
-	Channel     ProxyChannel
+	Remote      *RemoteChannel
 	Hijacked    bool
 	SSLHijacked bool
 }

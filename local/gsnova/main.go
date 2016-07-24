@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 
+	"github.com/yinqiwen/gsnova/common/helper"
 	"github.com/yinqiwen/gsnova/common/logger"
 	//"log"
 	//"net"
@@ -11,11 +12,11 @@ import (
 	"path/filepath"
 	//"time"
 	"encoding/json"
-	"io/ioutil"
 
 	_ "github.com/yinqiwen/gsnova/local/handler/direct"
 	_ "github.com/yinqiwen/gsnova/local/handler/gae"
 	_ "github.com/yinqiwen/gsnova/local/handler/paas"
+	_ "github.com/yinqiwen/gsnova/local/handler/vps"
 	"github.com/yinqiwen/gsnova/local/proxy"
 )
 
@@ -29,12 +30,20 @@ func main() {
 	conf := flag.String("file", home+"/gsnova.json", "Specify config file for gsnova")
 	flag.Parse()
 
-	data, _ := ioutil.ReadFile(*conf)
+	data, err := helper.ReadWithoutComment(*conf, "//")
+	if nil != err {
+		fmt.Println(err)
+		return
+	}
 	err = json.Unmarshal(data, &proxy.GConf)
 	if nil != err {
 		fmt.Printf("Failed to unmarshal json:%s to config for reason:%v", data, err)
 		return
 	}
 	logger.InitLogger(proxy.GConf.Log)
-	proxy.Init()
+	err = proxy.Init()
+	if nil != err {
+		fmt.Println(err)
+		return
+	}
 }

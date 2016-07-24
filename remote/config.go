@@ -10,6 +10,7 @@ import (
 )
 
 type ServerConfig struct {
+	Listen string
 	Auth   []string
 	RC4Key string
 }

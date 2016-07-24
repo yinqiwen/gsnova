@@ -32,7 +32,10 @@ func getProxyByName(name string) Proxy {
 }
 
 func Init() error {
-	GConf.init()
+	err := GConf.init()
+	if nil != err {
+		return err
+	}
 	event.SetDefaultRC4Key(GConf.RC4Key)
 	for name, p := range proxyTable {
 		err := p.Init()

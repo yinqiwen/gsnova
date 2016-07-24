@@ -13,7 +13,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yinqiwen/gsnova/common/event"
 	"github.com/yinqiwen/gsnova/local/hosts"
 	"github.com/yinqiwen/gsnova/local/proxy"
 )
@@ -64,18 +63,30 @@ type httpChannel struct {
 	server string
 }
 
-func (h *httpChannel) Write(ev event.Event) (event.Event, error) {
-	var buf bytes.Buffer
-	auth := proxy.NewAuthEvent()
-	event.EncodeEvent(&buf, auth)
-	event.EncodeEvent(&buf, ev)
+func (h *httpChannel) Open() error {
+	return nil
+}
+
+func (h *httpChannel) Closed() bool {
+	return false
+}
+
+func (h *httpChannel) Close() error {
+	return nil
+}
+
+func (h *httpChannel) Read(p []byte) (int, error) {
+	return 0, io.EOF
+}
+
+func (h *httpChannel) Request(p []byte) ([]byte, error) {
 	var gaehost string
 	if strings.Contains(h.server, ".") {
 		gaehost = h.server
 	} else {
 		gaehost = h.server + ".appspot.com"
 	}
-
+	buf := bytes.NewBuffer(p)
 	req := &http.Request{
 		Method:        "POST",
 		URL:           &url.URL{Scheme: "http", Host: gaehost, Path: "/invoke"},
@@ -83,7 +94,7 @@ func (h *httpChannel) Write(ev event.Event) (event.Event, error) {
 		ProtoMinor:    1,
 		Host:          gaehost,
 		Header:        make(http.Header),
-		Body:          ioutil.NopCloser(&buf),
+		Body:          ioutil.NopCloser(buf),
 		ContentLength: int64(buf.Len()),
 	}
 	req.Close = false
@@ -97,29 +108,42 @@ func (h *httpChannel) Write(ev event.Event) (event.Event, error) {
 		log.Printf("Failed to request data from GAE:%s", err)
 		return nil, err
 	} else {
+		if nil != response.Body {
+			defer response.Body.Close()
+		}
 		if response.StatusCode != 200 {
-			log.Printf("Session[%d]Invalid response:%d", ev.GetId(), response.StatusCode)
+			log.Printf("Invalid response:%d", response.StatusCode)
 			return nil, fmt.Errorf("Invalid response:%d", response.StatusCode)
 		} else {
 			var buf bytes.Buffer
-			n, err := io.Copy(&buf, response.Body)
+			n, _ := io.Copy(&buf, response.Body)
 			if int64(n) < response.ContentLength {
 				return nil, fmt.Errorf("No sufficient space in body.")
 			}
-			if nil != err {
-				return nil, err
-			}
-			response.Body.Close()
-			err, res := event.DecodeEvent(&buf)
-			return res, err
+			return buf.Bytes(), nil
 		}
 	}
-
-	return nil, nil
 }
 
-func newHTTPChannel(server string) *httpChannel {
-	h := new(httpChannel)
-	h.server = server
-	return h
+func (h *httpChannel) Write(p []byte) (n int, err error) {
+	return 0, nil
+}
+
+func newHTTPChannel(server string) (*proxy.RemoteChannel, error) {
+	rc := &proxy.RemoteChannel{
+		Addr:          server,
+		Index:         0,
+		DirectWrite:   true,
+		DirectRead:    true,
+		JoinAuthEvent: true,
+	}
+	tc := new(httpChannel)
+	tc.server = server
+	rc.C = tc
+
+	err := rc.Init()
+	if nil != err {
+		return nil, err
+	}
+	return rc, nil
 }

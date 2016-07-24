@@ -6,10 +6,12 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/yinqiwen/gsnova/common/gfwlist"
 	"github.com/yinqiwen/gsnova/local/hosts"
 )
 
 var GConf LocalConfig
+var mygfwlist *gfwlist.GFWList
 
 func matchHostnames(pattern, host string) bool {
 	host = strings.TrimSuffix(host, ".")
@@ -52,6 +54,12 @@ type GAEConfig struct {
 	ConnsPerServer int
 }
 
+type VPSConfig struct {
+	Enable         bool
+	Server         string
+	ConnsPerServer int
+}
+
 type PACConfig struct {
 	Method []string
 	Host   []string
@@ -74,11 +82,21 @@ func (pac *PACConfig) matchRules(req *http.Request) bool {
 	}
 	ok := true
 	for _, rule := range pac.Rule {
+		not := false
+		if strings.HasPrefix(rule, "!") {
+			not = true
+			rule = rule[1:]
+		}
 		if strings.EqualFold(rule, "InHosts") {
 			ok = pac.ruleInHosts(req)
-			if !ok {
-				break
-			}
+		} else if strings.EqualFold(rule, "BlockedByGFW") {
+			ok = mygfwlist.IsBlockedByGFW(req)
+		}
+		if not {
+			ok = ok != true
+		}
+		if !ok {
+			break
 		}
 	}
 	return ok
@@ -132,6 +150,7 @@ type LocalConfig struct {
 	Proxy     []ProxyConfig
 	PAAS      PAASConfig
 	GAE       GAEConfig
+	VPS       VPSConfig
 }
 
 func (cfg *LocalConfig) init() error {
@@ -142,5 +161,10 @@ func (cfg *LocalConfig) init() error {
 			cfg.Proxy[i].PAC[j].pathRegex, _ = NewRegex(pac.Path)
 		}
 	}
+	gfwlist, err := gfwlist.NewGFWList("https://raw.githubusercontent.com/gfwlist/gfwlist/master/gfwlist.txt", "", true)
+	if nil != err {
+		return err
+	}
+	mygfwlist = gfwlist
 	return nil
 }

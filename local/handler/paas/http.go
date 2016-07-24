@@ -2,7 +2,7 @@ package paas
 
 import (
 	"bytes"
-	"encoding/binary"
+	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -16,184 +16,126 @@ import (
 var paasHttpClient *http.Client
 
 type httpChannel struct {
-	url      string
-	idx      int64
-	ch       chan event.Event
-	authCode int
-	running  bool
+	addr    string
+	idx     int
+	pushurl *url.URL
+	pullurl *url.URL
+
+	rbody   io.ReadCloser
+	pulling bool
 }
 
-func (hc *httpChannel) init() {
-	hc.running = true
-	go hc.processWrite()
-	go hc.processRead()
-}
-func (hc *httpChannel) close() {
-	hc.running = false
-	hc.Write(nil)
+func (hc *httpChannel) Open() error {
+	return nil
 }
 
-func (hc *httpChannel) processWrite() {
-	u, _ := url.Parse(hc.url)
-	u.Path = "/http/push"
-	auth := proxy.NewAuthEvent()
-	auth.Index = int64(hc.idx)
-
-	readWriteEv := func(buf *bytes.Buffer) int {
-		sev := <-hc.ch
-		if nil != sev {
-			event.EncodeEvent(buf, sev)
-			return 1
-		}
-		return 0
-	}
-
-	for hc.running {
-		var buf bytes.Buffer
-		event.EncodeEvent(&buf, auth)
-		count := 0
-
-		if len(hc.ch) == 0 {
-			count += readWriteEv(&buf)
-		} else {
-			for len(hc.ch) > 0 {
-				count += readWriteEv(&buf)
-			}
-		}
-
-		if !hc.running && count == 0 {
-			return
-		}
-		req := &http.Request{
-			Method:        "POST",
-			URL:           u,
-			ProtoMajor:    1,
-			ProtoMinor:    1,
-			Host:          u.Host,
-			Header:        make(http.Header),
-			Body:          ioutil.NopCloser(&buf),
-			ContentLength: int64(buf.Len()),
-		}
-		req.Close = false
-		req.Header.Set("Connection", "keep-alive")
-		req.Header.Set("Content-Type", "image/jpeg")
-		if len(proxy.GConf.UserAgent) > 0 {
-			req.Header.Set("User-Agent", proxy.GConf.UserAgent)
-		}
-		s := time.Now()
-		response, err := paasHttpClient.Do(req)
-		if nil != err || response.StatusCode != 200 {
-			log.Printf("Failed to push data to PAAS:%s for reason:%v or res:%v", hc.url, err, response)
-		} else {
-			hc.processHttpBody(response)
-		}
-		e := time.Now()
-		log.Printf("[%d]Push %d events to %s cost %v", hc.idx, count, hc.url, e.Sub(s))
-	}
+func (hc *httpChannel) Closed() bool {
+	return false
 }
 
-func (hc *httpChannel) processRead() {
-	u, _ := url.Parse(hc.url)
-	u.Path = "/http/pull"
-	for hc.running && hc.idx >= 0 {
-		auth := proxy.NewAuthEvent()
-		auth.Index = int64(hc.idx)
-		var buf bytes.Buffer
-		event.EncodeEvent(&buf, auth)
-		req := &http.Request{
-			Method:        "POST",
-			URL:           u,
-			ProtoMajor:    1,
-			ProtoMinor:    1,
-			Host:          u.Host,
-			Header:        make(http.Header),
-			Body:          ioutil.NopCloser(&buf),
-			ContentLength: int64(buf.Len()),
-		}
-		req.Close = false
-		req.Header.Set("Connection", "keep-alive")
-		req.Header.Set("Content-Type", "image/jpeg")
-		if len(proxy.GConf.UserAgent) > 0 {
-			req.Header.Set("User-Agent", proxy.GConf.UserAgent)
-		}
-		response, err := paasHttpClient.Do(req)
-		if nil != err || response.StatusCode != 200 {
-			log.Printf("Failed to pull data from PAAS:%s for reason:%v or res:%v", hc.url, err, response)
-		} else {
-			hc.processHttpBody(response)
-		}
-	}
-}
-
-func (hc *httpChannel) Write(ev event.Event) (event.Event, error) {
-	hc.ch <- ev
+func (tc *httpChannel) Request([]byte) ([]byte, error) {
 	return nil, nil
 }
 
-func (hc *httpChannel) processHttpBody(res *http.Response) {
-	if nil == res.Body {
-		return
-	}
-	lenbuf := make([]byte, 4)
-	defer res.Body.Close()
-	data := make([]byte, 8192)
-	var buf bytes.Buffer
-	for {
-		n, err := res.Body.Read(data)
-		buf.Write(data[0:n])
-		for buf.Len() > 0 {
-			if buf.Len() < 4 {
-				break
-			}
-			tmp := bytes.NewBuffer(buf.Bytes()[0:4])
-			chunklen := uint32(1)
-			binary.Read(tmp, binary.BigEndian, &chunklen)
-			if chunklen > uint32(buf.Len()) {
-				break
-			}
-			buf.Read(lenbuf)
-			err, ev := event.DecodeEvent(&buf)
-			if nil != err {
-				log.Printf("Failed to decode event for reason:%v", err)
-				return
-			}
-			if hc.idx < 0 {
-				if auth, ok := ev.(*event.ErrorEvent); ok {
-					hc.authCode = int(auth.Code)
-				} else {
-					log.Printf("[ERROR]Expected error event for auth all connection, but got %T.", ev)
-				}
-				hc.close()
-				return
-			} else {
-				proxy.HandleEvent(ev)
-			}
-		}
+func (hc *httpChannel) Close() error {
+	return nil
+}
+
+func (hc *httpChannel) pull() {
+	if nil == hc.pullurl {
+		u, err := url.Parse(hc.addr)
 		if nil != err {
 			return
 		}
+		u.Path = "/http/pull"
+		hc.pullurl = u
+	}
+	if hc.pulling {
+		return
+	}
+	auth := proxy.NewAuthEvent()
+	auth.Index = int64(hc.idx)
+	var buf bytes.Buffer
+	event.EncodeEvent(&buf, auth)
+	hc.pulling = true
+	hc.postURL(buf.Bytes(), hc.pullurl)
+	hc.pulling = false
+}
+
+func (hc *httpChannel) Read(p []byte) (int, error) {
+	if hc.rbody == nil && hc.idx >= 0 {
+		hc.pull()
+	}
+	start := time.Now()
+	for nil == hc.rbody {
+		if time.Now().After(start.Add(5 * time.Second)) {
+			return 0, proxy.ErrChannelReadTimeout
+		}
+		time.Sleep(1 * time.Millisecond)
+	}
+	n, err := hc.rbody.Read(p)
+	if nil != err {
+		hc.rbody.Close()
+		hc.rbody = nil
+	}
+	return n, err
+}
+
+func (hc *httpChannel) postURL(p []byte, u *url.URL) (n int, err error) {
+	buf := bytes.NewBuffer(p)
+	req := &http.Request{
+		Method:        "POST",
+		URL:           u,
+		ProtoMajor:    1,
+		ProtoMinor:    1,
+		Host:          u.Host,
+		Header:        make(http.Header),
+		Body:          ioutil.NopCloser(buf),
+		ContentLength: int64(buf.Len()),
+	}
+	req.Close = false
+	req.Header.Set("Connection", "keep-alive")
+	req.Header.Set("Content-Type", "image/jpeg")
+	if len(proxy.GConf.UserAgent) > 0 {
+		req.Header.Set("User-Agent", proxy.GConf.UserAgent)
+	}
+	response, err := paasHttpClient.Do(req)
+	if nil != err || response.StatusCode != 200 {
+		log.Printf("Failed to write data to PAAS:%s for reason:%v or res:%v", u.String(), err, response)
+		return 0, err
+	} else {
+		if response.ContentLength != 0 && nil != response.Body {
+			hc.rbody = response.Body
+		}
+		return len(p), nil
 	}
 }
 
-func newHTTPChannel(url string, idx int64) *httpChannel {
-	hc := new(httpChannel)
-	hc.url = url
-	hc.idx = idx
-	hc.authCode = -1
-	hc.ch = make(chan event.Event, 10)
-	hc.init()
-	if hc.idx < 0 {
-		hc.Write(nil)
-		start := time.Now()
-		for hc.authCode != 0 {
-			if time.Now().After(start.Add(5*time.Second)) || hc.authCode > 0 {
-				log.Printf("Server:%s auth failed", hc.url)
-				hc.close()
-				return nil
-			}
-			time.Sleep(1 * time.Millisecond)
+func (hc *httpChannel) Write(p []byte) (n int, err error) {
+	if nil == hc.pushurl {
+		u, err := url.Parse(hc.addr)
+		if nil != err {
+			return 0, err
 		}
-		log.Printf("Server:%s authed", hc.url)
+		u.Path = "/http/push"
+		hc.pushurl = u
 	}
-	return hc
+	return hc.postURL(p, hc.pushurl)
+}
+
+func newHTTPChannel(addr string, idx int) (*proxy.RemoteChannel, error) {
+	rc := new(proxy.RemoteChannel)
+	rc.Addr = addr
+	rc.Index = idx
+	rc.JoinAuthEvent = true
+	tc := new(httpChannel)
+	tc.addr = addr
+	tc.idx = idx
+	rc.C = tc
+
+	err := rc.Init()
+	if nil != err {
+		return nil, err
+	}
+	return rc, nil
 }

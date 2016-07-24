@@ -11,7 +11,7 @@ import (
 )
 
 type GAEProxy struct {
-	cs               *proxy.ProxyChannelTable
+	cs               *proxy.RemoteChannelTable
 	injectRangeRegex []*regexp.Regexp
 }
 
@@ -20,7 +20,11 @@ func (p *GAEProxy) Init() error {
 		return nil
 	}
 	for _, server := range proxy.GConf.GAE.ServerList {
-		channel := newHTTPChannel(server)
+		channel, err := newHTTPChannel(server)
+		if nil != err {
+			log.Printf("[ERROR]Failed to connect %s for reason:%v", server, err)
+			continue
+		}
 		if nil != channel {
 			p.cs.Add(channel)
 		}
@@ -35,9 +39,9 @@ func (p *GAEProxy) Features() proxy.Feature {
 }
 
 func (p *GAEProxy) Serve(session *proxy.ProxySession, ev event.Event) error {
-	if nil == session.Channel {
-		session.Channel = p.cs.Select()
-		if session.Channel == nil {
+	if nil == session.Remote {
+		session.Remote = p.cs.Select()
+		if session.Remote == nil {
 			return fmt.Errorf("No proxy channel in PaasProxy")
 		}
 	}
@@ -74,7 +78,7 @@ func (p *GAEProxy) Serve(session *proxy.ProxySession, ev event.Event) error {
 			}
 
 			if !rangeFetch {
-				rev, err := session.Channel.Write(req)
+				rev, err := session.Remote.Request(req)
 				if nil != err {
 					log.Printf("[ERROR]%v", err)
 					session.Close()
@@ -106,7 +110,7 @@ func (p *GAEProxy) Serve(session *proxy.ProxySession, ev event.Event) error {
 				fetcher := &proxy.RangeFetcher{
 					SingleFetchLimit:  256 * 1024,
 					ConcurrentFetcher: 3,
-					C:                 session.Channel,
+					C:                 session.Remote,
 				}
 				rev, err := fetcher.Fetch(req)
 				if nil != err {
@@ -131,7 +135,7 @@ var mygae GAEProxy
 
 func init() {
 	initGAEClient()
-	mygae.cs = proxy.NewProxyChannelTable()
+	mygae.cs = proxy.NewRemoteChannelTable()
 	mygae.Init()
 	proxy.RegisterProxy("GAE", &mygae)
 }

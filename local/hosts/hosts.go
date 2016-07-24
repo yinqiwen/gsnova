@@ -3,11 +3,12 @@ package hosts
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"regexp"
 	"strings"
 	"sync"
+
+	"github.com/yinqiwen/gsnova/common/helper"
 )
 
 const SNIProxy = "sni_proxy"
@@ -80,7 +81,7 @@ func InHosts(host string) bool {
 func init() {
 	file := "hosts.json"
 	hs := make(map[string][]string)
-	data, err := ioutil.ReadFile(file)
+	data, err := helper.ReadWithoutComment(file, "//")
 	if nil == err {
 		err = json.Unmarshal(data, &hs)
 	}

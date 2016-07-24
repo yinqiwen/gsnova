@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"encoding/binary"
 	"io"
 	"log"
 	"net/http"
@@ -10,6 +9,7 @@ import (
 	"time"
 
 	"github.com/yinqiwen/gsnova/common/event"
+	"github.com/yinqiwen/gsnova/remote"
 )
 
 func readRequestBuffer(r *http.Request) *bytes.Buffer {
@@ -24,14 +24,7 @@ func readRequestBuffer(r *http.Request) *bytes.Buffer {
 func httpInvoke(w http.ResponseWriter, r *http.Request) {
 	writeEvent := func(ev event.Event) error {
 		var buf bytes.Buffer
-		chunklen := uint32(1)
-		binary.Write(&buf, binary.BigEndian, chunklen)
 		event.EncodeEvent(&buf, ev)
-		var tmp bytes.Buffer
-		chunklen = uint32(buf.Len())
-		binary.Write(&tmp, binary.BigEndian, chunklen)
-		copy(buf.Bytes()[0:4], tmp.Bytes()[0:4])
-
 		_, err := w.Write(buf.Bytes())
 		if nil == err {
 			w.(http.Flusher).Flush()
@@ -39,8 +32,8 @@ func httpInvoke(w http.ResponseWriter, r *http.Request) {
 		return err
 	}
 	reqbuf := readRequestBuffer(r)
-	ctx := &ConnContex{}
-	ress, err := handleRequestBuffer(reqbuf, ctx)
+	ctx := &remote.ConnContex{}
+	ress, err := remote.HandleRequestBuffer(reqbuf, ctx)
 	if nil != err {
 		log.Printf("[ERROR]connection %s:%d error:%v", ctx.User, ctx.Index, err)
 		w.WriteHeader(400)
@@ -50,8 +43,8 @@ func httpInvoke(w http.ResponseWriter, r *http.Request) {
 			writeEvent(res)
 		}
 		begin := time.Now()
-		if strings.HasSuffix(r.URL.Path, "pull") {
-			queue := getEventQueue(ctx.User, ctx.Index, true)
+		if strings.HasSuffix(r.URL.Path, "pull") && ctx.Index >= 0 {
+			queue := remote.GetEventQueue(ctx.User, ctx.Index, true)
 			for {
 				if time.Now().After(begin.Add(10 * time.Second)) {
 					log.Printf("Stop puller after 10s for conn:%d", ctx.Index)

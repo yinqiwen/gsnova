@@ -9,6 +9,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/yinqiwen/gsnova/common/event"
+	"github.com/yinqiwen/gsnova/remote"
 )
 
 var (
@@ -39,7 +40,7 @@ func websocketInvoke(w http.ResponseWriter, r *http.Request) {
 	}
 	//log.Printf("###Recv websocket connection")
 	buf := bytes.NewBuffer(nil)
-	ctx := &ConnContex{}
+	ctx := &remote.ConnContex{}
 	wsClosed := false
 	var queue *event.EventQueue
 
@@ -59,14 +60,14 @@ func websocketInvoke(w http.ResponseWriter, r *http.Request) {
 			} else {
 				buf.Write(data)
 			}
-			ress, err := handleRequestBuffer(buf, ctx)
+			ress, err := remote.HandleRequestBuffer(buf, ctx)
 			if nil != err {
 				log.Printf("[ERROR]connection %s:%d error:%v", ctx.User, ctx.Index, err)
 				ws.Close()
 				wsClosed = true
 			} else {
 				if nil == queue && len(ctx.User) > 0 && ctx.Index >= 0 {
-					queue = getEventQueue(ctx.User, ctx.Index, true)
+					queue = remote.GetEventQueue(ctx.User, ctx.Index, true)
 					go func() {
 						for !wsClosed {
 							ev, err := queue.Peek(1 * time.Millisecond)

@@ -3,6 +3,7 @@ package direct
 import (
 	"crypto/tls"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"strings"
@@ -18,47 +19,64 @@ type directChannel struct {
 	conn net.Conn
 }
 
-func (d *directChannel) read() {
-	for {
-		if nil == d.conn {
-			return
-		}
-		d.conn.SetReadDeadline(time.Now().Add(10 * time.Second))
-		b := make([]byte, 8192)
-		n, err := d.conn.Read(b)
-		if nil != err {
-			closeEv := &event.TCPCloseEvent{}
-			closeEv.SetId(d.sid)
-			proxy.HandleEvent(closeEv)
-			return
-		}
-		ev := &event.TCPChunkEvent{Content: b[0:n]}
-		ev.SetId(d.sid)
-		proxy.HandleEvent(ev)
-	}
+func (tc *directChannel) Open() error {
+	return nil
 }
 
-func (d *directChannel) Write(ev event.Event) (event.Event, error) {
-	switch ev.(type) {
-	case *event.TCPCloseEvent:
-		d.conn.Close()
-	case *event.TCPChunkEvent:
-		d.conn.Write(ev.(*event.TCPChunkEvent).Content)
-	case *event.HTTPRequestEvent:
-		req := ev.(*event.HTTPRequestEvent)
-		content := req.HTTPEncode()
-		_, err := d.conn.Write(content)
+func (tc *directChannel) Request([]byte) ([]byte, error) {
+	return nil, nil
+}
+
+func (tc *directChannel) Closed() bool {
+	return nil == tc.conn
+}
+
+func (tc *directChannel) Close() error {
+	conn := tc.conn
+	if nil != conn {
+		conn.Close()
+		tc.conn = nil
+	}
+	return nil
+}
+
+func (tc *directChannel) Read(p []byte) (int, error) {
+	conn := tc.conn
+	if nil == conn {
+		return 0, io.EOF
+	}
+	return conn.Read(p)
+}
+
+func (tc *directChannel) Write(p []byte) (n int, err error) {
+	conn := tc.conn
+	if nil == conn {
+		return 0, io.EOF
+	}
+	return conn.Write(p)
+}
+
+func (d *directChannel) read() {
+	for {
+		c := d.conn
+		if nil == c {
+			return
+		}
+		c.SetReadDeadline(time.Now().Add(10 * time.Second))
+		b := make([]byte, 8192)
+		n, err := c.Read(b)
+		if n > 0 {
+			ev := &event.TCPChunkEvent{Content: b[0:n]}
+			ev.SetId(d.sid)
+			proxy.HandleEvent(ev)
+		}
 		if nil != err {
 			closeEv := &event.TCPCloseEvent{}
 			closeEv.SetId(d.sid)
 			proxy.HandleEvent(closeEv)
-			return nil, err
+			return
 		}
-		return nil, nil
-	default:
-		log.Printf("Invalid event type:%T to process", ev)
 	}
-	return nil, nil
 }
 
 func newDirectChannel(req *event.HTTPRequestEvent, useTLS bool) (*directChannel, error) {
@@ -118,13 +136,17 @@ func (p *DirectProxy) Features() proxy.Feature {
 }
 
 func (p *DirectProxy) Serve(session *proxy.ProxySession, ev event.Event) error {
-	if nil == session.Channel {
+	if nil == session.Remote {
 		if req, ok := ev.(*event.HTTPRequestEvent); ok {
 			c, err := newDirectChannel(req, p.useTLS)
 			if nil != err {
 				return err
 			}
-			session.Channel = c
+			session.Remote = &proxy.RemoteChannel{
+				DirectWrite: true,
+				DirectRead:  true,
+			}
+			session.Remote.C = c
 			if strings.EqualFold(req.Method, "Connect") {
 				session.Hijacked = true
 				return nil
@@ -133,10 +155,28 @@ func (p *DirectProxy) Serve(session *proxy.ProxySession, ev event.Event) error {
 			return fmt.Errorf("Can NOT create direct channel by event:%T", ev)
 		}
 	}
-	if nil == session.Channel {
-		return fmt.Errorf("No No")
+	if nil == session.Remote {
+		return fmt.Errorf("No remote connected.")
 	}
-	session.Channel.Write(ev)
+	switch ev.(type) {
+	case *event.TCPCloseEvent:
+		session.Remote.Close()
+	case *event.TCPChunkEvent:
+		session.Remote.WriteRaw(ev.(*event.TCPChunkEvent).Content)
+	case *event.HTTPRequestEvent:
+		req := ev.(*event.HTTPRequestEvent)
+		content := req.HTTPEncode()
+		_, err := session.Remote.WriteRaw(content)
+		if nil != err {
+			closeEv := &event.TCPCloseEvent{}
+			closeEv.SetId(ev.GetId())
+			proxy.HandleEvent(closeEv)
+			return err
+		}
+		return nil
+	default:
+		log.Printf("Invalid event type:%T to process", ev)
+	}
 	return nil
 
 }

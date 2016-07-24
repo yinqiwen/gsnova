@@ -15,6 +15,8 @@ const (
 	MAGIC_NUMBER uint16 = 0xCAFE
 )
 
+var EBNR = errors.New("Event buffer not ready")
+
 var rc4Key string
 
 type EventFlags uint64
@@ -402,6 +404,7 @@ func DecodeValue(buf *bytes.Buffer) (err error, ev interface{}) {
 }
 
 func EncodeEvent(buf *bytes.Buffer, ev Event) error {
+	buf.Write(make([]byte, 4))
 	var header EventHeader
 	header.Type = GetRegistType(ev)
 	header.Id = ev.GetId()
@@ -431,10 +434,20 @@ func EncodeEvent(buf *bytes.Buffer, ev Event) error {
 		EncodeUInt64Value(buf, uint64(len(eventContent)))
 		buf.Write(eventContent)
 	}
+	elen := uint32(buf.Len())
+	binary.LittleEndian.PutUint32(buf.Bytes()[0:4], elen)
 	return nil
 }
 
 func DecodeEvent(buf *bytes.Buffer) (err error, ev Event) {
+	if buf.Len() < 4 {
+		return EBNR, nil
+	}
+	elen := binary.LittleEndian.Uint32(buf.Bytes()[0:4])
+	if elen > uint32(buf.Len()) {
+		return EBNR, nil
+	}
+	buf.Next(4)
 	var header EventHeader
 	if err = header.Decode(buf); nil != err {
 		return
@@ -468,15 +481,3 @@ func DecodeEvent(buf *bytes.Buffer) (err error, ev Event) {
 	err = ev.Decode(bytes.NewBuffer(body))
 	return
 }
-
-// func ExtractEvent(ev Event) Event {
-// 	encrypt, ok := ev.(*EncryptEvent)
-// 	if ok {
-// 		return ExtractEvent(encrypt.Ev)
-// 	}
-// 	compress, ok := ev.(*CompressEvent)
-// 	if ok {
-// 		return ExtractEvent(compress.Ev)
-// 	}
-// 	return ev
-// }

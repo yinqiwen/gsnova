@@ -2,169 +2,110 @@ package paas
 
 import (
 	"bytes"
-	"crypto/tls"
 	"io"
 	"log"
 	"net/url"
-	"strings"
-	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/yinqiwen/gsnova/common/event"
-	"github.com/yinqiwen/gsnova/local/hosts"
 	"github.com/yinqiwen/gsnova/local/proxy"
 )
 
 type websocketChannel struct {
-	url      string
-	idx      int64
-	conn     *websocket.Conn
-	ch       chan event.Event
-	authCode int
+	url     string
+	conn    *websocket.Conn
+	readbuf bytes.Buffer
 }
 
-func writeEvent(conn *websocket.Conn, ev event.Event) error {
-	var buf bytes.Buffer
-	event.EncodeEvent(&buf, ev)
-	return conn.WriteMessage(websocket.BinaryMessage, buf.Bytes())
+func (tc *websocketChannel) Request([]byte) ([]byte, error) {
+	return nil, nil
 }
 
-func (wc *websocketChannel) reopen() error {
+func (wc *websocketChannel) Open() error {
 	u, err := url.Parse(wc.url)
 	if nil != err {
 		return err
 	}
 	u.Path = "/ws"
 	wsDialer := &websocket.Dialer{}
-	if strings.HasPrefix(wc.url, "wss://") && hosts.InHosts(hosts.SNIProxy) {
-		wsDialer.TLSClientConfig = &tls.Config{}
-		wsDialer.NetDial = paasDial
-	}
+	wsDialer.NetDial = paasDial
 
 	c, _, err := wsDialer.Dial(u.String(), nil)
 	if err != nil {
 		log.Printf("dial websocket error:%v", err)
 		return err
 	}
-	auth := proxy.NewAuthEvent()
-	auth.Index = wc.idx
-	err = writeEvent(c, auth)
-	if nil != err {
-		return err
-	}
-	log.Printf("[%d]Connect %s success.", wc.idx, wc.url)
+	log.Printf("Connect %s success.", wc.url)
 	wc.conn = c
 	return nil
 }
 
-func (wc *websocketChannel) init() {
-	go wc.processWrite()
-	go wc.processRead()
+func (wc *websocketChannel) Closed() bool {
+	return nil == wc.conn
 }
-func (wc *websocketChannel) close() {
-	if nil != wc.conn {
-		wc.conn.Close()
+
+func (wc *websocketChannel) Close() error {
+	c := wc.conn
+	if nil != c {
+		c.Close()
 		wc.conn = nil
 	}
+	return nil
 }
 
-func (wc *websocketChannel) processWrite() {
-	var writeEv event.Event
-	for {
-		conn := wc.conn
-		if nil == conn {
-			time.Sleep(1 * time.Second)
-			continue
+func (wc *websocketChannel) Read(p []byte) (int, error) {
+	if wc.readbuf.Len() > 0 {
+		return wc.readbuf.Read(p)
+	}
+	wc.readbuf.Reset()
+	c := wc.conn
+	if nil == c {
+		return 0, io.EOF
+	}
+	mt, data, err := c.ReadMessage()
+	if err != nil {
+		if err != io.EOF {
+			log.Printf("Websocket read error:%v", err)
 		}
-		if nil == writeEv {
-			writeEv = <-wc.ch
-		}
-		if nil != writeEv {
-			var buf bytes.Buffer
-			event.EncodeEvent(&buf, writeEv)
-			//log.Printf("####%d write %T", ev.GetId(), ev)
-			err := conn.WriteMessage(websocket.BinaryMessage, buf.Bytes())
-			if nil != err {
-				wc.close()
-				log.Printf("Failed to write websocket binary messgage:%v", err)
-			} else {
-				writeEv = nil
-			}
-		}
+		wc.Close()
+		return 0, err
+	}
+	switch mt {
+	case websocket.BinaryMessage:
+		wc.readbuf.Write(data)
+		return wc.readbuf.Read(p)
+	default:
+		log.Printf("Invalid websocket message type")
+		wc.Close()
+		return 0, io.EOF
 	}
 }
 
-func (wc *websocketChannel) processRead() {
-	for {
-		conn := wc.conn
-		if nil == conn {
-			wc.reopen()
-			time.Sleep(1 * time.Second)
-			continue
-		}
-		mt, data, err := conn.ReadMessage()
-		if err != nil {
-			if err != io.EOF {
-				log.Printf("Websocket read error:%v", err)
-			}
-			wc.close()
-			continue
-		}
-		buf := bytes.NewBuffer(nil)
-		switch mt {
-		case websocket.BinaryMessage:
-			if buf.Len() == 0 {
-				buf = bytes.NewBuffer(data)
-			} else {
-				buf.Write(data)
-			}
-			for buf.Len() > 0 {
-				err, ev := event.DecodeEvent(buf)
-				if nil != err {
-					log.Printf("Failed to decode event for reason:%v", err)
-					break
-				}
-				if wc.idx < 0 {
-					if auth, ok := ev.(*event.ErrorEvent); ok {
-						wc.authCode = int(auth.Code)
-					} else {
-						log.Printf("[ERROR]Expected error event for auth all connection, but got %T.", ev)
-					}
-					wc.close()
-					return
-				} else {
-					proxy.HandleEvent(ev)
-				}
-			}
-		default:
-			log.Printf("Invalid websocket message type")
-		}
+func (wc *websocketChannel) Write(p []byte) (n int, err error) {
+	c := wc.conn
+	if nil == c {
+		return 0, io.EOF
+	}
+	err = c.WriteMessage(websocket.BinaryMessage, p)
+	if nil != err {
+		wc.Close()
+		log.Printf("Failed to write websocket binary messgage:%v", err)
+		return 0, err
+	} else {
+		return len(p), nil
 	}
 }
 
-func (wc *websocketChannel) Write(ev event.Event) (event.Event, error) {
-	wc.ch <- ev
-	return nil, nil
-}
+func newWebsocketChannel(addr string, idx int) (*proxy.RemoteChannel, error) {
+	rc := new(proxy.RemoteChannel)
+	rc.Addr = addr
+	rc.Index = idx
+	tc := new(websocketChannel)
+	tc.url = addr
+	rc.C = tc
 
-func newWebsocketChannel(url string, idx int64) *websocketChannel {
-	wc := new(websocketChannel)
-	wc.url = url
-	wc.idx = idx
-	wc.authCode = -1
-	wc.ch = make(chan event.Event, 1)
-	wc.init()
-	if wc.idx < 0 {
-		start := time.Now()
-		for wc.authCode != 0 {
-			if time.Now().After(start.Add(5*time.Second)) || wc.authCode > 0 {
-				log.Printf("Server:%s auth failed", wc.url)
-				wc.close()
-				return nil
-			}
-			time.Sleep(1 * time.Millisecond)
-		}
-		log.Printf("Server:%s authed", wc.url)
+	err := rc.Init()
+	if nil != err {
+		return nil, err
 	}
-	return wc
+	return rc, nil
 }

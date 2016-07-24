@@ -1,4 +1,4 @@
-package main
+package remote
 
 import (
 	"sync"
@@ -9,7 +9,7 @@ import (
 var queueTable map[string][]*event.EventQueue = make(map[string][]*event.EventQueue)
 var queueMutex sync.Mutex
 
-func closeUserEventQueue(user string) {
+func CloseUserEventQueue(user string) {
 	queueMutex.Lock()
 	defer queueMutex.Unlock()
 
@@ -22,7 +22,7 @@ func closeUserEventQueue(user string) {
 	delete(queueTable, user)
 }
 
-func getEventQueue(user string, idx int, createIfMissing bool) *event.EventQueue {
+func GetEventQueue(user string, idx int, createIfMissing bool) *event.EventQueue {
 	queueMutex.Lock()
 	defer queueMutex.Unlock()
 	qs := queueTable[user]
@@ -41,7 +41,7 @@ func getEventQueue(user string, idx int, createIfMissing bool) *event.EventQueue
 
 }
 
-func deleteEventQueue(user string, idx int) {
+func DeleteEventQueue(user string, idx int) {
 	queueMutex.Lock()
 	defer queueMutex.Unlock()
 	qs := queueTable[user]

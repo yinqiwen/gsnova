@@ -1,4 +1,4 @@
-package main
+package remote
 
 import (
 	//"fmt"
@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/yinqiwen/gsnova/common/event"
-	"github.com/yinqiwen/gsnova/remote"
 )
 
 var proxySessionMap map[SessionId]*ProxySession = make(map[SessionId]*ProxySession)
@@ -36,7 +35,13 @@ type ProxySession struct {
 	ch         chan event.Event
 }
 
-func getProxySessionByEvent(user string, idx int, ev event.Event) *ProxySession {
+func GetsessionTableSize() int {
+	sessionMutex.Lock()
+	defer sessionMutex.Unlock()
+	return len(proxySessionMap)
+}
+
+func GetProxySessionByEvent(user string, idx int, ev event.Event) *ProxySession {
 	sid := SessionId{user, ev.GetId(), idx}
 	sessionMutex.Lock()
 	defer sessionMutex.Unlock()
@@ -95,7 +100,7 @@ func (p *ProxySession) publish(ev event.Event) {
 	ev.SetId(p.Id.Id)
 	start := time.Now()
 	for {
-		queue := getEventQueue(p.Id.User, p.Id.ConnIndex, false)
+		queue := GetEventQueue(p.Id.User, p.Id.ConnIndex, false)
 		if nil != queue {
 			queue.Publish(ev)
 			return
@@ -110,9 +115,10 @@ func (p *ProxySession) publish(ev event.Event) {
 }
 
 func (p *ProxySession) close() error {
-	if nil != p.conn {
+	c := p.conn
+	if nil != c {
 		log.Printf("Session[%s:%d] close connection to %s", p.Id.User, p.Id.Id, p.addr)
-		p.conn.Close()
+		c.Close()
 		p.conn = nil
 		p.addr = ""
 	}
@@ -131,7 +137,6 @@ func (p *ProxySession) processEvents() {
 		ev := <-p.ch
 		if nil != ev {
 			p.handle(ev)
-			//log.Printf("#####%d %v %v", ev.GetId(), ev, p.closed)
 		} else {
 			break
 		}
@@ -148,7 +153,7 @@ func (p *ProxySession) open(to string) error {
 	if nil != err {
 		ev := &event.TCPCloseEvent{}
 		p.publish(ev)
-		log.Printf("###Failed to connect %s for reason:%v", to, err)
+		log.Printf("Failed to connect %s for reason:%v", to, err)
 		return err
 	}
 	p.conn = c
@@ -179,12 +184,15 @@ func (p *ProxySession) readTCP() error {
 		conn.SetReadDeadline(time.Now().Add(10 * time.Second))
 		b := make([]byte, 8192)
 		n, err := conn.Read(b)
+		if n > 0 {
+			ev := &event.TCPChunkEvent{Content: b[0:n]}
+			p.publish(ev)
+		}
 		if nil != err {
 			p.initialClose()
 			return err
 		}
-		ev := &event.TCPChunkEvent{Content: b[0:n]}
-		p.publish(ev)
+
 	}
 	return nil
 }
@@ -225,7 +233,7 @@ func (p *ProxySession) handle(ev event.Event) error {
 	return nil
 }
 
-func handleRequestBuffer(reqbuf *bytes.Buffer, ctx *ConnContex) ([]event.Event, error) {
+func HandleRequestBuffer(reqbuf *bytes.Buffer, ctx *ConnContex) ([]event.Event, error) {
 	ress := make([]event.Event, 0)
 	for reqbuf.Len() > 0 {
 		err, ev := event.DecodeEvent(reqbuf)
@@ -235,7 +243,7 @@ func handleRequestBuffer(reqbuf *bytes.Buffer, ctx *ConnContex) ([]event.Event, 
 		}
 		if auth, ok := ev.(*event.AuthEvent); ok {
 			if len(ctx.User) == 0 {
-				if !remote.ServerConf.VerifyUser(auth.User) {
+				if !ServerConf.VerifyUser(auth.User) {
 					var authres event.ErrorEvent
 					authres.Code = event.ErrAuthFailed
 					authres.SetId(ev.GetId())
@@ -247,7 +255,7 @@ func handleRequestBuffer(reqbuf *bytes.Buffer, ctx *ConnContex) ([]event.Event, 
 				log.Printf("Recv connection:%d from user:%s", auth.Index, authedUser)
 				if auth.Index < 0 {
 					removeProxySessionsByUser(authedUser)
-					closeUserEventQueue(authedUser)
+					CloseUserEventQueue(authedUser)
 					var authres event.ErrorEvent
 					authres.Code = 0
 					authres.SetId(ev.GetId())
@@ -265,7 +273,7 @@ func handleRequestBuffer(reqbuf *bytes.Buffer, ctx *ConnContex) ([]event.Event, 
 				return nil, fmt.Errorf("Auth event MUST be first event.")
 			}
 		}
-		session := getProxySessionByEvent(ctx.User, ctx.Index, ev)
+		session := GetProxySessionByEvent(ctx.User, ctx.Index, ev)
 		if nil != session {
 			session.offer(ev)
 		} else {

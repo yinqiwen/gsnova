@@ -6,11 +6,25 @@ import (
 	"log"
 	"net/http"
 	"os"
+
+	"github.com/yinqiwen/gotoolkit/ots"
+	"github.com/yinqiwen/gsnova/remote"
 )
 
 // hello world, the web server
 func indexCallback(w http.ResponseWriter, req *http.Request) {
 	io.WriteString(w, html)
+}
+
+func statCallback(w http.ResponseWriter, req *http.Request) {
+	w.WriteHeader(200)
+	fmt.Fprintf(w, "NumSession: %d\n", remote.GetsessionTableSize())
+	ots.Handle("stat", w)
+}
+
+func stackdumpCallback(w http.ResponseWriter, req *http.Request) {
+	w.WriteHeader(200)
+	ots.Handle("stackdump", w)
 }
 
 func main() {
@@ -25,6 +39,8 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", indexCallback)
+	mux.HandleFunc("/stat", statCallback)
+	mux.HandleFunc("/stackdump", stackdumpCallback)
 	mux.HandleFunc("/ws", websocketInvoke)
 	mux.HandleFunc("/http/pull", httpInvoke)
 	mux.HandleFunc("/http/push", httpInvoke)
