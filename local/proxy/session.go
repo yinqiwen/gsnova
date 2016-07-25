@@ -61,6 +61,12 @@ func closeProxySession(sid uint32) {
 	log.Printf("Close proxy session:%d, %d left", sid, len(sessions))
 }
 
+func getProxySessionSize() int {
+	sessionMutex.Lock()
+	defer sessionMutex.Unlock()
+	return len(sessions)
+}
+
 func HandleEvent(ev event.Event) error {
 	session := getProxySession(ev.GetId())
 	if nil == session {

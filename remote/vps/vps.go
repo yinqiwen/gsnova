@@ -28,6 +28,7 @@ func serveProxyConn(conn net.Conn) {
 	var queue *event.EventQueue
 	connClosed := false
 	for !connClosed {
+		conn.SetReadDeadline(time.Now().Add(10 * time.Second))
 		n, cerr := bufconn.Read(b)
 		if n > 0 {
 			buf.Write(b[0:n])

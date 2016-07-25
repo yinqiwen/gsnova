@@ -115,10 +115,13 @@ func (rc *RemoteChannel) processWrite() {
 			return
 		}
 		if buf.Len() > 0 {
+			start := time.Now()
 			_, err := conn.Write(buf.Bytes())
 			if nil != err {
 				rc.Close()
 				log.Printf("Failed to write tcp messgage:%v", err)
+			} else {
+				log.Printf("[%d]%s cost %v to write %d events.", rc.Index, rc.Addr, time.Now().Sub(start), count)
 			}
 		}
 	}

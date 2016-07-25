@@ -96,6 +96,7 @@ func (p *GAEProxy) Serve(session *proxy.ProxySession, ev event.Event) error {
 					}
 				case *event.HTTPResponseEvent:
 					res := rev.(*event.HTTPResponseEvent)
+					//log.Printf("#### %s  %d %v %d", req.URL, res.StatusCode, res.Headers, len(res.Content))
 					adjustResp(res)
 					//res.Headers.Set("Content-Length", fmt.Sprintf("%d", len(res.Content)))
 					proxy.HandleEvent(rev)

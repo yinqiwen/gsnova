@@ -5,6 +5,7 @@ import (
 	"io"
 	"log"
 	"net/url"
+	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/yinqiwen/gsnova/local/proxy"
@@ -61,6 +62,7 @@ func (wc *websocketChannel) Read(p []byte) (int, error) {
 	if nil == c {
 		return 0, io.EOF
 	}
+	c.SetReadDeadline(time.Now().Add(10 * time.Second))
 	mt, data, err := c.ReadMessage()
 	if err != nil {
 		if err != io.EOF {
