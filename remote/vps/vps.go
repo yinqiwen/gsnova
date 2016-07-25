@@ -34,13 +34,12 @@ func serveProxyConn(conn net.Conn) {
 		}
 		ress, err := remote.HandleRequestBuffer(&buf, ctx)
 		if nil != err {
-			if err == event.EBNR {
-				continue
+			if err != event.EBNR {
+				log.Printf("[ERROR]connection %s:%d error:%v", ctx.User, ctx.Index, err)
+				conn.Close()
+				connClosed = true
+				return
 			}
-			log.Printf("[ERROR]connection %s:%d error:%v", ctx.User, ctx.Index, err)
-			conn.Close()
-			connClosed = true
-			return
 		} else {
 			if nil == queue && len(ctx.User) > 0 && ctx.Index >= 0 {
 				queue = remote.GetEventQueue(ctx.User, ctx.Index, true)

@@ -238,7 +238,9 @@ func HandleRequestBuffer(reqbuf *bytes.Buffer, ctx *ConnContex) ([]event.Event, 
 	for reqbuf.Len() > 0 {
 		err, ev := event.DecodeEvent(reqbuf)
 		if nil != err {
-			log.Printf("Failed to decode event for reason:%v", err)
+			if err != event.EBNR {
+				log.Printf("Failed to decode event for reason:%v", err)
+			}
 			return ress, err
 		}
 		if auth, ok := ev.(*event.AuthEvent); ok {
@@ -252,7 +254,7 @@ func HandleRequestBuffer(reqbuf *bytes.Buffer, ctx *ConnContex) ([]event.Event, 
 				}
 				authedUser := auth.User
 				authedUser = authedUser + "@" + auth.Mac
-				log.Printf("Recv connection:%d from user:%s", auth.Index, authedUser)
+				//log.Printf("Recv connection:%d from user:%s", auth.Index, authedUser)
 				if auth.Index < 0 {
 					removeProxySessionsByUser(authedUser)
 					CloseUserEventQueue(authedUser)
