@@ -7,12 +7,14 @@ import (
 	"log"
 
 	"github.com/yinqiwen/gsnova/common/event"
+	"github.com/yinqiwen/gsnova/common/logger"
 )
 
 type ServerConfig struct {
 	Listen string
 	Auth   []string
 	RC4Key string
+	Log    []string
 }
 
 func (conf *ServerConfig) VerifyUser(user string) bool {
@@ -41,6 +43,7 @@ func init() {
 		fmt.Printf("Failed to load server config:%s for reason:%v", file, err)
 		return
 	}
+	logger.InitLogger(ServerConf.Log)
 	log.Printf("Load server conf success.")
 	log.Printf("ServerConf:%v", &ServerConf)
 	event.SetDefaultRC4Key(ServerConf.RC4Key)

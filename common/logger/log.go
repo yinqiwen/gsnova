@@ -63,5 +63,7 @@ func InitLogger(output []string) {
 			ws = append(ws, initLogWriter(name))
 		}
 	}
-	log.SetOutput(io.MultiWriter(ws...))
+	if len(ws) > 0 {
+		log.SetOutput(io.MultiWriter(ws...))
+	}
 }
