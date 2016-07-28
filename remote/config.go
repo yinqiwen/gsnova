@@ -10,11 +10,16 @@ import (
 	"github.com/yinqiwen/gsnova/common/logger"
 )
 
+type EncryptConfig struct {
+	Method string
+	Key    string
+}
+
 type ServerConfig struct {
-	Listen string
-	Auth   []string
-	RC4Key string
-	Log    []string
+	Listen  string
+	Auth    []string
+	Encrypt EncryptConfig
+	Log     []string
 }
 
 func (conf *ServerConfig) VerifyUser(user string) bool {
@@ -46,5 +51,5 @@ func init() {
 	logger.InitLogger(ServerConf.Log)
 	log.Printf("Load server conf success.")
 	log.Printf("ServerConf:%v", &ServerConf)
-	event.SetDefaultRC4Key(ServerConf.RC4Key)
+	event.SetDefaultSecretKey(ServerConf.Encrypt.Key)
 }

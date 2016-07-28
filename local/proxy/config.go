@@ -160,7 +160,6 @@ type LocalConfig struct {
 	Log       []string
 	Encrypt   EncryptConfig
 	UserAgent string
-	RC4Key    string
 	Auth      string
 	// LocalDNS  LocalDNSConfig
 	Proxy []ProxyConfig
