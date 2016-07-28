@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/getlantern/netx"
 	"github.com/yinqiwen/gsnova/common/event"
 	"github.com/yinqiwen/gsnova/local/hosts"
 	"github.com/yinqiwen/gsnova/local/proxy"
@@ -21,7 +22,7 @@ func paasDial(network, addr string) (net.Conn, error) {
 		addr = host + ":" + port
 	}
 	log.Printf("[PAAS]Connect %s:%s", host, port)
-	return net.DialTimeout(network, addr, 3*time.Second)
+	return netx.DialTimeout(network, addr, 3*time.Second)
 }
 
 type PaasProxy struct {
@@ -35,6 +36,11 @@ func newRemoteChannel(server string, idx int) (*proxy.RemoteChannel, error) {
 		return newHTTPChannel(server, idx)
 	}
 	return nil, fmt.Errorf("Not supported url:%s", server)
+}
+
+func (p *PaasProxy) Destory() error {
+	p.cs.StopAll()
+	return nil
 }
 
 func (p *PaasProxy) Init() error {
@@ -77,6 +83,8 @@ func (p *PaasProxy) Serve(session *proxy.ProxySession, ev event.Event) error {
 	}
 	switch ev.(type) {
 	case *event.TCPChunkEvent:
+		session.Remote.Write(ev)
+	case *event.TCPOpenEvent:
 		session.Remote.Write(ev)
 	case *event.TCPCloseEvent:
 		session.Remote.Write(ev)

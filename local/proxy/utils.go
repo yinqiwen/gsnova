@@ -23,3 +23,8 @@ func NewAuthEvent() *event.AuthEvent {
 	}
 	return auth
 }
+
+// func FillNOnce(auth *event.AuthEvent, nonceLen int) {
+// 	auth.NOnce = make([]byte, nonceLen)
+// 	io.ReadFull(rand.Reader, auth.NOnce)
+// }

@@ -9,6 +9,7 @@ import (
 	"reflect"
 
 	"github.com/golang/snappy"
+	"golang.org/x/crypto/salsa20"
 )
 
 const (
@@ -17,26 +18,33 @@ const (
 
 var EBNR = errors.New("Event buffer not ready")
 
-var rc4Key string
+var secretKey []byte
+
+// var rc4Key string
+// var salsa20Key [32]byte
 
 type EventFlags uint64
 
 func (f EventFlags) IsSnappyEnable() bool {
 	return f&SnappyCompressor > 0
 }
-func (f EventFlags) IsRC4Enable() bool {
-	return ((f >> 4) & RC4Encypter) > 0
+func (f EventFlags) IsEncypted() bool {
+	return ((f >> 4) & WithEncypter) > 0
 }
 func (f *EventFlags) EnableSnappy() {
 	(*f) = EventFlags(uint64(*f) | SnappyCompressor)
 }
 
-func (f *EventFlags) EnableRC4() {
-	(*f) = EventFlags(uint64(*f) | (RC4Encypter << 4))
+func (f *EventFlags) EnableEncrypt() {
+	(*f) = EventFlags(uint64(*f) | (WithEncypter << 4))
 }
 
-func SetDefaultRC4Key(key string) {
-	rc4Key = key
+// func SetDefaultRC4Key(key string) {
+// 	rc4Key = key
+// }
+
+func SetDefaultSecretKey(key string) {
+	secretKey = []byte(key)
 }
 
 func EncodeInt64Value(buf *bytes.Buffer, v int64) {
@@ -403,19 +411,19 @@ func DecodeValue(buf *bytes.Buffer) (err error, ev interface{}) {
 	return
 }
 
-func EncodeEvent(buf *bytes.Buffer, ev Event) error {
+func EncryptEvent(buf *bytes.Buffer, ev Event, nonce []byte) error {
 	buf.Write(make([]byte, 4))
 	var header EventHeader
 	header.Type = GetRegistType(ev)
 	header.Id = ev.GetId()
 	header.Flags = 0
-	if len(rc4Key) > 0 {
-		header.Flags.EnableRC4()
+	if len(secretKey) > 0 {
+		header.Flags.EnableEncrypt()
 	}
 	var eventBuffer bytes.Buffer
 	ev.Encode(&eventBuffer)
 	eventContent := eventBuffer.Bytes()
-	if eventBuffer.Len() >= 12 {
+	if eventBuffer.Len() >= 128 {
 		header.Flags.EnableSnappy()
 	}
 	header.Encode(buf)
@@ -424,12 +432,90 @@ func EncodeEvent(buf *bytes.Buffer, ev Event) error {
 		newbuf := snappy.Encode(evbuf, eventContent)
 		eventContent = newbuf
 	}
-	if header.Flags.IsRC4Enable() {
+	nonceWithId := make([]byte, len(nonce)+8)
+	copy(nonceWithId[:], nonce[:])
+	binary.LittleEndian.PutUint64(nonceWithId[len(nonce):], uint64(ev.GetId()))
+	//elen := len(eventContent)
+	var salsa20Key [32]byte
+	salsa20.XORKeyStream(eventContent, eventContent, nonceWithId, &salsa20Key)
+	EncodeUInt64Value(buf, uint64(len(eventContent)))
+	buf.Write(eventContent)
+
+	elen := uint32(buf.Len())
+	binary.LittleEndian.PutUint32(buf.Bytes()[0:4], elen)
+	return nil
+}
+
+func DecryptEvent(buf *bytes.Buffer, nonce []byte) (err error, ev Event) {
+	if buf.Len() < 4 {
+		return EBNR, nil
+	}
+	elen := binary.LittleEndian.Uint32(buf.Bytes()[0:4])
+	if elen > uint32(buf.Len()) {
+		return EBNR, nil
+	}
+	buf.Next(4)
+	var header EventHeader
+	if err = header.Decode(buf); nil != err {
+		return
+	}
+	var length uint32
+	length, err = DecodeUInt32Value(buf)
+	if err != nil {
+		return
+	}
+	body := buf.Next(int(length))
+	nonceWithSeq := make([]byte, len(nonce)+8)
+	copy(nonceWithSeq[:], nonce[:])
+	var salsa20Key [32]byte
+	binary.LittleEndian.PutUint64(nonceWithSeq[len(nonce):], uint64(header.GetId()))
+	salsa20.XORKeyStream(body, body, nonceWithSeq, &salsa20Key)
+
+	if header.Flags.IsSnappyEnable() {
+		b := make([]byte, 0, 0)
+		b, err = snappy.Decode(b, body)
+		if err != nil {
+			return
+		}
+		body = b
+	}
+	var tmp interface{}
+	if err, tmp = NewEventInstance(header.Type); nil != err {
+		return
+	}
+	ev = tmp.(Event)
+	ev.SetId(header.Id)
+	err = ev.Decode(bytes.NewBuffer(body))
+	return
+}
+
+func EncodeEvent(buf *bytes.Buffer, ev Event) error {
+	buf.Write(make([]byte, 4))
+	var header EventHeader
+	header.Type = GetRegistType(ev)
+	header.Id = ev.GetId()
+	header.Flags = 0
+	if len(secretKey) > 0 {
+		header.Flags.EnableEncrypt()
+	}
+	var eventBuffer bytes.Buffer
+	ev.Encode(&eventBuffer)
+	eventContent := eventBuffer.Bytes()
+	if eventBuffer.Len() >= 128 {
+		header.Flags.EnableSnappy()
+	}
+	header.Encode(buf)
+	if header.Flags.IsSnappyEnable() {
+		evbuf := make([]byte, 0)
+		newbuf := snappy.Encode(evbuf, eventContent)
+		eventContent = newbuf
+	}
+	if header.Flags.IsEncypted() {
 		EncodeUInt64Value(buf, uint64(len(eventContent)))
-		dst := make([]byte, len(eventContent))
-		cipher, _ := rc4.NewCipher([]byte(rc4Key))
-		cipher.XORKeyStream(dst, eventContent)
-		buf.Write(dst)
+		//dst := make([]byte, len(eventContent))
+		cipher, _ := rc4.NewCipher(secretKey)
+		cipher.XORKeyStream(eventContent, eventContent)
+		buf.Write(eventContent)
 	} else {
 		EncodeUInt64Value(buf, uint64(len(eventContent)))
 		buf.Write(eventContent)
@@ -458,11 +544,11 @@ func DecodeEvent(buf *bytes.Buffer) (err error, ev Event) {
 		return
 	}
 	body := buf.Next(int(length))
-	if header.Flags.IsRC4Enable() {
-		dst := make([]byte, int(length))
-		cipher, _ := rc4.NewCipher([]byte(rc4Key))
-		cipher.XORKeyStream(dst, body)
-		body = dst
+	if header.Flags.IsEncypted() {
+		//dst := make([]byte, int(length))
+		cipher, _ := rc4.NewCipher(secretKey)
+		cipher.XORKeyStream(body, body)
+		//body = dst
 	}
 	if header.Flags.IsSnappyEnable() {
 		b := make([]byte, 0, 0)

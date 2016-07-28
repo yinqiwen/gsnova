@@ -13,6 +13,11 @@ type VPSProxy struct {
 	cs *proxy.RemoteChannelTable
 }
 
+func (p *VPSProxy) Destory() error {
+	p.cs.StopAll()
+	return nil
+}
+
 func (p *VPSProxy) Init() error {
 	if !proxy.GConf.VPS.Enable {
 		return nil
@@ -48,6 +53,8 @@ func (p *VPSProxy) Serve(session *proxy.ProxySession, ev event.Event) error {
 	}
 	switch ev.(type) {
 	case *event.TCPChunkEvent:
+		session.Remote.Write(ev)
+	case *event.TCPOpenEvent:
 		session.Remote.Write(ev)
 	case *event.TCPCloseEvent:
 		session.Remote.Write(ev)

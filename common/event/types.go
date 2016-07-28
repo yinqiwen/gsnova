@@ -1,18 +1,20 @@
 package event
 
 const (
-	EventHttpReq  = 10000
-	EventHttpRes  = 10001
-	EventTCPOpen  = 10002
-	EventTCPClose = 10003
-	EventTCPChunk = 10004
-	EventAuth     = 10005
-	EventError    = 10006
+	EventHttpReq   = 10000
+	EventHttpRes   = 10001
+	EventTCPOpen   = 10002
+	EventTCPClose  = 10003
+	EventTCPChunk  = 10004
+	EventAuth      = 10005
+	EventError     = 10006
+	EventIVSetting = 10007
+	EventUDP       = 10008
 
 	NoneCompressor   = 0
 	SnappyCompressor = 1
 	NoneEncypter     = 0
-	RC4Encypter      = 1
+	WithEncypter     = 1
 )
 
 func init() {
@@ -23,4 +25,6 @@ func init() {
 	RegistObject(EventTCPChunk, &TCPChunkEvent{})
 	RegistObject(EventError, &ErrorEvent{})
 	RegistObject(EventAuth, &AuthEvent{})
+	RegistObject(EventIVSetting, &IVSettingEvent{})
+	RegistObject(EventUDP, &UDPEvent{})
 }

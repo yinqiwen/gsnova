@@ -26,5 +26,21 @@ func (ev *AuthEvent) Decode(buffer *bytes.Buffer) (err error) {
 		return err
 	}
 	ev.Index, err = DecodeInt64Value(buffer)
+	if nil != err {
+		return err
+	}
+	return err
+}
+
+//Initial vector setting
+type IVSettingEvent struct {
+	IV []byte
+}
+
+func (ev *IVSettingEvent) Encode(buffer *bytes.Buffer) {
+	EncodeBytesValue(buffer, ev.IV)
+}
+func (ev *IVSettingEvent) Decode(buffer *bytes.Buffer) (err error) {
+	ev.IV, err = DecodeBytesValue(buffer)
 	return err
 }

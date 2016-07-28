@@ -33,6 +33,10 @@ func serveProxyConn(conn net.Conn) {
 		if n > 0 {
 			buf.Write(b[0:n])
 		}
+		if nil != cerr {
+			conn.Close()
+			connClosed = true
+		}
 		ress, err := remote.HandleRequestBuffer(&buf, ctx)
 		if nil != err {
 			if err != event.EBNR {
@@ -52,7 +56,8 @@ func serveProxyConn(conn net.Conn) {
 						}
 						err = writeEvent(ev)
 						if nil != err {
-							log.Printf("Websoket write error:%v", err)
+							log.Printf("TCP write error:%v", err)
+							conn.Close()
 							return
 						} else {
 							queue.ReadPeek()
@@ -63,11 +68,6 @@ func serveProxyConn(conn net.Conn) {
 			for _, res := range ress {
 				writeEvent(res)
 			}
-		}
-		if nil != cerr {
-			conn.Close()
-			connClosed = true
-			return
 		}
 	}
 }

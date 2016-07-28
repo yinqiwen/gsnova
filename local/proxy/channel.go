@@ -118,7 +118,7 @@ func (rc *RemoteChannel) processWrite() {
 			start := time.Now()
 			_, err := conn.Write(buf.Bytes())
 			if nil != err {
-				rc.Close()
+				conn.Close()
 				log.Printf("Failed to write tcp messgage:%v", err)
 			} else {
 				log.Printf("[%d]%s cost %v to write %d events.", rc.Index, rc.Addr, time.Now().Sub(start), count)
@@ -131,6 +131,7 @@ func (rc *RemoteChannel) processRead() {
 	for rc.running {
 		conn := rc.C
 		if conn.Closed() {
+			//rc.nonce =
 			err := conn.Open()
 			if nil != err {
 				log.Printf("Channel[%d] connect %s failed:%v.", rc.Index, rc.Addr, err)
@@ -174,6 +175,7 @@ func (rc *RemoteChannel) processRead() {
 				if cerr != io.EOF && cerr != ErrChannelReadTimeout {
 					log.Printf("Failed to read channel for reason:%v", cerr)
 				}
+				conn.Close()
 				break
 			}
 		}
@@ -182,11 +184,9 @@ func (rc *RemoteChannel) processRead() {
 
 func (rc *RemoteChannel) Request(ev event.Event) (event.Event, error) {
 	var buf bytes.Buffer
-	if rc.JoinAuthEvent {
-		auth := NewAuthEvent()
-		auth.Index = int64(rc.Index)
-		event.EncodeEvent(&buf, auth)
-	}
+	auth := NewAuthEvent()
+	auth.Index = int64(rc.Index)
+	event.EncodeEvent(&buf, auth)
 	event.EncodeEvent(&buf, ev)
 	res, err := rc.C.Request(buf.Bytes())
 	if nil != err {
@@ -232,6 +232,15 @@ func (p *RemoteChannelTable) Add(c *RemoteChannel) {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 	p.cs = append(p.cs, c)
+}
+
+func (p *RemoteChannelTable) StopAll() {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+	for _, c := range p.cs {
+		c.Stop()
+	}
+	p.cs = make([]*RemoteChannel, 0)
 }
 
 func (p *RemoteChannelTable) Select() *RemoteChannel {

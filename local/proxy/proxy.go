@@ -1,9 +1,14 @@
 package proxy
 
 import (
+	"encoding/json"
+	"fmt"
 	"log"
 
 	"github.com/yinqiwen/gsnova/common/event"
+	"github.com/yinqiwen/gsnova/common/helper"
+	"github.com/yinqiwen/gsnova/common/logger"
+	"github.com/yinqiwen/gsnova/local/hosts"
 )
 
 type Feature struct {
@@ -12,6 +17,7 @@ type Feature struct {
 
 type Proxy interface {
 	Init() error
+	Destory() error
 	Features() Feature
 	Serve(session *ProxySession, ev event.Event) error
 }
@@ -31,22 +37,50 @@ func getProxyByName(name string) Proxy {
 	return nil
 }
 
-func Init() error {
-	err := GConf.init()
+func Start(confdir string) error {
+	clientConf := confdir + "/client.json"
+	hostsConf := confdir + "/hosts.json"
+	confdata, err := helper.ReadWithoutComment(clientConf, "//")
+	if nil != err {
+		//log.Println(err)
+		return err
+	}
+	err = json.Unmarshal(confdata, &GConf)
+	if nil != err {
+		fmt.Printf("Failed to unmarshal json:%s to config for reason:%v", string(confdata), err)
+		return err
+	}
+	err = GConf.init()
 	if nil != err {
 		return err
 	}
-	event.SetDefaultRC4Key(GConf.RC4Key)
+	logger.InitLogger(GConf.Log)
+	err = hosts.Init(hostsConf)
+	if nil != err {
+		return err
+	}
+	event.SetDefaultSecretKey(GConf.Encrypt.Key)
 	for name, p := range proxyTable {
 		err := p.Init()
 		if nil != err {
-			log.Printf("Failed to init proxy:%s", name)
+			log.Printf("Failed to init proxy:%s with error:%v", name, err)
 		} else {
 			log.Printf("Proxy:%s init success.", name)
 		}
 	}
 	startLocalServers()
-	ch := make(chan int)
-	<-ch
+	return nil
+}
+
+func Stop() error {
+	stopLocalServers()
+	for name, p := range proxyTable {
+		err := p.Destory()
+		if nil != err {
+			log.Printf("Failed to destroy proxy:%s with error:%v", name, err)
+		} else {
+			log.Printf("Proxy:%s destroy success.", name)
+		}
+	}
 	return nil
 }

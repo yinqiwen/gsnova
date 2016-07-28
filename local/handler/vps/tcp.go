@@ -5,6 +5,7 @@ import (
 	"net"
 	"time"
 
+	"github.com/getlantern/netx"
 	"github.com/yinqiwen/gsnova/local/proxy"
 )
 
@@ -14,7 +15,7 @@ type tcpChannel struct {
 }
 
 func (tc *tcpChannel) Open() error {
-	c, err := net.DialTimeout("tcp", tc.addr, 5*time.Second)
+	c, err := netx.DialTimeout("tcp", tc.addr, 5*time.Second)
 	if err != nil {
 		return err
 	}
@@ -44,6 +45,7 @@ func (tc *tcpChannel) Read(p []byte) (int, error) {
 	if nil == conn {
 		return 0, io.EOF
 	}
+	conn.SetReadDeadline(time.Now().Add(10 * time.Second))
 	return conn.Read(p)
 }
 

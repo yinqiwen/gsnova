@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/getlantern/netx"
 	"github.com/yinqiwen/gsnova/local/hosts"
 	"github.com/yinqiwen/gsnova/local/proxy"
 )
@@ -33,7 +34,7 @@ func initGAEClient() {
 		for i := 0; i < 3; i++ {
 			remote = hosts.GetHost(host)
 			//log.Printf("SSL Dial %s:%s", remote, port)
-			conn, err = net.DialTimeout(n, remote+":443", 5*time.Second)
+			conn, err = netx.DialTimeout(n, remote+":443", 5*time.Second)
 			if err == nil {
 				break
 			}
@@ -131,11 +132,10 @@ func (h *httpChannel) Write(p []byte) (n int, err error) {
 
 func newHTTPChannel(server string) (*proxy.RemoteChannel, error) {
 	rc := &proxy.RemoteChannel{
-		Addr:          server,
-		Index:         0,
-		DirectWrite:   true,
-		DirectRead:    true,
-		JoinAuthEvent: true,
+		Addr:        server,
+		Index:       0,
+		DirectWrite: true,
+		DirectRead:  true,
 	}
 	tc := new(httpChannel)
 	tc.server = server

@@ -32,6 +32,10 @@ func (p *GAEProxy) Init() error {
 	p.injectRangeRegex, _ = proxy.NewRegex(proxy.GConf.GAE.InjectRange)
 	return nil
 }
+
+func (p *GAEProxy) Destory() error {
+	return nil
+}
 func (p *GAEProxy) Features() proxy.Feature {
 	var f proxy.Feature
 	f.MaxRequestBody = 768 * 1024

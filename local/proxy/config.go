@@ -90,7 +90,11 @@ func (pac *PACConfig) matchRules(req *http.Request) bool {
 		if strings.EqualFold(rule, "InHosts") {
 			ok = pac.ruleInHosts(req)
 		} else if strings.EqualFold(rule, "BlockedByGFW") {
-			ok = mygfwlist.IsBlockedByGFW(req)
+			if nil != mygfwlist {
+				ok = mygfwlist.IsBlockedByGFW(req)
+			} else {
+				log.Printf("NIL GFWList object")
+			}
 		}
 		if not {
 			ok = ok != true
@@ -142,15 +146,27 @@ type ProxyConfig struct {
 	PAC   []PACConfig
 }
 
+type EncryptConfig struct {
+	Method string
+	Key    string
+}
+
+// type LocalDNSConfig struct {
+// 	Listen string
+// 	DNS    []string
+// }
+
 type LocalConfig struct {
 	Log       []string
+	Encrypt   EncryptConfig
 	UserAgent string
 	RC4Key    string
 	Auth      string
-	Proxy     []ProxyConfig
-	PAAS      PAASConfig
-	GAE       GAEConfig
-	VPS       VPSConfig
+	// LocalDNS  LocalDNSConfig
+	Proxy []ProxyConfig
+	PAAS  PAASConfig
+	GAE   GAEConfig
+	VPS   VPSConfig
 }
 
 func (cfg *LocalConfig) init() error {
@@ -161,10 +177,10 @@ func (cfg *LocalConfig) init() error {
 			cfg.Proxy[i].PAC[j].pathRegex, _ = NewRegex(pac.Path)
 		}
 	}
-	gfwlist, err := gfwlist.NewGFWList("https://raw.githubusercontent.com/gfwlist/gfwlist/master/gfwlist.txt", "", true)
-	if nil != err {
-		return err
-	}
-	mygfwlist = gfwlist
+	// gfwlist, err := gfwlist.NewGFWList("https://raw.githubusercontent.com/gfwlist/gfwlist/master/gfwlist.txt", "", true)
+	// if nil != err {
+	// 	return err
+	// }
+	// mygfwlist = gfwlist
 	return nil
 }

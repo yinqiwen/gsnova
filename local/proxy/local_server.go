@@ -13,25 +13,62 @@ import (
 
 	"github.com/yinqiwen/gsnova/common/event"
 	"github.com/yinqiwen/gsnova/common/fakecert"
+	"github.com/yinqiwen/gsnova/local/socks"
 )
 
-type proxyHandler struct {
-	Config ProxyConfig
-}
-
-func (p *proxyHandler) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
-
-}
-
 var seed uint32 = 0
+var proxyServerRunning = true
 
 func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
-	bufconn := bufio.NewReader(conn)
-	defer conn.Close()
 	var p Proxy
+	proxyName := ""
 	sid := atomic.AddUint32(&seed, 1)
 	queue := event.NewEventQueue()
 	connClosed := false
+	session := newProxySession(sid, queue)
+	defer closeProxySession(sid)
+
+	findProxy := func(req *http.Request) {
+		if nil == p {
+			for _, pac := range proxy.PAC {
+				if pac.Match(req) {
+					p = getProxyByName(pac.Remote)
+					proxyName = pac.Remote
+					break
+				}
+
+			}
+			if nil == p {
+				log.Printf("No proxy found.")
+				return
+			}
+		}
+	}
+	//isSocksConn := false
+	socksConn, bufconn, err := socks.NewSocksConn(conn)
+	if nil == err {
+		//isSocksConn = true
+		socksConn.Grant(&net.TCPAddr{
+			IP: net.ParseIP("0.0.0.0"), Port: 0})
+		conn = socksConn
+		creq, _ := http.NewRequest("Connect", socksConn.Req.Target, nil)
+		findProxy(creq)
+		session.Hijacked = true
+		tcpOpen := &event.TCPOpenEvent{}
+		tcpOpen.SetId(sid)
+		tcpOpen.Addr = socksConn.Req.Target
+		p.Serve(session, tcpOpen)
+	} else {
+		if nil == bufconn {
+			conn.Close()
+			return
+		}
+	}
+	if nil == bufconn {
+		bufconn = bufio.NewReader(conn)
+	}
+	defer conn.Close()
+
 	go func() {
 		for !connClosed {
 			ev, err := queue.Read(1 * time.Second)
@@ -54,8 +91,6 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 			case *event.TCPChunkEvent:
 				conn.Write(ev.(*event.TCPChunkEvent).Content)
 			case *event.HTTPResponseEvent:
-				//rr := ev.(*event.HTTPResponseEvent).ToResponse(true)
-				//rr.Write(connWriter)
 				ev.(*event.HTTPResponseEvent).Write(conn)
 				code := ev.(*event.HTTPResponseEvent).StatusCode
 				log.Printf("Session:%d response:%d %v", ev.GetId(), code, http.StatusText(int(code)))
@@ -64,9 +99,9 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 			}
 		}
 	}()
-	session := newProxySession(sid, queue)
-	defer closeProxySession(sid)
-	proxyName := ""
+
+	// sniSniffed := false
+	// tmp := make([]byte, 0)
 	for {
 		if session.Hijacked {
 			buffer := make([]byte, 8192)
@@ -75,6 +110,19 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 				log.Printf("Session:%d read chunk failed from proxy connection:%v", sid, err)
 				break
 			}
+			// if !sniSniffed {
+			// 	tmp = append(tmp, buffer[0:n]...)
+			// 	sni, err := helper.TLSParseSNI(tmp)
+			// 	if err != nil {
+			// 		if err != helper.ErrTLSIncomplete {
+			// 			sniSniffed = true
+			// 			log.Printf("####%v", err)
+			// 		}
+			// 	} else {
+			// 		sniSniffed = true
+			// 		log.Printf("####SNI = %v", sni)
+			// 	}
+			// }
 			var chunk event.TCPChunkEvent
 			chunk.SetId(sid)
 			chunk.Content = buffer[0:n]
@@ -86,20 +134,7 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 			log.Printf("Session:%d read request failed from proxy connection:%v", sid, err)
 			break
 		}
-		if nil == p {
-			for _, pac := range proxy.PAC {
-				if pac.Match(req) {
-					p = getProxyByName(pac.Remote)
-					proxyName = pac.Remote
-					break
-				}
-
-			}
-			if nil == p {
-				log.Printf("No proxy found.")
-				return
-			}
-		}
+		findProxy(req)
 		reqUrl := req.URL.String()
 		if strings.EqualFold(req.Method, "Connect") {
 			reqUrl = req.URL.Host
@@ -171,34 +206,49 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 	connClosed = true
 }
 
-func startLocalProxyServer(proxy ProxyConfig) error {
+func startLocalProxyServer(proxy ProxyConfig) (*net.TCPListener, error) {
 	tcpaddr, err := net.ResolveTCPAddr("tcp", proxy.Local)
 	if nil != err {
 		log.Fatalf("[ERROR]Local server address:%s error:%v", proxy.Local, err)
-		return err
+		return nil, err
 	}
 	var lp *net.TCPListener
 	lp, err = net.ListenTCP("tcp", tcpaddr)
 	if nil != err {
 		log.Fatalf("Can NOT listen on address:%s", proxy.Local)
-		return err
+		return nil, err
 	}
 	log.Printf("Listen on address %s", proxy.Local)
 	go func() {
-		for {
+		for proxyServerRunning {
 			conn, err := lp.AcceptTCP()
 			if nil != err {
 				continue
 			}
 			go serveProxyConn(conn, proxy)
 		}
+		lp.Close()
 	}()
+	return lp, nil
+}
+
+var runningServers []*net.TCPListener
+
+func startLocalServers() error {
+	proxyServerRunning = true
+	runningServers = make([]*net.TCPListener, 0)
+	for _, proxy := range GConf.Proxy {
+		l, _ := startLocalProxyServer(proxy)
+		if nil != l {
+			runningServers = append(runningServers, l)
+		}
+	}
 	return nil
 }
 
-func startLocalServers() error {
-	for _, proxy := range GConf.Proxy {
-		startLocalProxyServer(proxy)
+func stopLocalServers() {
+	proxyServerRunning = false
+	for _, l := range runningServers {
+		l.Close()
 	}
-	return nil
 }

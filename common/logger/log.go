@@ -14,6 +14,12 @@ type logFileWriter struct {
 	file *os.File
 }
 
+func (writer *logFileWriter) close() {
+	if nil != writer.file {
+		writer.file.Close()
+	}
+}
+
 func (writer *logFileWriter) Write(p []byte) (n int, err error) {
 	if nil != writer.file {
 		_, err := writer.file.Write(p)

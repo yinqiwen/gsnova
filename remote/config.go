@@ -34,7 +34,7 @@ func (conf *ServerConfig) VerifyUser(user string) bool {
 var ServerConf ServerConfig
 
 func init() {
-	file := "gsnova-server.json"
+	file := "server.json"
 	data, err := ioutil.ReadFile(file)
 	if nil == err {
 		err = json.Unmarshal(data, &ServerConf)

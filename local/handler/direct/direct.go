@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/getlantern/netx"
 	"github.com/yinqiwen/gsnova/common/event"
 	"github.com/yinqiwen/gsnova/local/hosts"
 	"github.com/yinqiwen/gsnova/local/proxy"
@@ -100,7 +101,7 @@ func newDirectChannel(req *event.HTTPRequestEvent, useTLS bool) (*directChannel,
 		}
 	}
 
-	c, err := net.DialTimeout("tcp", addr, 5*time.Second)
+	c, err := netx.DialTimeout("tcp", addr, 5*time.Second)
 	log.Printf("Session:%d connect %s for %s", req.GetId(), addr, req.GetHost())
 	if nil != err {
 		log.Printf("Failed to connect %s for %s with error:%v", addr, req.GetHost(), err)
@@ -127,6 +128,9 @@ type DirectProxy struct {
 }
 
 func (p *DirectProxy) Init() error {
+	return nil
+}
+func (p *DirectProxy) Destory() error {
 	return nil
 }
 func (p *DirectProxy) Features() proxy.Feature {

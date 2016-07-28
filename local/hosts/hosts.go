@@ -2,7 +2,6 @@ package hosts
 
 import (
 	"encoding/json"
-	"fmt"
 	"net"
 	"regexp"
 	"strings"
@@ -78,16 +77,16 @@ func InHosts(host string) bool {
 	return ok
 }
 
-func init() {
-	file := "hosts.json"
+func Init(confile string) error {
+	//file := "hosts.json"
 	hs := make(map[string][]string)
-	data, err := helper.ReadWithoutComment(file, "//")
+	data, err := helper.ReadWithoutComment(confile, "//")
 	if nil == err {
 		err = json.Unmarshal(data, &hs)
 	}
 	if nil != err {
-		fmt.Printf("Failed to load hosts config:%s for reason:%v", file, err)
-		return
+		//fmt.Printf("Failed to load hosts config:%s for reason:%v", file, err)
+		return err
 	}
 	for k, vs := range hs {
 		if len(vs) > 0 {
@@ -101,4 +100,5 @@ func init() {
 			hostMappingTable[k] = mapping
 		}
 	}
+	return nil
 }
