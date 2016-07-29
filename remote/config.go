@@ -28,7 +28,7 @@ func (conf *ServerConfig) VerifyUser(user string) bool {
 	}
 	for _, u := range conf.Auth {
 		if u == user || u == "*" {
-			log.Printf("Valid user:%s", user)
+			//log.Printf("Valid user:%s", user)
 			return true
 		}
 	}
