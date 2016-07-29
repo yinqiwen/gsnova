@@ -453,22 +453,25 @@ func EncryptEvent(buf *bytes.Buffer, ev Event, iv uint64) error {
 	// 	newbuf := snappy.Encode(evbuf, eventContent)
 	// 	eventContent = newbuf
 	// }
-	switch header.Flags.GetEncrytFlag() {
-	case Salsa20Encypter:
-		nonce := make([]byte, 8)
-		iv = iv ^ uint64(ev.GetId())
-		binary.LittleEndian.PutUint64(nonce, iv)
-		salsa20.XORKeyStream(eventContent, eventContent, nonce, &salsa20Key)
-	case RC4Encypter:
-		rc4Cipher, _ := rc4.NewCipher(secretKey)
-		rc4Cipher.XORKeyStream(eventContent, eventContent)
-		// case Chacha20Encypter:
-		// 	nonce := make([]byte, 24)
-		// 	iv = iv ^ uint64(ev.GetId())
-		// 	binary.LittleEndian.PutUint64(nonce, iv)
-		// 	cipher, _ := chacha20.NewXChaCha(secretKey, nonce)
-		// 	cipher.XORKeyStream(eventContent, eventContent)
+	if len(eventContent) > 0 {
+		switch header.Flags.GetEncrytFlag() {
+		case Salsa20Encypter:
+			nonce := make([]byte, 8)
+			iv = iv ^ uint64(ev.GetId())
+			binary.LittleEndian.PutUint64(nonce, iv)
+			salsa20.XORKeyStream(eventContent, eventContent, nonce, &salsa20Key)
+		case RC4Encypter:
+			rc4Cipher, _ := rc4.NewCipher(secretKey)
+			rc4Cipher.XORKeyStream(eventContent, eventContent)
+			// case Chacha20Encypter:
+			// 	nonce := make([]byte, 24)
+			// 	iv = iv ^ uint64(ev.GetId())
+			// 	binary.LittleEndian.PutUint64(nonce, iv)
+			// 	cipher, _ := chacha20.NewXChaCha(secretKey, nonce)
+			// 	cipher.XORKeyStream(eventContent, eventContent)
+		}
 	}
+
 	//EncodeUInt64Value(buf, uint64(len(eventContent)))
 	//buf.Write(eventContent)
 
@@ -494,21 +497,23 @@ func DecryptEvent(buf *bytes.Buffer, iv uint64) (err error, ev Event) {
 	}
 	hlen := buflen - buf.Len()
 	body := buf.Bytes()[0 : int(elen)-hlen]
-	switch header.Flags.GetEncrytFlag() {
-	case Salsa20Encypter:
-		nonce := make([]byte, 8)
-		iv = iv ^ uint64(header.GetId())
-		binary.LittleEndian.PutUint64(nonce, iv)
-		salsa20.XORKeyStream(body, body, nonce, &salsa20Key)
-	case RC4Encypter:
-		rc4Cipher, _ := rc4.NewCipher(secretKey)
-		rc4Cipher.XORKeyStream(body, body)
-		// case Chacha20Encypter:
-		// 	nonce := make([]byte, 24)
-		// 	iv = iv ^ uint64(header.GetId())
-		// 	binary.LittleEndian.PutUint64(nonce, iv)
-		// 	cipher, _ := chacha20.NewXChaCha(secretKey, nonce)
-		// 	cipher.XORKeyStream(body, body)
+	if len(body) > 0 {
+		switch header.Flags.GetEncrytFlag() {
+		case Salsa20Encypter:
+			nonce := make([]byte, 8)
+			iv = iv ^ uint64(header.GetId())
+			binary.LittleEndian.PutUint64(nonce, iv)
+			salsa20.XORKeyStream(body, body, nonce, &salsa20Key)
+		case RC4Encypter:
+			rc4Cipher, _ := rc4.NewCipher(secretKey)
+			rc4Cipher.XORKeyStream(body, body)
+			// case Chacha20Encypter:
+			// 	nonce := make([]byte, 24)
+			// 	iv = iv ^ uint64(header.GetId())
+			// 	binary.LittleEndian.PutUint64(nonce, iv)
+			// 	cipher, _ := chacha20.NewXChaCha(secretKey, nonce)
+			// 	cipher.XORKeyStream(body, body)
+		}
 	}
 
 	// if header.Flags.IsSnappyEnable() {
@@ -527,7 +532,7 @@ func DecryptEvent(buf *bytes.Buffer, iv uint64) (err error, ev Event) {
 	ev.SetId(header.Id)
 	err = ev.Decode(buf)
 	if nil != err {
-		log.Printf("Failed to decode event:%T", tmp)
+		log.Printf("Failed to decode event:%T with body len:%d", tmp, len(body))
 	}
 	return
 }
