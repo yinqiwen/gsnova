@@ -36,7 +36,6 @@ func httpInvoke(w http.ResponseWriter, r *http.Request) {
 
 	ress, err := remote.HandleRequestBuffer(reqbuf, ctx)
 	if nil != err {
-		log.Printf("####%d left", reqbuf.Len())
 		log.Printf("[ERROR]connection %s:%d error:%v with path:%s ", ctx.User, ctx.ConnIndex, err, r.URL.Path)
 		w.WriteHeader(400)
 	} else {

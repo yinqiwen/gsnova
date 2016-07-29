@@ -44,7 +44,6 @@ func (p *PaasProxy) Destory() error {
 }
 
 func (p *PaasProxy) Init() error {
-	log.Printf("%v", proxy.GConf.PAAS)
 	if !proxy.GConf.PAAS.Enable {
 		return nil
 	}

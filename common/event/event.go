@@ -5,6 +5,7 @@ import (
 	"crypto/rc4"
 	"encoding/binary"
 	"errors"
+	"log"
 	"reflect"
 	"strings"
 
@@ -488,9 +489,11 @@ func DecryptEvent(buf *bytes.Buffer, iv uint64) (err error, ev Event) {
 	buf.Next(4)
 	var header EventHeader
 	if err = header.Decode(buf); nil != err {
+		log.Printf("Failed to decode event header")
 		return
 	}
 	hlen := buflen - buf.Len()
+	bodylen := elen - hlen
 	body := buf.Bytes()[0 : int(elen)-hlen]
 	switch header.Flags.GetEncrytFlag() {
 	case Salsa20Encypter:
@@ -524,6 +527,9 @@ func DecryptEvent(buf *bytes.Buffer, iv uint64) (err error, ev Event) {
 	ev = tmp.(Event)
 	ev.SetId(header.Id)
 	err = ev.Decode(buf)
+	if nil != err {
+		log.Printf("Failed to decode event:%T", tmp)
+	}
 	return
 }
 

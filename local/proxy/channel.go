@@ -69,7 +69,6 @@ func (rc *RemoteChannel) Init() error {
 		}
 		time.Sleep(1 * time.Millisecond)
 	}
-	log.Printf("####%d", rc.authResult)
 	if rc.authResult == event.ErrAuthFailed {
 		rc.Stop()
 		return fmt.Errorf("Server:%s auth failed.", rc.Addr)
@@ -126,7 +125,6 @@ func (rc *RemoteChannel) processWrite() {
 		} else {
 			count += readBufferEv(&buf)
 		}
-		log.Printf("####To write %d bytes", buf.Len())
 		if !rc.running && count == 0 {
 			return
 		}
@@ -226,7 +224,6 @@ func (rc *RemoteChannel) Request(ev event.Event) (event.Event, error) {
 
 func (rc *RemoteChannel) Write(ev event.Event) error {
 	rc.wch <- ev
-	log.Printf("###in write %d", len(rc.wch))
 	return nil
 }
 
