@@ -27,6 +27,18 @@ func closeUserEventQueue(user string) {
 	delete(queueTable, user)
 }
 
+func getUnmatchedUserRunId(cid ConnId) (int64, bool) {
+	queueMutex.Lock()
+	defer queueMutex.Unlock()
+	qss := queueTable[cid.User]
+	if nil != qss {
+		if qss.runid != cid.RunId {
+			return qss.runid, true
+		}
+	}
+	return 0, false
+}
+
 func closeUnmatchedUserEventQueue(cid ConnId) (int64, bool) {
 	queueMutex.Lock()
 	defer queueMutex.Unlock()
@@ -38,6 +50,7 @@ func closeUnmatchedUserEventQueue(cid ConnId) (int64, bool) {
 					q.Close()
 				}
 			}
+			qss.qs = nil
 			delete(queueTable, cid.User)
 			return qss.runid, true
 		}

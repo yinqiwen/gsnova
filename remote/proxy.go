@@ -250,13 +250,13 @@ func authConnection(auth *event.AuthEvent, ctx *ConnContex) error {
 		ctx.IV = auth.IV
 		ctx.RunId = auth.RunId
 		cid := ctx.ConnId
-		log.Printf("#### IV = %d", ctx.IV)
+		GetEventQueue(ctx.ConnId, true)
 		//log.Printf("###Recv IV = %s", string(ctx.IV))
-		lastRunId, ok := closeUnmatchedUserEventQueue(cid)
-
+		lastRunId, ok := getUnmatchedUserRunId(cid)
 		if ok {
-			log.Printf("@@@@@%d %d", ctx.RunId, lastRunId)
+			log.Printf("Remove old user sessions for runid:%d, while new runid:%d", lastRunId, ctx.RunId)
 			removeUserSessions(cid.User, lastRunId)
+			closeUnmatchedUserEventQueue(cid)
 		}
 		return nil
 	} else {

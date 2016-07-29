@@ -68,21 +68,23 @@ func httpInvoke(w http.ResponseWriter, r *http.Request) {
 	buf := bytes.NewBuffer(b)
 	ctx := appengine.NewContext(r)
 
-	err, ev := event.DecodeEvent(buf)
+	err, ev := event.DecryptEvent(buf, 0)
 	if nil != err {
 		ctx.Errorf("Decode auth event failed:%v", err)
 		return
 	}
+	var iv uint64
 	if auth, ok := ev.(*event.AuthEvent); ok {
 		if !remote.ServerConf.VerifyUser(auth.User) {
 			return
 		}
+		iv = auth.IV
 	} else {
 		ctx.Errorf("Expected auth event, but got %T", ev)
 		return
 	}
 
-	err, ev = event.DecodeEvent(buf)
+	err, ev = event.DecryptEvent(buf, iv)
 	if nil != err {
 		ctx.Errorf("Decode http request event failed:%v", err)
 		return

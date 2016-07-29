@@ -39,7 +39,6 @@ func serveProxyConn(conn net.Conn) {
 			conn.Close()
 			connClosed = true
 		}
-		log.Printf("###Recv %d bytes", n)
 		ress, err := remote.HandleRequestBuffer(&buf, ctx)
 		if nil != err {
 			if err != event.EBNR {
