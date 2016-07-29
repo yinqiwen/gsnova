@@ -7,6 +7,7 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	"math/rand"
 	"net"
 	"net/http"
 	"net/url"
@@ -44,8 +45,9 @@ func initGAEClient() {
 		}
 		tlcfg := &tls.Config{}
 		tlcfg.InsecureSkipVerify = true
-		if len(proxy.GConf.GAE.TLSServerName) > 0 {
-			tlcfg.ServerName = proxy.GConf.GAE.TLSServerName[0]
+		sniLen := len(proxy.GConf.GAE.SNI)
+		if sniLen > 0 {
+			tlcfg.ServerName = proxy.GConf.GAE.SNI[rand.Intn(sniLen)]
 		}
 		return tls.Client(conn, tlcfg), nil
 	}
@@ -64,7 +66,7 @@ type httpChannel struct {
 	server string
 }
 
-func (h *httpChannel) Open() error {
+func (h *httpChannel) Open(iv uint64) error {
 	return nil
 }
 
@@ -132,18 +134,15 @@ func (h *httpChannel) Write(p []byte) (n int, err error) {
 
 func newHTTPChannel(server string) (*proxy.RemoteChannel, error) {
 	rc := &proxy.RemoteChannel{
-		Addr:        server,
-		Index:       0,
-		DirectWrite: true,
-		DirectRead:  true,
+		Addr:          server,
+		Index:         0,
+		DirectIO:      true,
+		OpenJoinAuth:  false,
+		WriteJoinAuth: true,
 	}
 	tc := new(httpChannel)
 	tc.server = server
 	rc.C = tc
 
-	err := rc.Init()
-	if nil != err {
-		return nil, err
-	}
 	return rc, nil
 }

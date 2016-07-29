@@ -23,11 +23,7 @@ func (p *VPSProxy) Init() error {
 		return nil
 	}
 	server := proxy.GConf.VPS.Server
-	_, err := newTCPChannel(server, -1)
-	if nil != err {
-		return err
-	}
-	for i := 0; i < proxy.GConf.VPS.ConnsPerServer; i++ {
+	for i := 1; i < proxy.GConf.VPS.ConnsPerServer; i++ {
 		channel, err := newTCPChannel(server, i)
 		if nil != channel {
 			p.cs.Add(channel)

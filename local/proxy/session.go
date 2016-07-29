@@ -68,9 +68,13 @@ func getProxySessionSize() int {
 }
 
 func HandleEvent(ev event.Event) error {
+
 	session := getProxySession(ev.GetId())
 	if nil == session {
-		if _, ok := ev.(*event.TCPCloseEvent); !ok {
+		switch ev.(type) {
+		case *event.TCPCloseEvent:
+		case *event.NotifyEvent:
+		default:
 			log.Printf("No session:%d found for %T", ev.GetId(), ev)
 		}
 		return sessionNotExist

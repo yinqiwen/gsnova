@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math/rand"
 	"sync"
 	"time"
 
@@ -13,13 +14,14 @@ import (
 )
 
 var ErrChannelReadTimeout = errors.New("Remote channel read timeout")
+var ErrChannelAuthFailed = errors.New("Remote channel auth failed")
 
 type ProxyChannel interface {
 	Write(event.Event) (event.Event, error)
 }
 
 type RemoteProxyChannel interface {
-	Open() error
+	Open(iv uint64) error
 	Closed() bool
 	Request([]byte) ([]byte, error)
 	io.ReadWriteCloser
@@ -28,44 +30,53 @@ type RemoteProxyChannel interface {
 type RemoteChannel struct {
 	Addr          string
 	Index         int
-	DirectWrite   bool
-	DirectRead    bool
-	JoinAuthEvent bool
+	DirectIO      bool
+	WriteJoinAuth bool
+	OpenJoinAuth  bool
 	C             RemoteProxyChannel
 
-	authCode int
-	wch      chan event.Event
-	running  bool
+	authResult int
+	iv         uint64
+	wch        chan event.Event
+	running    bool
+}
+
+func (rc *RemoteChannel) authed() bool {
+	return rc.authResult != 0
+}
+func (rc *RemoteChannel) generateIV() uint64 {
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	tmp := uint64(r.Int63())
+	rc.iv = tmp
+	return tmp
 }
 
 func (rc *RemoteChannel) Init() error {
 	rc.running = true
-	rc.authCode = -1
+	rc.authResult = 0
 
-	connAuthed := rc.C.Closed()
-	if !rc.DirectWrite {
+	if !rc.DirectIO {
 		rc.wch = make(chan event.Event, 5)
 		go rc.processWrite()
-	}
-	if !rc.DirectRead {
 		go rc.processRead()
 	}
 
-	if rc.Index < 0 {
-		if !connAuthed {
-			auth := NewAuthEvent()
-			auth.Index = int64(rc.Index)
-			rc.Write(auth)
+	start := time.Now()
+	for rc.authResult == 0 {
+		if time.Now().After(start.Add(5 * time.Second)) {
+			rc.Stop()
+			return fmt.Errorf("Server:%s auth timeout after %v", rc.Addr, time.Now().Sub(start))
 		}
-		start := time.Now()
-		for rc.authCode != 0 {
-			if time.Now().After(start.Add(5*time.Second)) || rc.authCode > 0 {
-				rc.Stop()
-				return fmt.Errorf("Server:%s auth failed", rc.Addr)
-			}
-			time.Sleep(1 * time.Millisecond)
-		}
-		log.Printf("Server:%s authed suucess.", rc.Addr)
+		time.Sleep(1 * time.Millisecond)
+	}
+	log.Printf("####%d", rc.authResult)
+	if rc.authResult == event.ErrAuthFailed {
+		rc.Stop()
+		return fmt.Errorf("Server:%s auth failed.", rc.Addr)
+	} else if rc.authResult == event.SuccessAuthed {
+		log.Printf("Server:%s authed success.", rc.Addr)
+	} else {
+		return fmt.Errorf("Server:%s auth recv unexpected code:%d.", rc.Addr, rc.authResult)
 	}
 	return nil
 }
@@ -81,13 +92,15 @@ func (rc *RemoteChannel) Stop() {
 }
 
 func (rc *RemoteChannel) processWrite() {
-	auth := NewAuthEvent()
-	auth.Index = int64(rc.Index)
 
 	readBufferEv := func(buf *bytes.Buffer) int {
 		sev := <-rc.wch
 		if nil != sev {
-			event.EncodeEvent(buf, sev)
+			if _, ok := sev.(*event.AuthEvent); ok {
+				event.EncryptEvent(buf, sev, 0)
+			} else {
+				event.EncryptEvent(buf, sev, rc.iv)
+			}
 			return 1
 		}
 		return 0
@@ -99,8 +112,11 @@ func (rc *RemoteChannel) processWrite() {
 			continue
 		}
 		var buf bytes.Buffer
-		if rc.JoinAuthEvent {
-			event.EncodeEvent(&buf, auth)
+		if rc.WriteJoinAuth {
+			auth := NewAuthEvent()
+			auth.Index = int64(rc.Index)
+			auth.IV = rc.iv
+			event.EncryptEvent(&buf, auth, 0)
 		}
 		count := 0
 		if len(rc.wch) > 0 {
@@ -110,7 +126,7 @@ func (rc *RemoteChannel) processWrite() {
 		} else {
 			count += readBufferEv(&buf)
 		}
-
+		log.Printf("####To write %d bytes", buf.Len())
 		if !rc.running && count == 0 {
 			return
 		}
@@ -131,17 +147,20 @@ func (rc *RemoteChannel) processRead() {
 	for rc.running {
 		conn := rc.C
 		if conn.Closed() {
-			//rc.nonce =
-			err := conn.Open()
+			rc.generateIV()
+			err := conn.Open(rc.iv)
 			if nil != err {
 				log.Printf("Channel[%d] connect %s failed:%v.", rc.Index, rc.Addr, err)
 				time.Sleep(1 * time.Second)
 				continue
 			}
 			log.Printf("Channel[%d] connect %s success.", rc.Index, rc.Addr)
-			auth := NewAuthEvent()
-			auth.Index = int64(rc.Index)
-			rc.Write(auth)
+			if rc.OpenJoinAuth {
+				auth := NewAuthEvent()
+				auth.Index = int64(rc.Index)
+				auth.IV = rc.iv
+				rc.Write(auth)
+			}
 		}
 		data := make([]byte, 8192)
 		var buf bytes.Buffer
@@ -149,7 +168,7 @@ func (rc *RemoteChannel) processRead() {
 			n, cerr := conn.Read(data)
 			buf.Write(data[0:n])
 			for buf.Len() > 0 {
-				err, ev := event.DecodeEvent(&buf)
+				err, ev := event.DecryptEvent(&buf, rc.iv)
 				if nil != err {
 					if err == event.EBNR {
 						err = nil
@@ -159,17 +178,19 @@ func (rc *RemoteChannel) processRead() {
 					}
 					break
 				}
-				if rc.Index < 0 {
-					if auth, ok := ev.(*event.ErrorEvent); ok {
-						rc.authCode = int(auth.Code)
-					} else {
-						log.Printf("[ERROR]Expected error event for auth all connection, but got %T.", ev)
+				auth, isNotify := ev.(*event.NotifyEvent)
+				if isNotify {
+					if !rc.authed() {
+						rc.authResult = int(auth.Code)
+						continue
 					}
-					rc.Stop()
-					return
-				} else {
-					HandleEvent(ev)
 				}
+				if !rc.authed() {
+					log.Printf("[ERROR]Expected auth result event for auth all connection, but got %T.", ev)
+					conn.Close()
+					continue
+				}
+				HandleEvent(ev)
 			}
 			if nil != cerr {
 				if cerr != io.EOF && cerr != ErrChannelReadTimeout {
@@ -186,15 +207,17 @@ func (rc *RemoteChannel) Request(ev event.Event) (event.Event, error) {
 	var buf bytes.Buffer
 	auth := NewAuthEvent()
 	auth.Index = int64(rc.Index)
-	event.EncodeEvent(&buf, auth)
-	event.EncodeEvent(&buf, ev)
+	auth.IV = rc.generateIV()
+	event.EncryptEvent(&buf, auth, 0)
+	event.EncryptEvent(&buf, ev, auth.IV)
+	//event.EncodeEvent(&buf, ev)
 	res, err := rc.C.Request(buf.Bytes())
 	if nil != err {
 		return nil, err
 	}
 	rbuf := bytes.NewBuffer(res)
 	var rev event.Event
-	err, rev = event.DecodeEvent(rbuf)
+	err, rev = event.DecryptEvent(rbuf, auth.IV)
 	if nil != err {
 		return nil, err
 	}
@@ -202,20 +225,9 @@ func (rc *RemoteChannel) Request(ev event.Event) (event.Event, error) {
 }
 
 func (rc *RemoteChannel) Write(ev event.Event) error {
-	if rc.DirectWrite {
-		var buf bytes.Buffer
-		if rc.JoinAuthEvent {
-			auth := NewAuthEvent()
-			auth.Index = int64(rc.Index)
-			event.EncodeEvent(&buf, auth)
-		}
-		event.EncodeEvent(&buf, ev)
-		_, err := rc.C.Write(buf.Bytes())
-		return err
-	} else {
-		rc.wch <- ev
-		return nil
-	}
+	rc.wch <- ev
+	log.Printf("###in write %d", len(rc.wch))
+	return nil
 }
 
 func (rc *RemoteChannel) WriteRaw(p []byte) (int, error) {

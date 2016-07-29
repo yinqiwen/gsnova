@@ -14,7 +14,7 @@ type tcpChannel struct {
 	conn net.Conn
 }
 
-func (tc *tcpChannel) Open() error {
+func (tc *tcpChannel) Open(iv uint64) error {
 	c, err := netx.DialTimeout("tcp", tc.addr, 5*time.Second)
 	if err != nil {
 		return err
@@ -58,9 +58,13 @@ func (tc *tcpChannel) Write(p []byte) (n int, err error) {
 }
 
 func newTCPChannel(addr string, idx int) (*proxy.RemoteChannel, error) {
-	rc := new(proxy.RemoteChannel)
-	rc.Addr = addr
-	rc.Index = idx
+	rc := &proxy.RemoteChannel{
+		Addr:          addr,
+		Index:         idx,
+		DirectIO:      false,
+		OpenJoinAuth:  true,
+		WriteJoinAuth: false,
+	}
 	tc := new(tcpChannel)
 	tc.addr = addr
 	rc.C = tc

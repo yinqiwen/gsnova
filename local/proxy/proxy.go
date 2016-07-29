@@ -59,7 +59,7 @@ func Start(confdir string) error {
 	if nil != err {
 		return err
 	}
-	event.SetDefaultSecretKey(GConf.Encrypt.Key)
+	event.SetDefaultSecretKey(GConf.Encrypt.Method, GConf.Encrypt.Key)
 	for name, p := range proxyTable {
 		err := p.Init()
 		if nil != err {

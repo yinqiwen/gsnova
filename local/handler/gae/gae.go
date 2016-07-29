@@ -90,11 +90,12 @@ func (p *GAEProxy) Serve(session *proxy.ProxySession, ev event.Event) error {
 				}
 				rev.SetId(req.GetId())
 				switch rev.(type) {
-				case *event.ErrorEvent:
-					if rev.(*event.ErrorEvent).Code == event.ErrTooLargeResponse {
+				case *event.NotifyEvent:
+					rerr := rev.(*event.NotifyEvent)
+					if rerr.Code == event.ErrTooLargeResponse {
 						rangeFetch = true
 					} else {
-						log.Printf("[ERROR]:%d(%s)", rev.(*event.ErrorEvent).Code, rev.(*event.ErrorEvent).Reason)
+						log.Printf("[ERROR]:%d(%s)", rerr.Code, rerr.Reason)
 						session.Close()
 						return nil
 					}

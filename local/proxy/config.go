@@ -49,7 +49,7 @@ type PAASConfig struct {
 type GAEConfig struct {
 	Enable         bool
 	ServerList     []string
-	TLSServerName  []string
+	SNI            []string
 	InjectRange    []string
 	ConnsPerServer int
 }
@@ -146,6 +146,10 @@ type ProxyConfig struct {
 	PAC   []PACConfig
 }
 
+type DirectConfig struct {
+	SNI []string
+}
+
 type EncryptConfig struct {
 	Method string
 	Key    string
@@ -162,10 +166,11 @@ type LocalConfig struct {
 	UserAgent string
 	Auth      string
 	// LocalDNS  LocalDNSConfig
-	Proxy []ProxyConfig
-	PAAS  PAASConfig
-	GAE   GAEConfig
-	VPS   VPSConfig
+	Proxy  []ProxyConfig
+	PAAS   PAASConfig
+	GAE    GAEConfig
+	VPS    VPSConfig
+	Direct DirectConfig
 }
 
 func (cfg *LocalConfig) init() error {

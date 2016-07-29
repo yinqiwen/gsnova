@@ -47,6 +47,7 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 	//isSocksConn := false
 	socksConn, bufconn, err := socks.NewSocksConn(conn)
 	if nil == err {
+		log.Printf("Local proxy recv %s proxy conn to %s", socksConn.Version(), socksConn.Req.Target)
 		//isSocksConn = true
 		socksConn.Grant(&net.TCPAddr{
 			IP: net.ParseIP("0.0.0.0"), Port: 0})
@@ -80,11 +81,8 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 			}
 			//log.Printf("Session:%d recv event:%T", sid, ev)
 			switch ev.(type) {
-			case *event.ErrorEvent:
-				err := ev.(*event.ErrorEvent)
-				log.Printf("[ERROR]Session:%d recv error %d:%s", err.Code, err.Reason)
-				conn.Close()
-				return
+			case *event.NotifyEvent:
+				//donothing now
 			case *event.TCPCloseEvent:
 				conn.Close()
 				return
@@ -110,22 +108,27 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 				log.Printf("Session:%d read chunk failed from proxy connection:%v", sid, err)
 				break
 			}
+			chunkContent := buffer[0:n]
 			// if !sniSniffed {
-			// 	tmp = append(tmp, buffer[0:n]...)
+			// 	tmp = append(tmp, chunkContent...)
 			// 	sni, err := helper.TLSParseSNI(tmp)
 			// 	if err != nil {
 			// 		if err != helper.ErrTLSIncomplete {
 			// 			sniSniffed = true
+			// 			chunkContent = tmp
 			// 			log.Printf("####%v", err)
+			// 		} else {
+			// 			continue
 			// 		}
 			// 	} else {
 			// 		sniSniffed = true
+			// 		chunkContent = tmp
 			// 		log.Printf("####SNI = %v", sni)
 			// 	}
 			// }
 			var chunk event.TCPChunkEvent
 			chunk.SetId(sid)
-			chunk.Content = buffer[0:n]
+			chunk.Content = chunkContent
 			p.Serve(session, &chunk)
 			continue
 		}

@@ -32,15 +32,15 @@ func websocketInvoke(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Error Upgrading to websockets", 400)
 		return
 	}
-
+	ctx := &remote.ConnContex{}
 	writeEvent := func(ev event.Event) error {
 		var buf bytes.Buffer
-		event.EncodeEvent(&buf, ev)
+		event.EncryptEvent(&buf, ev, ctx.IV)
 		return ws.WriteMessage(websocket.BinaryMessage, buf.Bytes())
 	}
 	//log.Printf("###Recv websocket connection")
 	buf := bytes.NewBuffer(nil)
-	ctx := &remote.ConnContex{}
+
 	wsClosed := false
 	var queue *event.EventQueue
 
@@ -62,12 +62,12 @@ func websocketInvoke(w http.ResponseWriter, r *http.Request) {
 			}
 			ress, err := remote.HandleRequestBuffer(buf, ctx)
 			if nil != err {
-				log.Printf("[ERROR]connection %s:%d error:%v", ctx.User, ctx.Index, err)
+				log.Printf("[ERROR]connection %s:%d error:%v", ctx.User, ctx.ConnIndex, err)
 				ws.Close()
 				wsClosed = true
 			} else {
-				if nil == queue && len(ctx.User) > 0 && ctx.Index >= 0 {
-					queue = remote.GetEventQueue(ctx.User, ctx.Index, true)
+				if nil == queue && len(ctx.User) > 0 && ctx.ConnIndex >= 0 {
+					queue = remote.GetEventQueue(ctx.ConnId, true)
 					go func() {
 						for !wsClosed {
 							ev, err := queue.Peek(1 * time.Millisecond)
@@ -94,6 +94,6 @@ func websocketInvoke(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	wsClosed = true
-	log.Printf("Close websocket connection:%d", ctx.Index)
+	log.Printf("Close websocket connection:%d", ctx.ConnIndex)
 	//ws.WriteMessage(websocket.CloseMessage, []byte{})
 }

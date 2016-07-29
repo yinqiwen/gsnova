@@ -21,16 +21,18 @@ type httpChannel struct {
 	pushurl *url.URL
 	pullurl *url.URL
 
+	iv      uint64
 	rbody   io.ReadCloser
 	pulling bool
 }
 
-func (hc *httpChannel) Open() error {
-	return nil
+func (hc *httpChannel) Open(iv uint64) error {
+	hc.iv = iv
+	return hc.pull()
 }
 
 func (hc *httpChannel) Closed() bool {
-	return false
+	return nil == hc.rbody
 }
 
 func (tc *httpChannel) Request([]byte) ([]byte, error) {
@@ -41,25 +43,27 @@ func (hc *httpChannel) Close() error {
 	return nil
 }
 
-func (hc *httpChannel) pull() {
+func (hc *httpChannel) pull() error {
 	if nil == hc.pullurl {
 		u, err := url.Parse(hc.addr)
 		if nil != err {
-			return
+			return err
 		}
 		u.Path = "/http/pull"
 		hc.pullurl = u
 	}
 	if hc.pulling {
-		return
+		return nil
 	}
-	auth := proxy.NewAuthEvent()
-	auth.Index = int64(hc.idx)
+	readAuth := proxy.NewAuthEvent()
+	readAuth.Index = int64(hc.idx)
+	readAuth.IV = hc.iv
 	var buf bytes.Buffer
-	event.EncodeEvent(&buf, auth)
+	event.EncryptEvent(&buf, readAuth, 0)
 	hc.pulling = true
-	hc.postURL(buf.Bytes(), hc.pullurl)
+	_, err := hc.postURL(buf.Bytes(), hc.pullurl)
 	hc.pulling = false
+	return err
 }
 
 func (hc *httpChannel) Read(p []byte) (int, error) {
@@ -124,10 +128,14 @@ func (hc *httpChannel) Write(p []byte) (n int, err error) {
 }
 
 func newHTTPChannel(addr string, idx int) (*proxy.RemoteChannel, error) {
-	rc := new(proxy.RemoteChannel)
-	rc.Addr = addr
-	rc.Index = idx
-	rc.JoinAuthEvent = true
+	rc := &proxy.RemoteChannel{
+		Addr:          addr,
+		Index:         idx,
+		DirectIO:      false,
+		OpenJoinAuth:  false,
+		WriteJoinAuth: true,
+	}
+
 	tc := new(httpChannel)
 	tc.addr = addr
 	tc.idx = idx

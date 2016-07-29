@@ -15,20 +15,22 @@ func serveProxyConn(conn net.Conn) {
 	bufconn := bufio.NewReader(conn)
 	defer conn.Close()
 
+	ctx := &remote.ConnContex{}
+
 	writeEvent := func(ev event.Event) error {
 		var buf bytes.Buffer
-		event.EncodeEvent(&buf, ev)
+		event.EncryptEvent(&buf, ev, ctx.IV)
 		_, err := conn.Write(buf.Bytes())
 		return err
 	}
 
 	var buf bytes.Buffer
 	b := make([]byte, 8192)
-	ctx := &remote.ConnContex{}
+
 	var queue *event.EventQueue
 	connClosed := false
 	for !connClosed {
-		conn.SetReadDeadline(time.Now().Add(10 * time.Second))
+		conn.SetReadDeadline(time.Now().Add(60 * time.Second))
 		n, cerr := bufconn.Read(b)
 		if n > 0 {
 			buf.Write(b[0:n])
@@ -37,17 +39,21 @@ func serveProxyConn(conn net.Conn) {
 			conn.Close()
 			connClosed = true
 		}
+		log.Printf("###Recv %d bytes", n)
 		ress, err := remote.HandleRequestBuffer(&buf, ctx)
 		if nil != err {
 			if err != event.EBNR {
-				log.Printf("[ERROR]connection %s:%d error:%v", ctx.User, ctx.Index, err)
+				log.Printf("[ERROR]connection %s:%d error:%v", ctx.User, ctx.ConnIndex, err)
 				conn.Close()
 				connClosed = true
 				return
 			}
 		} else {
-			if nil == queue && len(ctx.User) > 0 && ctx.Index >= 0 {
-				queue = remote.GetEventQueue(ctx.User, ctx.Index, true)
+			for _, res := range ress {
+				writeEvent(res)
+			}
+			if nil == queue && len(ctx.User) > 0 && ctx.ConnIndex >= 0 {
+				queue = remote.GetEventQueue(ctx.ConnId, true)
 				go func() {
 					for !connClosed {
 						ev, err := queue.Peek(1 * time.Millisecond)
@@ -64,9 +70,6 @@ func serveProxyConn(conn net.Conn) {
 						}
 					}
 				}()
-			}
-			for _, res := range ress {
-				writeEvent(res)
 			}
 		}
 	}

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math/rand"
 	"net"
 	"strings"
 	"time"
@@ -16,11 +17,12 @@ import (
 )
 
 type directChannel struct {
-	sid  uint32
-	conn net.Conn
+	sid            uint32
+	httpsProxyConn bool
+	conn           net.Conn
 }
 
-func (tc *directChannel) Open() error {
+func (tc *directChannel) Open(iv uint64) error {
 	return nil
 }
 
@@ -80,38 +82,66 @@ func (d *directChannel) read() {
 	}
 }
 
-func newDirectChannel(req *event.HTTPRequestEvent, useTLS bool) (*directChannel, error) {
-	host := req.GetHost()
+func newDirectChannel(ev event.Event, useTLS bool) (*directChannel, error) {
+	host := ""
 	port := ""
+	fromHttpsConnect := false
+	switch ev.(type) {
+	case *event.TCPOpenEvent:
+		host = ev.(*event.TCPOpenEvent).Addr
+	case *event.HTTPRequestEvent:
+		req := ev.(*event.HTTPRequestEvent)
+		host = req.Headers.Get("Host")
+		fromHttpsConnect = strings.EqualFold(req.Method, "Connect")
+	default:
+		return nil, fmt.Errorf("Can NOT create direct channel by event:%T", ev)
+	}
+	if len(host) == 0 {
+		return nil, fmt.Errorf("Empty remote addr in event")
+	}
 	if strings.Contains(host, ":") {
 		host, port, _ = net.SplitHostPort(host)
 	}
-	if strings.EqualFold(req.Method, "Connect") && hosts.InHosts(hosts.SNIProxy) {
+	if hosts.InHosts(hosts.SNIProxy) && port == "443" {
 		host = hosts.SNIProxy
+	}
+
+	if useTLS && port == "80" && hosts.InHosts(host) {
+		useTLS = true
+	} else {
+		useTLS = false
 	}
 	host = hosts.GetHost(host)
 	addr := host
-	if len(port) > 0 {
-		addr = addr + ":" + port
+	if useTLS {
+		addr = addr + ":443"
 	} else {
-		if strings.EqualFold(req.Method, "Connect") || useTLS {
-			addr = addr + ":443"
+		if len(port) > 0 {
+			addr = addr + ":" + port
 		} else {
-			addr = addr + ":80"
+			if fromHttpsConnect {
+				addr = addr + ":443"
+			} else {
+				addr = addr + ":80"
+			}
 		}
 	}
 
 	c, err := netx.DialTimeout("tcp", addr, 5*time.Second)
-	log.Printf("Session:%d connect %s for %s", req.GetId(), addr, req.GetHost())
+	log.Printf("Session:%d connect %s for %s", ev.GetId(), addr, host)
 	if nil != err {
-		log.Printf("Failed to connect %s for %s with error:%v", addr, req.GetHost(), err)
+		log.Printf("Failed to connect %s for %s with error:%v", addr, host, err)
 		return nil, err
 	}
 
-	d := &directChannel{req.GetId(), c}
-	if useTLS && !strings.EqualFold(req.Method, "Connect") {
+	d := &directChannel{ev.GetId(), fromHttpsConnect, c}
+	if useTLS {
 		tlcfg := &tls.Config{}
 		tlcfg.InsecureSkipVerify = true
+		sniLen := len(proxy.GConf.Direct.SNI)
+		if sniLen > 0 {
+			tlcfg.ServerName = proxy.GConf.Direct.SNI[rand.Intn(sniLen)]
+		}
 		tlsconn := tls.Client(c, tlcfg)
 		err = tlsconn.Handshake()
 		if nil != err {
@@ -141,22 +171,23 @@ func (p *DirectProxy) Features() proxy.Feature {
 
 func (p *DirectProxy) Serve(session *proxy.ProxySession, ev event.Event) error {
 	if nil == session.Remote {
-		if req, ok := ev.(*event.HTTPRequestEvent); ok {
-			c, err := newDirectChannel(req, p.useTLS)
-			if nil != err {
-				return err
-			}
-			session.Remote = &proxy.RemoteChannel{
-				DirectWrite: true,
-				DirectRead:  true,
-			}
-			session.Remote.C = c
-			if strings.EqualFold(req.Method, "Connect") {
-				session.Hijacked = true
-				return nil
-			}
-		} else {
+		switch ev.(type) {
+		case *event.TCPOpenEvent:
+		case *event.HTTPRequestEvent:
+		default:
 			return fmt.Errorf("Can NOT create direct channel by event:%T", ev)
+		}
+		c, err := newDirectChannel(ev, p.useTLS)
+		if nil != err {
+			return err
+		}
+		session.Remote = &proxy.RemoteChannel{
+			DirectIO: true,
+		}
+		session.Remote.C = c
+		if c.httpsProxyConn {
+			session.Hijacked = true
+			return nil
 		}
 	}
 	if nil == session.Remote {
@@ -165,6 +196,8 @@ func (p *DirectProxy) Serve(session *proxy.ProxySession, ev event.Event) error {
 	switch ev.(type) {
 	case *event.TCPCloseEvent:
 		session.Remote.Close()
+	case *event.TCPOpenEvent:
+		//do nothing
 	case *event.TCPChunkEvent:
 		session.Remote.WriteRaw(ev.(*event.TCPChunkEvent).Content)
 	case *event.HTTPRequestEvent:

@@ -16,15 +16,20 @@ import (
 var proxySessionMap map[SessionId]*ProxySession = make(map[SessionId]*ProxySession)
 var sessionMutex sync.Mutex
 
+type ConnId struct {
+	User      string
+	ConnIndex int
+	RunId     int64
+}
+
 type ConnContex struct {
-	User  string
-	Index int
+	ConnId
+	IV uint64
 }
 
 type SessionId struct {
-	User      string
-	Id        uint32
-	ConnIndex int
+	ConnId
+	Id uint32
 }
 
 type ProxySession struct {
@@ -41,8 +46,8 @@ func GetsessionTableSize() int {
 	return len(proxySessionMap)
 }
 
-func GetProxySessionByEvent(user string, idx int, ev event.Event) *ProxySession {
-	sid := SessionId{user, ev.GetId(), idx}
+func getProxySessionByEvent(cid ConnId, ev event.Event) *ProxySession {
+	sid := SessionId{cid, ev.GetId()}
 	sessionMutex.Lock()
 	defer sessionMutex.Unlock()
 	if p, exist := proxySessionMap[sid]; exist {
@@ -85,11 +90,11 @@ func sessionExist(sid SessionId) bool {
 	return exist
 }
 
-func removeProxySessionsByUser(user string) {
+func removeUserSessions(user string, runid int64) {
 	sessionMutex.Lock()
 	defer sessionMutex.Unlock()
 	for k, s := range proxySessionMap {
-		if k.User == user {
+		if k.User == user && k.RunId == runid {
 			s.close()
 			delete(proxySessionMap, k)
 		}
@@ -100,7 +105,7 @@ func (p *ProxySession) publish(ev event.Event) {
 	ev.SetId(p.Id.Id)
 	start := time.Now()
 	for {
-		queue := GetEventQueue(p.Id.User, p.Id.ConnIndex, false)
+		queue := GetEventQueue(p.Id.ConnId, false)
 		if nil != queue {
 			queue.Publish(ev)
 			return
@@ -233,55 +238,77 @@ func (p *ProxySession) handle(ev event.Event) error {
 	return nil
 }
 
-func HandleRequestBuffer(reqbuf *bytes.Buffer, ctx *ConnContex) ([]event.Event, error) {
-	ress := make([]event.Event, 0)
-	for reqbuf.Len() > 0 {
-		err, ev := event.DecodeEvent(reqbuf)
-		if nil != err {
-			if err != event.EBNR {
-				log.Printf("Failed to decode event for reason:%v", err)
-			}
-			return ress, err
+func authConnection(auth *event.AuthEvent, ctx *ConnContex) error {
+	if len(ctx.User) == 0 {
+		if !ServerConf.VerifyUser(auth.User) {
+			return fmt.Errorf("Auth failed with user:%s", auth.User)
 		}
-		if auth, ok := ev.(*event.AuthEvent); ok {
-			if len(ctx.User) == 0 {
-				if !ServerConf.VerifyUser(auth.User) {
-					var authres event.ErrorEvent
-					authres.Code = event.ErrAuthFailed
-					authres.SetId(ev.GetId())
-					ress = append(ress, &authres)
-					return ress, nil
-				}
-				authedUser := auth.User
-				authedUser = authedUser + "@" + auth.Mac
-				//log.Printf("Recv connection:%d from user:%s", auth.Index, authedUser)
-				if auth.Index < 0 {
-					removeProxySessionsByUser(authedUser)
-					CloseUserEventQueue(authedUser)
-					var authres event.ErrorEvent
-					authres.Code = 0
-					authres.SetId(ev.GetId())
-					ress = append(ress, &authres)
-					continue
-				}
-				ctx.User = authedUser + "@" + ev.(*event.AuthEvent).Mac
-				ctx.Index = int(auth.Index)
-			} else {
-				return nil, fmt.Errorf("Duplicate auth event in same connection")
-			}
-			continue
+		authedUser := auth.User
+		authedUser = authedUser + "@" + auth.Mac
+		ctx.User = authedUser
+		ctx.ConnIndex = int(auth.Index)
+		ctx.IV = auth.IV
+		ctx.RunId = auth.RunId
+		cid := ctx.ConnId
+		log.Printf("#### IV = %d", ctx.IV)
+		//log.Printf("###Recv IV = %s", string(ctx.IV))
+		lastRunId, ok := closeUnmatchedUserEventQueue(cid)
+
+		if ok {
+			log.Printf("@@@@@%d %d", ctx.RunId, lastRunId)
+			removeUserSessions(cid.User, lastRunId)
+		}
+		return nil
+	} else {
+		return fmt.Errorf("Duplicate auth/login event in same connection")
+	}
+}
+
+func handleEvent(ev event.Event, ctx *ConnContex) (event.Event, error) {
+	switch ev.(type) {
+	case *event.AuthEvent:
+		auth := ev.(*event.AuthEvent)
+		err := authConnection(auth, ctx)
+		var authres event.NotifyEvent
+		authres.SetId(ev.GetId())
+		if nil == err {
+			authres.Code = event.SuccessAuthed
 		} else {
-			if len(ctx.User) == 0 {
-				return nil, fmt.Errorf("Auth event MUST be first event.")
-			}
+			authres.Code = event.ErrAuthFailed
 		}
-		session := GetProxySessionByEvent(ctx.User, ctx.Index, ev)
+		return &authres, nil
+	default:
+		session := getProxySessionByEvent(ctx.ConnId, ev)
 		if nil != session {
 			session.offer(ev)
 		} else {
 			if _, ok := ev.(*event.TCPCloseEvent); !ok {
 				log.Printf("No session:%d found for event %T", ev.GetId(), ev)
 			}
+		}
+	}
+	return nil, nil
+}
+
+func HandleRequestBuffer(reqbuf *bytes.Buffer, ctx *ConnContex) ([]event.Event, error) {
+	var ress []event.Event
+	for reqbuf.Len() > 0 {
+		var ev event.Event
+		var err error
+		err, ev = event.DecryptEvent(reqbuf, ctx.IV)
+		if nil != err {
+			if err != event.EBNR {
+				log.Printf("Failed to decode event for reason:%v", err)
+			}
+			return ress, err
+		}
+		log.Printf("####%T", ev)
+		res, err := handleEvent(ev, ctx)
+		if nil != res {
+			ress = append(ress, res)
+		}
+		if nil != err {
+			return ress, err
 		}
 	}
 	return ress, nil

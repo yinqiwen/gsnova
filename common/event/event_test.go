@@ -3,6 +3,7 @@ package event
 import (
 	"bytes"
 	"fmt"
+	"math/rand"
 	//	"reflect"
 	"net/http"
 	"testing"
@@ -10,15 +11,21 @@ import (
 )
 
 func TestHTTPEvent(t *testing.T) {
-	SetDefaultRC4Key("AAAAAA")
+	SetDefaultSecretKey("rc4", "AAAAAAasdadasfafasasdasfasasgagaga")
 	var request HTTPRequestEvent
 	request.Headers = make(http.Header)
 	request.Headers.Add("A", "CC")
 	request.Headers.Add("D", "ZZ")
 	request.URL = "hello"
 	request.Method = "GET"
-	request.Content.Write([]byte("hello,world"))
+	request.Content = []byte("hello,world")
 
+	for i := 0; i < 100000; i++ {
+		var buf bytes.Buffer
+		EncodeEvent(&buf, &request)
+		DecodeEvent(&buf)
+
+	}
 	var buf bytes.Buffer
 	EncodeEvent(&buf, &request)
 
@@ -26,7 +33,65 @@ func TestHTTPEvent(t *testing.T) {
 	err, tmp := DecodeEvent(&buf)
 	fmt.Printf("%v\n", err)
 	cmp, _ := tmp.(*HTTPRequestEvent)
-	fmt.Printf("%s %s %s %v\n", cmp.URL, cmp.Method, string(cmp.Content.Bytes()), cmp.Headers)
+	fmt.Printf("%s %s %s %v\n", cmp.URL, cmp.Method, string(cmp.Content), cmp.Headers)
+}
+
+func TestSalsa20Event(t *testing.T) {
+	SetDefaultSecretKey("salsa20", "AAAAAAasdadasfafasasdasfasasgagaga")
+	var request HTTPRequestEvent
+	request.Headers = make(http.Header)
+	request.Headers.Add("A", "CC")
+	request.Headers.Add("D", "ZZ")
+	request.URL = "hello"
+	request.Method = "GET"
+	request.Content = []byte("hello,world")
+	request.SetId(1023)
+
+	iv := uint64(rand.Int63())
+
+	for i := 0; i < 100000; i++ {
+		var buf bytes.Buffer
+		EncryptEvent(&buf, &request, iv)
+		DecryptEvent(&buf, iv)
+
+	}
+	var buf bytes.Buffer
+	EncryptEvent(&buf, &request, iv)
+
+	//var cmp HTTPRequestEvent
+	err, tmp := DecryptEvent(&buf, iv)
+	fmt.Printf("%v\n", err)
+	cmp, _ := tmp.(*HTTPRequestEvent)
+	fmt.Printf("%s %s %s %v\n", cmp.URL, cmp.Method, string(cmp.Content), cmp.Headers)
+}
+
+func TestChacha20Event(t *testing.T) {
+	SetDefaultSecretKey("chacha20", "AAAAAAasdadasfafasasdasfasasgagaga")
+	var request HTTPRequestEvent
+	request.Headers = make(http.Header)
+	request.Headers.Add("A", "CC")
+	request.Headers.Add("D", "ZZ")
+	request.URL = "hello"
+	request.Method = "GET"
+	request.Content = []byte("hello,world")
+	request.SetId(1023)
+
+	iv := uint64(rand.Int63())
+
+	for i := 0; i < 100000; i++ {
+		var buf bytes.Buffer
+		EncryptEvent(&buf, &request, iv)
+		DecryptEvent(&buf, iv)
+
+	}
+	var buf bytes.Buffer
+	EncryptEvent(&buf, &request, iv)
+
+	//var cmp HTTPRequestEvent
+	err, tmp := DecryptEvent(&buf, iv)
+	fmt.Printf("%v\n", err)
+	cmp, _ := tmp.(*HTTPRequestEvent)
+	fmt.Printf("%s %s %s %v\n", cmp.URL, cmp.Method, string(cmp.Content), cmp.Headers)
 }
 
 type XT struct {

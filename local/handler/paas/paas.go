@@ -44,18 +44,13 @@ func (p *PaasProxy) Destory() error {
 }
 
 func (p *PaasProxy) Init() error {
+	log.Printf("%v", proxy.GConf.PAAS)
 	if !proxy.GConf.PAAS.Enable {
 		return nil
 	}
 	for _, server := range proxy.GConf.PAAS.ServerList {
-		var channel *proxy.RemoteChannel
-		_, err := newRemoteChannel(server, -1)
-		if nil != err {
-			log.Printf("[ERROR]Failed to connect %s for reason:%v", server, err)
-			continue
-		}
 		for i := 0; i < proxy.GConf.PAAS.ConnsPerServer; i++ {
-			channel, err = newRemoteChannel(server, i)
+			channel, err := newRemoteChannel(server, i)
 			if nil != err {
 				log.Printf("[ERROR]Failed to connect [%d]%s for reason:%v", i, server, err)
 				continue

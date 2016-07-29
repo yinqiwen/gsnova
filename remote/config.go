@@ -51,5 +51,5 @@ func init() {
 	logger.InitLogger(ServerConf.Log)
 	log.Printf("Load server conf success.")
 	log.Printf("ServerConf:%v", &ServerConf)
-	event.SetDefaultSecretKey(ServerConf.Encrypt.Key)
+	event.SetDefaultSecretKey(ServerConf.Encrypt.Method, ServerConf.Encrypt.Key)
 }

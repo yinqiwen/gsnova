@@ -41,7 +41,7 @@ func init() {
 		X509RootCert, err = x509.ParseCertificate(root_cert.Certificate[0])
 		return
 	}
-	log.Fatalf("Failed to load root cert:%v", err)
+	log.Printf("###Failed to load root cert:%v", err)
 }
 
 func TLSConfig(host string) (*tls.Config, error) {

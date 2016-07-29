@@ -72,6 +72,15 @@ type SocksConn struct {
 	socksVersion byte
 }
 
+func (conn *SocksConn) Version() string {
+	if conn.socksVersion == socks4Version {
+		return "socks4"
+	} else if conn.socksVersion == socks5Version {
+		return "socks5"
+	}
+	return "unknown"
+}
+
 // Send a message to the proxy client that access to the given address is
 // granted.
 // For SOCKS5, Addr is ignored, and "0.0.0.0:0" is always sent back for

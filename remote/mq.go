@@ -6,15 +6,20 @@ import (
 	"github.com/yinqiwen/gsnova/common/event"
 )
 
-var queueTable map[string][]*event.EventQueue = make(map[string][]*event.EventQueue)
+type UserEventQueue struct {
+	runid int64
+	qs    []*event.EventQueue
+}
+
+var queueTable map[string]*UserEventQueue = make(map[string]*UserEventQueue)
 var queueMutex sync.Mutex
 
-func CloseUserEventQueue(user string) {
+func closeUserEventQueue(user string) {
 	queueMutex.Lock()
 	defer queueMutex.Unlock()
 
 	qs := queueTable[user]
-	for _, q := range qs {
+	for _, q := range qs.qs {
 		if nil != q {
 			q.Close()
 		}
@@ -22,31 +27,49 @@ func CloseUserEventQueue(user string) {
 	delete(queueTable, user)
 }
 
-func GetEventQueue(user string, idx int, createIfMissing bool) *event.EventQueue {
+func closeUnmatchedUserEventQueue(cid ConnId) (int64, bool) {
 	queueMutex.Lock()
 	defer queueMutex.Unlock()
-	qs := queueTable[user]
-	if len(qs) < (idx + 1) {
-		tmp := make([]*event.EventQueue, idx+1)
-		copy(tmp, qs)
-		qs = tmp
+	qss := queueTable[cid.User]
+	if nil != qss {
+		if qss.runid != cid.RunId {
+			for _, q := range qss.qs {
+				if nil != q {
+					q.Close()
+				}
+			}
+			delete(queueTable, cid.User)
+			return qss.runid, true
+		}
 	}
-	q := qs[idx]
-	if nil == q && createIfMissing {
-		q = event.NewEventQueue()
-		qs[idx] = q
-		queueTable[user] = qs
-	}
-	return q
-
+	return 0, false
 }
 
-func DeleteEventQueue(user string, idx int) {
+func GetEventQueue(cid ConnId, createIfMissing bool) *event.EventQueue {
 	queueMutex.Lock()
 	defer queueMutex.Unlock()
-	qs := queueTable[user]
-	if idx < len(qs) {
-		qs[idx] = nil
+	qss := queueTable[cid.User]
+	if nil == qss {
+		if createIfMissing {
+			qss = new(UserEventQueue)
+			qss.runid = cid.RunId
+			queueTable[cid.User] = qss
+		} else {
+			return nil
+		}
 	}
-	queueTable[user] = qs
+	qs := qss.qs
+	if len(qs) < (cid.ConnIndex + 1) {
+		tmp := make([]*event.EventQueue, cid.ConnIndex+1)
+		copy(tmp, qs)
+		qs = tmp
+		qss.qs = qs
+	}
+	q := qs[cid.ConnIndex]
+	if nil == q && createIfMissing {
+		q = event.NewEventQueue()
+		qs[cid.ConnIndex] = q
+		qss.qs = qs
+	}
+	return q
 }

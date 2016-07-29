@@ -21,7 +21,7 @@ func (tc *websocketChannel) Request([]byte) ([]byte, error) {
 	return nil, nil
 }
 
-func (wc *websocketChannel) Open() error {
+func (wc *websocketChannel) Open(iv uint64) error {
 	u, err := url.Parse(wc.url)
 	if nil != err {
 		return err
@@ -98,9 +98,13 @@ func (wc *websocketChannel) Write(p []byte) (n int, err error) {
 }
 
 func newWebsocketChannel(addr string, idx int) (*proxy.RemoteChannel, error) {
-	rc := new(proxy.RemoteChannel)
-	rc.Addr = addr
-	rc.Index = idx
+	rc := &proxy.RemoteChannel{
+		Addr:          addr,
+		Index:         idx,
+		DirectIO:      false,
+		OpenJoinAuth:  true,
+		WriteJoinAuth: false,
+	}
 	tc := new(websocketChannel)
 	tc.url = addr
 	rc.C = tc
