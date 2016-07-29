@@ -239,6 +239,7 @@ func (p *ProxySession) handle(ev event.Event) error {
 }
 
 func authConnection(auth *event.AuthEvent, ctx *ConnContex) error {
+	//log.Printf("###Recv auth IV = %d, ctx IV = %d", auth.IV, ctx.IV)
 	if len(ctx.User) == 0 {
 		if !ServerConf.VerifyUser(auth.User) {
 			return fmt.Errorf("Auth failed with user:%s", auth.User)
@@ -251,7 +252,7 @@ func authConnection(auth *event.AuthEvent, ctx *ConnContex) error {
 		ctx.RunId = auth.RunId
 		cid := ctx.ConnId
 		GetEventQueue(ctx.ConnId, true)
-		//log.Printf("###Recv IV = %s", string(ctx.IV))
+		//log.Printf("###Recv IV = %d", ctx.IV)
 		lastRunId, ok := getUnmatchedUserRunId(cid)
 		if ok {
 			log.Printf("Remove old user sessions for runid:%d, while new runid:%d", lastRunId, ctx.RunId)
@@ -302,7 +303,6 @@ func HandleRequestBuffer(reqbuf *bytes.Buffer, ctx *ConnContex) ([]event.Event, 
 			}
 			return ress, err
 		}
-		log.Printf("####%T", ev)
 		res, err := handleEvent(ev, ctx)
 		if nil != res {
 			ress = append(ress, res)

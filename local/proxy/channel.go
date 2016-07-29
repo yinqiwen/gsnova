@@ -91,14 +91,14 @@ func (rc *RemoteChannel) Stop() {
 }
 
 func (rc *RemoteChannel) processWrite() {
-
+	encryptIV := uint64(0)
 	readBufferEv := func(buf *bytes.Buffer) int {
 		sev := <-rc.wch
 		if nil != sev {
 			if _, ok := sev.(*event.AuthEvent); ok {
 				event.EncryptEvent(buf, sev, 0)
 			} else {
-				event.EncryptEvent(buf, sev, rc.iv)
+				event.EncryptEvent(buf, sev, encryptIV)
 			}
 			return 1
 		}
@@ -110,11 +110,12 @@ func (rc *RemoteChannel) processWrite() {
 			time.Sleep(5 * time.Millisecond)
 			continue
 		}
+		encryptIV = rc.iv
 		var buf bytes.Buffer
 		if rc.WriteJoinAuth {
 			auth := NewAuthEvent()
 			auth.Index = int64(rc.Index)
-			auth.IV = rc.iv
+			auth.IV = encryptIV
 			event.EncryptEvent(&buf, auth, 0)
 		}
 		count := 0
