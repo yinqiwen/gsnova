@@ -496,7 +496,8 @@ func DecryptEvent(buf *bytes.Buffer, iv uint64) (err error, ev Event) {
 		return
 	}
 	hlen := buflen - buf.Len()
-	body := buf.Bytes()[0 : int(elen)-hlen]
+	body := buf.Next(int(elen) - hlen)
+	//body := buf.Bytes()[0 : int(elen)-hlen]
 	if len(body) > 0 {
 		switch header.Flags.GetEncrytFlag() {
 		case Salsa20Encypter:
@@ -530,7 +531,6 @@ func DecryptEvent(buf *bytes.Buffer, iv uint64) (err error, ev Event) {
 	}
 	ev = tmp.(Event)
 	ev.SetId(header.Id)
-	buf.Next(len(body))
 	err = ev.Decode(bytes.NewBuffer(body))
 	if nil != err {
 		log.Printf("Failed to decode event:%T with body len:%d", tmp, len(body))
