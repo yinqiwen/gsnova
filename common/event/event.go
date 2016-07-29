@@ -530,6 +530,7 @@ func DecryptEvent(buf *bytes.Buffer, iv uint64) (err error, ev Event) {
 	}
 	ev = tmp.(Event)
 	ev.SetId(header.Id)
+	buf.Next(len(body))
 	err = ev.Decode(bytes.NewBuffer(body))
 	if nil != err {
 		log.Printf("Failed to decode event:%T with body len:%d", tmp, len(body))
