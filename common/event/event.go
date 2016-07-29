@@ -493,7 +493,6 @@ func DecryptEvent(buf *bytes.Buffer, iv uint64) (err error, ev Event) {
 		return
 	}
 	hlen := buflen - buf.Len()
-	bodylen := elen - hlen
 	body := buf.Bytes()[0 : int(elen)-hlen]
 	switch header.Flags.GetEncrytFlag() {
 	case Salsa20Encypter:
