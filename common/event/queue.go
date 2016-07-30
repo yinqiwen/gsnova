@@ -8,6 +8,7 @@ import (
 )
 
 var EventReadTimeout = errors.New("EventQueue read timeout")
+var EventWriteTimeout = errors.New("EventQueue write timeout")
 
 type EventQueue struct {
 	closed bool
@@ -16,8 +17,17 @@ type EventQueue struct {
 	queue  chan Event
 }
 
-func (q *EventQueue) Publish(ev Event) {
-	q.queue <- ev
+func (q *EventQueue) Publish(ev Event, timeout time.Duration) error {
+	for {
+		select {
+		case q.queue <- ev:
+			return nil
+		case <-time.After(timeout):
+			return EventWriteTimeout
+		default:
+			time.Sleep(1 * time.Millisecond)
+		}
+	}
 }
 func (q *EventQueue) Close() {
 	if !q.closed {

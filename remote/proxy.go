@@ -105,8 +105,14 @@ func (p *ProxySession) publish(ev event.Event) {
 	ev.SetId(p.Id.Id)
 	start := time.Now()
 	for {
-		success, match := publishEventQueue(p.Id.ConnId, ev)
-		if success || !match {
+		queue := GetEventQueue(p.Id.ConnId, false)
+		//success, match := publishEventQueue(p.Id.ConnId, ev)
+		if nil != queue {
+			err := queue.Publish(ev, 5*time.Second)
+			if nil != err {
+				log.Printf("Session[%s:%d] write event error:%v.", p.Id.User, p.Id.Id, err)
+				p.close()
+			}
 			return
 		}
 		if time.Now().After(start.Add(5 * time.Second)) {

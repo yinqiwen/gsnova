@@ -23,6 +23,7 @@ func serveProxyConn(conn net.Conn) {
 	writeEvent := func(ev event.Event) error {
 		var buf bytes.Buffer
 		event.EncryptEvent(&buf, ev, ctx.IV)
+		conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
 		_, err := conn.Write(buf.Bytes())
 		return err
 	}
