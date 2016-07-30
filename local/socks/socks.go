@@ -17,6 +17,8 @@ const (
 	socksAuthNoAcceptableMethods = 0xff
 
 	socksCmdConnect = 0x01
+	socksCmdBind    = 0x02
+	socksCmdUDP     = 0x03
 	socksReserved   = 0x00
 
 	socksAtypeV4         = 0x01

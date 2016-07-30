@@ -6,10 +6,7 @@ import (
 
 type UDPEvent struct {
 	EventHeader
-	SrcIp   int64
-	SrcPort uint16
-	DstIp   int64
-	DstPort uint16
+	Addr    string
 	Content []byte
 }
 

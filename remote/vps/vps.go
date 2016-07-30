@@ -107,7 +107,7 @@ func startLocalProxyServer(addr string) error {
 
 func dumpServerStat() {
 	log.Printf("=========Stat Begin==========")
-	fmt.Fprintf(logger.GetLoggerWriter(), "NumSession: %d\n", remote.GetsessionTableSize())
+	fmt.Fprintf(logger.GetLoggerWriter(), "NumSession: %d\n", remote.GetSessionTableSize())
 	ots.Handle("stat", logger.GetLoggerWriter())
 	log.Printf("=========Stat End==========")
 }

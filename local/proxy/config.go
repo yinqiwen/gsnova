@@ -155,22 +155,21 @@ type EncryptConfig struct {
 	Key    string
 }
 
-// type LocalDNSConfig struct {
-// 	Listen string
-// 	DNS    []string
-// }
+type UDPGWConfig struct {
+	VirtualAddr string
+}
 
 type LocalConfig struct {
 	Log       []string
 	Encrypt   EncryptConfig
 	UserAgent string
 	Auth      string
-	// LocalDNS  LocalDNSConfig
-	Proxy  []ProxyConfig
-	PAAS   PAASConfig
-	GAE    GAEConfig
-	VPS    VPSConfig
-	Direct DirectConfig
+	UDPGW     UDPGWConfig
+	Proxy     []ProxyConfig
+	PAAS      PAASConfig
+	GAE       GAEConfig
+	VPS       VPSConfig
+	Direct    DirectConfig
 }
 
 func (cfg *LocalConfig) init() error {

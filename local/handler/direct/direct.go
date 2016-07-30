@@ -194,6 +194,8 @@ func (p *DirectProxy) Serve(session *proxy.ProxySession, ev event.Event) error {
 		return fmt.Errorf("No remote connected.")
 	}
 	switch ev.(type) {
+	case *event.UDPEvent:
+		session.Remote.Write(ev)
 	case *event.TCPCloseEvent:
 		session.Remote.Close()
 	case *event.TCPOpenEvent:

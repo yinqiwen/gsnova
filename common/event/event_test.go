@@ -22,15 +22,15 @@ func BenchmarkRC4(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		var buf bytes.Buffer
-		EncodeEvent(&buf, &request)
-		DecodeEvent(&buf)
+		EncryptEvent(&buf, &request, 0)
+		DecryptEvent(&buf, 0)
 
 	}
 	var buf bytes.Buffer
-	EncodeEvent(&buf, &request)
+	EncryptEvent(&buf, &request, 0)
 
 	//var cmp HTTPRequestEvent
-	err, tmp := DecodeEvent(&buf)
+	err, tmp := DecryptEvent(&buf, 0)
 	fmt.Printf("%v\n", err)
 	cmp, _ := tmp.(*HTTPRequestEvent)
 	fmt.Printf("%s %s %s %v\n", cmp.URL, cmp.Method, string(cmp.Content), cmp.Headers)

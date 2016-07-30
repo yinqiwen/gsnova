@@ -2,7 +2,9 @@ package proxy
 
 import (
 	"log"
+	"math/rand"
 	"sync"
+	"time"
 
 	"github.com/yinqiwen/gsnova/common/event"
 )
@@ -22,7 +24,9 @@ type ProxySession struct {
 }
 
 func (s *ProxySession) handle(ev event.Event) error {
-	s.queue.Publish(ev)
+	if nil != s.queue {
+		s.queue.Publish(ev, 5*time.Second)
+	}
 	return nil
 }
 
@@ -50,15 +54,20 @@ func newProxySession(sid uint32, queue *event.EventQueue) *ProxySession {
 	s.id = sid
 	s.queue = queue
 	sessions[s.id] = s
-	log.Printf("Create proxy session:%d", sid)
+	//log.Printf("Create proxy session:%d", sid)
 	return s
+}
+
+func newRandomSession() *ProxySession {
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	return newProxySession(uint32(r.Int31()), nil)
 }
 
 func closeProxySession(sid uint32) {
 	sessionMutex.Lock()
 	defer sessionMutex.Unlock()
 	delete(sessions, sid)
-	log.Printf("Close proxy session:%d, %d left", sid, len(sessions))
+	//log.Printf("Close proxy session:%d, %d left", sid, len(sessions))
 }
 
 func getProxySessionSize() int {

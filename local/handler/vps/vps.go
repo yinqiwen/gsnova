@@ -23,7 +23,7 @@ func (p *VPSProxy) Init() error {
 		return nil
 	}
 	server := proxy.GConf.VPS.Server
-	for i := 1; i < proxy.GConf.VPS.ConnsPerServer; i++ {
+	for i := 0; i < proxy.GConf.VPS.ConnsPerServer; i++ {
 		channel, err := newTCPChannel(server, i)
 		if nil != channel {
 			p.cs.Add(channel)
@@ -49,6 +49,8 @@ func (p *VPSProxy) Serve(session *proxy.ProxySession, ev event.Event) error {
 	}
 	switch ev.(type) {
 	case *event.TCPChunkEvent:
+		session.Remote.Write(ev)
+	case *event.UDPEvent:
 		session.Remote.Write(ev)
 	case *event.TCPOpenEvent:
 		session.Remote.Write(ev)

@@ -18,7 +18,7 @@ func indexCallback(w http.ResponseWriter, req *http.Request) {
 
 func statCallback(w http.ResponseWriter, req *http.Request) {
 	w.WriteHeader(200)
-	fmt.Fprintf(w, "NumSession: %d\n", remote.GetsessionTableSize())
+	fmt.Fprintf(w, "NumSession: %d\n", remote.GetSessionTableSize())
 	ots.Handle("stat", w)
 }
 

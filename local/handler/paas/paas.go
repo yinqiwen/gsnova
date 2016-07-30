@@ -78,6 +78,8 @@ func (p *PaasProxy) Serve(session *proxy.ProxySession, ev event.Event) error {
 	switch ev.(type) {
 	case *event.TCPChunkEvent:
 		session.Remote.Write(ev)
+	case *event.UDPEvent:
+		session.Remote.Write(ev)
 	case *event.TCPOpenEvent:
 		session.Remote.Write(ev)
 	case *event.TCPCloseEvent:

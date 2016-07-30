@@ -37,10 +37,11 @@ type ProxySession struct {
 	CreateTime time.Time
 	conn       net.Conn
 	addr       string
+	network    string
 	ch         chan event.Event
 }
 
-func GetsessionTableSize() int {
+func GetSessionTableSize() int {
 	sessionMutex.Lock()
 	defer sessionMutex.Unlock()
 	return len(proxySessionMap)
@@ -58,6 +59,8 @@ func getProxySessionByEvent(cid ConnId, ev event.Event) *ProxySession {
 	case *event.TCPOpenEvent:
 		createIfMissing = true
 	case *event.HTTPRequestEvent:
+		createIfMissing = true
+	case *event.UDPEvent:
 		createIfMissing = true
 	}
 	if !createIfMissing {
@@ -147,8 +150,10 @@ func (p *ProxySession) forceClose() {
 }
 
 func (p *ProxySession) initialClose() {
-	ev := &event.TCPCloseEvent{}
-	p.publish(ev)
+	if p.network == "tcp" {
+		ev := &event.TCPCloseEvent{}
+		p.publish(ev)
+	}
 	p.forceClose()
 }
 
@@ -163,22 +168,25 @@ func (p *ProxySession) processEvents() {
 	}
 }
 
-func (p *ProxySession) open(to string) error {
+func (p *ProxySession) open(network, to string) error {
 	if p.conn != nil && to == p.addr {
 		return nil
 	}
 	p.close()
+	p.network = network
 	//log.Printf("Session[%s:%d] open connection to %s.", p.Id.User, p.Id.Id, to)
-	c, err := net.DialTimeout("tcp", to, 5*time.Second)
+	c, err := net.DialTimeout(network, to, 5*time.Second)
 	if nil != err {
-		ev := &event.TCPCloseEvent{}
-		p.publish(ev)
+		if network == "tcp" {
+			ev := &event.TCPCloseEvent{}
+			p.publish(ev)
+		}
 		log.Printf("Failed to connect %s for reason:%v", to, err)
 		return err
 	}
 	p.conn = c
 	p.addr = to
-	go p.readTCP()
+	go p.readNetwork()
 	return nil
 }
 
@@ -195,7 +203,7 @@ func (p *ProxySession) write(b []byte) (int, error) {
 	return n, err
 }
 
-func (p *ProxySession) readTCP() error {
+func (p *ProxySession) readNetwork() error {
 	for {
 		conn := p.conn
 		if nil == conn {
@@ -205,7 +213,12 @@ func (p *ProxySession) readTCP() error {
 		b := make([]byte, 8192)
 		n, err := conn.Read(b)
 		if n > 0 {
-			ev := &event.TCPChunkEvent{Content: b[0:n]}
+			var ev event.Event
+			if p.network == "tcp" {
+				ev = &event.TCPChunkEvent{Content: b[0:n]}
+			} else {
+				ev = &event.UDPEvent{Content: b[0:n]}
+			}
 			p.publish(ev)
 		}
 		if nil != err {
@@ -222,8 +235,15 @@ func (p *ProxySession) offer(ev event.Event) {
 
 func (p *ProxySession) handle(ev event.Event) error {
 	switch ev.(type) {
+	case *event.UDPEvent:
+		err := p.open("udp", ev.(*event.UDPEvent).Addr)
+		if nil != err {
+			return err
+		}
+		_, err = p.write(ev.(*event.UDPEvent).Content)
+		return err
 	case *event.TCPOpenEvent:
-		return p.open(ev.(*event.TCPOpenEvent).Addr)
+		return p.open("tcp", ev.(*event.TCPOpenEvent).Addr)
 	case *event.TCPCloseEvent:
 		p.close()
 		removeProxySession(p)
@@ -239,8 +259,8 @@ func (p *ProxySession) handle(ev event.Event) error {
 				addr = addr + ":443"
 			}
 		}
-		log.Printf("Session[%d] %s %s", ev.GetId(), req.Method, req.URL)
-		err := p.open(addr)
+		//log.Printf("Session[%d] %s %s", ev.GetId(), req.Method, req.URL)
+		err := p.open("tcp", addr)
 		if nil != err {
 			return err
 		}

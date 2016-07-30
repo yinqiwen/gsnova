@@ -18,13 +18,15 @@ type EventQueue struct {
 }
 
 func (q *EventQueue) Publish(ev Event, timeout time.Duration) error {
+	start := time.Now()
 	for {
 		select {
 		case q.queue <- ev:
 			return nil
-		case <-time.After(timeout):
-			return EventWriteTimeout
 		default:
+			if time.Now().After(start.Add(timeout)) {
+				return EventWriteTimeout
+			}
 			time.Sleep(1 * time.Millisecond)
 		}
 	}
@@ -75,6 +77,6 @@ func (q *EventQueue) Read(timeout time.Duration) (Event, error) {
 
 func NewEventQueue() *EventQueue {
 	q := new(EventQueue)
-	q.queue = make(chan Event, 10)
+	q.queue = make(chan Event, 100)
 	return q
 }

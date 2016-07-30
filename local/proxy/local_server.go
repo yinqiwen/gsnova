@@ -16,13 +16,17 @@ import (
 	"github.com/yinqiwen/gsnova/local/socks"
 )
 
-var seed uint32 = 0
+var sidSeed uint32 = 0
 var proxyServerRunning = true
+
+func getSessionId() uint32 {
+	return atomic.AddUint32(&sidSeed, 1)
+}
 
 func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 	var p Proxy
 	proxyName := ""
-	sid := atomic.AddUint32(&seed, 1)
+	sid := getSessionId()
 	queue := event.NewEventQueue()
 	connClosed := false
 	session := newProxySession(sid, queue)
@@ -49,6 +53,10 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 	if nil == err {
 		log.Printf("Local proxy recv %s proxy conn to %s", socksConn.Version(), socksConn.Req.Target)
 		//isSocksConn = true
+		if socksConn.Req.Target == GConf.UDPGW.VirtualAddr {
+			handleUDPGatewayConn(conn, p)
+			return
+		}
 		socksConn.Grant(&net.TCPAddr{
 			IP: net.ParseIP("0.0.0.0"), Port: 0})
 		conn = socksConn

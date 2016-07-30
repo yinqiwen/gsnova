@@ -35,10 +35,11 @@ type RemoteChannel struct {
 	OpenJoinAuth  bool
 	C             RemoteProxyChannel
 
-	authResult int
-	iv         uint64
-	wch        chan event.Event
-	running    bool
+	connSendedEvents uint32
+	authResult       int
+	iv               uint64
+	wch              chan event.Event
+	running          bool
 }
 
 func (rc *RemoteChannel) authed() bool {
@@ -55,6 +56,7 @@ func (rc *RemoteChannel) Init() error {
 	rc.running = true
 	rc.authResult = 0
 
+	authSession := newRandomSession()
 	if !rc.DirectIO {
 		rc.wch = make(chan event.Event, 5)
 		go rc.processWrite()
@@ -77,6 +79,7 @@ func (rc *RemoteChannel) Init() error {
 	} else {
 		return fmt.Errorf("Server:%s auth recv unexpected code:%d.", rc.Addr, rc.authResult)
 	}
+	closeProxySession(authSession.id)
 	return nil
 }
 func (rc *RemoteChannel) Close() {
@@ -91,44 +94,55 @@ func (rc *RemoteChannel) Stop() {
 }
 
 func (rc *RemoteChannel) processWrite() {
-	encryptIV := uint64(0)
-	readBufferEv := func(buf *bytes.Buffer) int {
+	readBufferEv := func(evs []event.Event) []event.Event {
 		sev := <-rc.wch
 		if nil != sev {
-			if _, ok := sev.(*event.AuthEvent); ok {
-				event.EncryptEvent(buf, sev, 0)
-			} else {
-				event.EncryptEvent(buf, sev, encryptIV)
-			}
-			return 1
+			evs = append(evs, sev)
 		}
-		return 0
+		return evs
 	}
+	var sendEvents []event.Event
 	for rc.running {
 		conn := rc.C
+		if len(sendEvents) == 0 {
+			if len(rc.wch) > 0 {
+				for len(rc.wch) > 0 {
+					sendEvents = readBufferEv(sendEvents)
+				}
+			} else {
+				sendEvents = readBufferEv(sendEvents)
+			}
+		}
+
+		if !rc.running && len(sendEvents) == 0 {
+			return
+		}
 		if conn.Closed() {
 			time.Sleep(5 * time.Millisecond)
 			continue
 		}
-		encryptIV = rc.iv
 		var buf bytes.Buffer
-		if rc.WriteJoinAuth {
+		civ := rc.iv
+		if rc.WriteJoinAuth || (rc.connSendedEvents == 0 && rc.OpenJoinAuth) {
 			auth := NewAuthEvent()
 			auth.Index = int64(rc.Index)
-			auth.IV = encryptIV
+			auth.IV = civ
 			event.EncryptEvent(&buf, auth, 0)
+			rc.connSendedEvents++
 		}
-		count := 0
-		if len(rc.wch) > 0 {
-			for len(rc.wch) > 0 {
-				count += readBufferEv(&buf)
+		for _, sev := range sendEvents {
+			if auth, ok := sev.(*event.AuthEvent); ok {
+				if auth.IV != civ {
+					log.Printf("####Got %d %d", civ, auth.IV)
+				}
+				auth.IV = civ
+				event.EncryptEvent(&buf, sev, 0)
+			} else {
+				event.EncryptEvent(&buf, sev, civ)
 			}
-		} else {
-			count += readBufferEv(&buf)
 		}
-		if !rc.running && count == 0 {
-			return
-		}
+		rc.connSendedEvents += uint32(len(sendEvents))
+
 		if buf.Len() > 0 {
 			start := time.Now()
 			_, err := conn.Write(buf.Bytes())
@@ -136,9 +150,10 @@ func (rc *RemoteChannel) processWrite() {
 				conn.Close()
 				log.Printf("Failed to write tcp messgage:%v", err)
 			} else {
-				log.Printf("[%d]%s cost %v to write %d events.", rc.Index, rc.Addr, time.Now().Sub(start), count)
+				log.Printf("[%d]%s cost %v to write %d events.", rc.Index, rc.Addr, time.Now().Sub(start), len(sendEvents))
 			}
 		}
+		sendEvents = nil
 	}
 }
 
@@ -146,7 +161,12 @@ func (rc *RemoteChannel) processRead() {
 	for rc.running {
 		conn := rc.C
 		if conn.Closed() {
+			if getProxySessionSize() == 0 {
+				time.Sleep(10 * time.Second)
+				continue
+			}
 			rc.generateIV()
+			rc.connSendedEvents = 0
 			err := conn.Open(rc.iv)
 			if nil != err {
 				log.Printf("Channel[%d] connect %s failed:%v.", rc.Index, rc.Addr, err)
@@ -155,10 +175,11 @@ func (rc *RemoteChannel) processRead() {
 			}
 			log.Printf("Channel[%d] connect %s success.", rc.Index, rc.Addr)
 			if rc.OpenJoinAuth {
-				auth := NewAuthEvent()
-				auth.Index = int64(rc.Index)
-				auth.IV = rc.iv
-				rc.Write(auth)
+				rc.Write(nil)
+				// auth := NewAuthEvent()
+				// auth.Index = int64(rc.Index)
+				// auth.IV = rc.iv
+				// rc.Write(auth)
 			}
 		}
 		data := make([]byte, 8192)
