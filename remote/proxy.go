@@ -95,9 +95,7 @@ func removeUserSessions(user string, runid int64) {
 	defer sessionMutex.Unlock()
 	for k, s := range proxySessionMap {
 		if k.User == user && k.RunId == runid {
-			s.close()
-			s.ch <- nil
-			delete(proxySessionMap, k)
+			removeProxySession(s)
 		}
 	}
 }
@@ -108,15 +106,14 @@ func (p *ProxySession) publish(ev event.Event) {
 	for {
 		queue, match := getEventQueue(p.Id.ConnId, false)
 		if !match {
-			p.close()
+			p.forceClose()
 			return
 		}
-		//success, match := publishEventQueue(p.Id.ConnId, ev)
 		if nil != queue {
 			err := queue.Publish(ev, 5*time.Second)
 			if nil != err {
 				log.Printf("Session[%s:%d] write event error:%v.", p.Id.User, p.Id.Id, err)
-				p.close()
+				p.forceClose()
 			}
 			return
 		}
@@ -140,11 +137,15 @@ func (p *ProxySession) close() error {
 	return nil
 }
 
+func (p *ProxySession) forceClose() {
+	p.close()
+	removeProxySession(p)
+}
+
 func (p *ProxySession) initialClose() {
 	ev := &event.TCPCloseEvent{}
 	p.publish(ev)
-	p.close()
-	removeProxySession(p)
+	p.forceClose()
 }
 
 func (p *ProxySession) processEvents() {
