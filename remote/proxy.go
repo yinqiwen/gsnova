@@ -72,14 +72,18 @@ func getProxySessionByEvent(cid ConnId, ev event.Event) *ProxySession {
 	return p
 }
 
+func destroyProxySession(s *ProxySession) {
+	delete(proxySessionMap, s.Id)
+	s.ch <- nil
+	close(s.ch)
+}
+
 func removeProxySession(s *ProxySession) {
 	sessionMutex.Lock()
 	defer sessionMutex.Unlock()
 	_, exist := proxySessionMap[s.Id]
 	if exist {
-		delete(proxySessionMap, s.Id)
-		s.ch <- nil
-		close(s.ch)
+		destroyProxySession(s)
 		//log.Printf("Remove sesion:%d, %d left", s.Id.Id, len(proxySessionMap))
 	}
 }
@@ -95,7 +99,7 @@ func removeUserSessions(user string, runid int64) {
 	defer sessionMutex.Unlock()
 	for k, s := range proxySessionMap {
 		if k.User == user && k.RunId == runid {
-			removeProxySession(s)
+			destroyProxySession(s)
 		}
 	}
 }
