@@ -65,6 +65,8 @@ func SetDefaultSecretKey(method string, key string) {
 	} else if strings.EqualFold(method, "aes") {
 		defaultEncryptMethod = AES256Encypter
 		//defaultEncryptMethod = Chacha20Encypter
+	} else if strings.EqualFold(method, "none") {
+		defaultEncryptMethod = 0
 	}
 }
 

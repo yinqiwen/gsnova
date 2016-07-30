@@ -3,11 +3,14 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"fmt"
 	"log"
 	"net"
 	"time"
 
+	"github.com/yinqiwen/gotoolkit/ots"
 	"github.com/yinqiwen/gsnova/common/event"
+	"github.com/yinqiwen/gsnova/common/logger"
 	"github.com/yinqiwen/gsnova/remote"
 )
 
@@ -101,6 +104,22 @@ func startLocalProxyServer(addr string) error {
 	return nil
 }
 
+func dumpServerStat() {
+	log.Printf("=========Stat Begin==========")
+	fmt.Fprintf(logger.GetLoggerWriter(), "NumSession: %d\n", remote.GetsessionTableSize())
+	ots.Handle("stat", logger.GetLoggerWriter())
+	log.Printf("=========Stat End==========")
+}
+
 func main() {
+	ticker := time.NewTicker(1 * time.Minute)
+	go func() {
+		for {
+			select {
+			case <-ticker.C:
+				dumpServerStat()
+			}
+		}
+	}()
 	startLocalProxyServer(remote.ServerConf.Listen)
 }

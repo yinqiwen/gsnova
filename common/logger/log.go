@@ -70,6 +70,13 @@ func InitLogger(output []string) {
 		}
 	}
 	if len(ws) > 0 {
-		log.SetOutput(io.MultiWriter(ws...))
+		logWriter = io.MultiWriter(ws...)
+		log.SetOutput(logWriter)
 	}
+}
+
+var logWriter io.Writer
+
+func GetLoggerWriter() io.Writer {
+	return logWriter
 }
