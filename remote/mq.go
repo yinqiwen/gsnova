@@ -52,6 +52,8 @@ func closeUnmatchedUserEventQueue(cid ConnId) (int64, bool) {
 }
 
 func getEventQueue(cid ConnId, createIfMissing bool) (*event.EventQueue, bool) {
+	queueMutex.Lock()
+	defer queueMutex.Unlock()
 	qss := queueTable[cid.User]
 	if nil == qss {
 		if createIfMissing {
@@ -93,8 +95,7 @@ func getEventQueue(cid ConnId, createIfMissing bool) (*event.EventQueue, bool) {
 // }
 
 func GetEventQueue(cid ConnId, createIfMissing bool) *event.EventQueue {
-	queueMutex.Lock()
-	defer queueMutex.Unlock()
+
 	p, _ := getEventQueue(cid, createIfMissing)
 	return p
 }

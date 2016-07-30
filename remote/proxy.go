@@ -66,7 +66,7 @@ func getProxySessionByEvent(cid ConnId, ev event.Event) *ProxySession {
 	p := new(ProxySession)
 	p.Id = sid
 	p.CreateTime = time.Now()
-	p.ch = make(chan event.Event, 10)
+	p.ch = make(chan event.Event, 100)
 	go p.processEvents()
 	proxySessionMap[sid] = p
 	return p
@@ -96,6 +96,7 @@ func removeUserSessions(user string, runid int64) {
 	for k, s := range proxySessionMap {
 		if k.User == user && k.RunId == runid {
 			s.close()
+			s.ch <- nil
 			delete(proxySessionMap, k)
 		}
 	}
@@ -105,7 +106,11 @@ func (p *ProxySession) publish(ev event.Event) {
 	ev.SetId(p.Id.Id)
 	start := time.Now()
 	for {
-		queue := GetEventQueue(p.Id.ConnId, false)
+		queue, match := getEventQueue(p.Id.ConnId, false)
+		if !match {
+			p.close()
+			return
+		}
 		//success, match := publishEventQueue(p.Id.ConnId, ev)
 		if nil != queue {
 			err := queue.Publish(ev, 5*time.Second)
