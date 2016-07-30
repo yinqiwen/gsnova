@@ -10,7 +10,7 @@ import (
 	//"time"
 )
 
-func TestHTTPEvent(t *testing.T) {
+func BenchmarkRC4(b *testing.B) {
 	SetDefaultSecretKey("rc4", "AAAAAAasdadasfafasasdasfasasgagaga")
 	var request HTTPRequestEvent
 	request.Headers = make(http.Header)
@@ -20,7 +20,7 @@ func TestHTTPEvent(t *testing.T) {
 	request.Method = "GET"
 	request.Content = []byte("hello,world")
 
-	for i := 0; i < 100000; i++ {
+	for i := 0; i < b.N; i++ {
 		var buf bytes.Buffer
 		EncodeEvent(&buf, &request)
 		DecodeEvent(&buf)
@@ -36,7 +36,7 @@ func TestHTTPEvent(t *testing.T) {
 	fmt.Printf("%s %s %s %v\n", cmp.URL, cmp.Method, string(cmp.Content), cmp.Headers)
 }
 
-func TestSalsa20Event(t *testing.T) {
+func BenchmarkSalsa20(b *testing.B) {
 	SetDefaultSecretKey("salsa20", "AAAAAAasdadasfafasasdasfasasgagaga")
 	var request HTTPRequestEvent
 	request.Headers = make(http.Header)
@@ -49,7 +49,7 @@ func TestSalsa20Event(t *testing.T) {
 
 	iv := uint64(rand.Int63())
 
-	for i := 0; i < 100000; i++ {
+	for i := 0; i < b.N; i++ {
 		var buf bytes.Buffer
 		EncryptEvent(&buf, &request, iv)
 		DecryptEvent(&buf, iv)
@@ -65,8 +65,8 @@ func TestSalsa20Event(t *testing.T) {
 	fmt.Printf("%s %s %s %v\n", cmp.URL, cmp.Method, string(cmp.Content), cmp.Headers)
 }
 
-func TestChacha20Event(t *testing.T) {
-	SetDefaultSecretKey("chacha20", "AAAAAAasdadasfafasasdasfasasgagaga")
+func BenchmarkAES(b *testing.B) {
+	SetDefaultSecretKey("aes", "AAAAAAasdadasfafasasdasfasasgagaga")
 	var request HTTPRequestEvent
 	request.Headers = make(http.Header)
 	request.Headers.Add("A", "CC")
@@ -78,7 +78,7 @@ func TestChacha20Event(t *testing.T) {
 
 	iv := uint64(rand.Int63())
 
-	for i := 0; i < 100000; i++ {
+	for i := 0; i < b.N; i++ {
 		var buf bytes.Buffer
 		EncryptEvent(&buf, &request, iv)
 		DecryptEvent(&buf, iv)

@@ -2,6 +2,7 @@ package event
 
 import (
 	"bytes"
+	"crypto/aes"
 	"crypto/rc4"
 	"encoding/binary"
 	"errors"
@@ -61,7 +62,8 @@ func SetDefaultSecretKey(method string, key string) {
 		defaultEncryptMethod = RC4Encypter
 	} else if strings.EqualFold(method, "salsa20") {
 		defaultEncryptMethod = Salsa20Encypter
-	} else if strings.EqualFold(method, "chacha20") {
+	} else if strings.EqualFold(method, "aes") {
+		defaultEncryptMethod = AES256Encypter
 		//defaultEncryptMethod = Chacha20Encypter
 	}
 }
@@ -463,6 +465,9 @@ func EncryptEvent(buf *bytes.Buffer, ev Event, iv uint64) error {
 		case RC4Encypter:
 			rc4Cipher, _ := rc4.NewCipher(secretKey)
 			rc4Cipher.XORKeyStream(eventContent, eventContent)
+		case AES256Encypter:
+			block, _ := aes.NewCipher(secretKey)
+			block.Encrypt(eventContent, eventContent)
 			// case Chacha20Encypter:
 			// 	nonce := make([]byte, 24)
 			// 	iv = iv ^ uint64(ev.GetId())
@@ -493,7 +498,8 @@ func DecryptEvent(buf *bytes.Buffer, iv uint64) (err error, ev Event) {
 		return
 	}
 	hlen := buflen - buf.Len()
-	body := buf.Bytes()[0 : int(elen)-hlen]
+	body := buf.Next(int(elen) - hlen)
+	//body := buf.Bytes()[0 : int(elen)-hlen]
 	if len(body) > 0 {
 		switch header.Flags.GetEncrytFlag() {
 		case Salsa20Encypter:
@@ -504,6 +510,9 @@ func DecryptEvent(buf *bytes.Buffer, iv uint64) (err error, ev Event) {
 		case RC4Encypter:
 			rc4Cipher, _ := rc4.NewCipher(secretKey)
 			rc4Cipher.XORKeyStream(body, body)
+		case AES256Encypter:
+			block, _ := aes.NewCipher(secretKey)
+			block.Decrypt(body, body)
 			// case Chacha20Encypter:
 			// 	nonce := make([]byte, 24)
 			// 	iv = iv ^ uint64(header.GetId())
@@ -527,7 +536,7 @@ func DecryptEvent(buf *bytes.Buffer, iv uint64) (err error, ev Event) {
 	}
 	ev = tmp.(Event)
 	ev.SetId(header.Id)
-	err = ev.Decode(buf)
+	err = ev.Decode(bytes.NewBuffer(body))
 	if nil != err {
 		log.Printf("Failed to decode event:%T", tmp)
 	}
