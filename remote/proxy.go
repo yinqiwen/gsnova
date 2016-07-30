@@ -105,9 +105,8 @@ func (p *ProxySession) publish(ev event.Event) {
 	ev.SetId(p.Id.Id)
 	start := time.Now()
 	for {
-		queue := GetEventQueue(p.Id.ConnId, false)
-		if nil != queue {
-			queue.Publish(ev)
+		success, match := publishEventQueue(p.Id.ConnId, ev)
+		if success || !match {
 			return
 		}
 		if time.Now().After(start.Add(5 * time.Second)) {
@@ -253,7 +252,7 @@ func authConnection(auth *event.AuthEvent, ctx *ConnContex) error {
 		cid := ctx.ConnId
 		GetEventQueue(ctx.ConnId, true)
 		//log.Printf("###Recv IV = %d", ctx.IV)
-		lastRunId, ok := getUnmatchedUserRunId(cid)
+		lastRunId, ok := closeUnmatchedUserEventQueue(cid)
 		if ok {
 			log.Printf("Remove old user sessions for runid:%d, while new runid:%d", lastRunId, ctx.RunId)
 			removeUserSessions(cid.User, lastRunId)

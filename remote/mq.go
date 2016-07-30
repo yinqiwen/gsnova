@@ -39,6 +39,9 @@ func closeUnmatchedUserEventQueue(cid ConnId) (int64, bool) {
 	qss := queueTable[cid.User]
 	if nil != qss {
 		if qss.runid != cid.RunId {
+			for _, qs := range qss.qs {
+				qs.Close()
+			}
 			delete(queueTable, cid.User)
 			return qss.runid, true
 		}
@@ -46,9 +49,7 @@ func closeUnmatchedUserEventQueue(cid ConnId) (int64, bool) {
 	return 0, false
 }
 
-func GetEventQueue(cid ConnId, createIfMissing bool) *event.EventQueue {
-	queueMutex.Lock()
-	defer queueMutex.Unlock()
+func getEventQueue(cid ConnId, createIfMissing bool) (*event.EventQueue, bool) {
 	qss := queueTable[cid.User]
 	if nil == qss {
 		if createIfMissing {
@@ -56,8 +57,11 @@ func GetEventQueue(cid ConnId, createIfMissing bool) *event.EventQueue {
 			qss.runid = cid.RunId
 			queueTable[cid.User] = qss
 		} else {
-			return nil
+			return nil, true
 		}
+	}
+	if qss.runid != cid.RunId {
+		return nil, false
 	}
 	qs := qss.qs
 	if len(qs) < (cid.ConnIndex + 1) {
@@ -72,5 +76,23 @@ func GetEventQueue(cid ConnId, createIfMissing bool) *event.EventQueue {
 		qs[cid.ConnIndex] = q
 		qss.qs = qs
 	}
-	return q
+	return q, true
+}
+
+func publishEventQueue(cid ConnId, ev event.Event) (bool, bool) {
+	queueMutex.Lock()
+	defer queueMutex.Unlock()
+	p, matched := getEventQueue(cid, false)
+	if nil != p {
+		p.Publish(ev)
+		return true, true
+	}
+	return false, matched
+}
+
+func GetEventQueue(cid ConnId, createIfMissing bool) *event.EventQueue {
+	queueMutex.Lock()
+	defer queueMutex.Unlock()
+	p, _ := getEventQueue(cid, createIfMissing)
+	return p
 }

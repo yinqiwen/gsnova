@@ -16,7 +16,7 @@ import (
 )
 
 func fetch(context appengine.Context, ev *event.HTTPRequestEvent) event.Event {
-	errorResponse := new(event.ErrorEvent)
+	errorResponse := new(event.NotifyEvent)
 	errorResponse.SetId(ev.GetId())
 	req, err := ev.ToRequest("")
 
@@ -92,7 +92,7 @@ func httpInvoke(w http.ResponseWriter, r *http.Request) {
 	if req, ok := ev.(*event.HTTPRequestEvent); ok {
 		res := fetch(ctx, req)
 		var resbuf bytes.Buffer
-		event.EncodeEvent(&resbuf, res)
+		event.EncryptEvent(&resbuf, res, iv)
 		headers := w.Header()
 		headers.Add("Content-Type", "application/octet-stream")
 		headers.Add("Content-Length", strconv.Itoa(resbuf.Len()))
