@@ -80,7 +80,7 @@ func removeProxySession(s *ProxySession) {
 		delete(proxySessionMap, s.Id)
 		s.ch <- nil
 		close(s.ch)
-		log.Printf("Remove sesion:%d, %d left", s.Id.Id, len(proxySessionMap))
+		//log.Printf("Remove sesion:%d, %d left", s.Id.Id, len(proxySessionMap))
 	}
 }
 func sessionExist(sid SessionId) bool {
@@ -121,7 +121,7 @@ func (p *ProxySession) publish(ev event.Event) {
 func (p *ProxySession) close() error {
 	c := p.conn
 	if nil != c {
-		log.Printf("Session[%s:%d] close connection to %s", p.Id.User, p.Id.Id, p.addr)
+		//log.Printf("Session[%s:%d] close connection to %s", p.Id.User, p.Id.Id, p.addr)
 		c.Close()
 		p.conn = nil
 		p.addr = ""
@@ -152,7 +152,7 @@ func (p *ProxySession) open(to string) error {
 		return nil
 	}
 	p.close()
-	log.Printf("Session[%s:%d] open connection to %s.", p.Id.User, p.Id.Id, to)
+	//log.Printf("Session[%s:%d] open connection to %s.", p.Id.User, p.Id.Id, to)
 	c, err := net.DialTimeout("tcp", to, 5*time.Second)
 	if nil != err {
 		ev := &event.TCPCloseEvent{}

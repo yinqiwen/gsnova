@@ -40,7 +40,9 @@ func closeUnmatchedUserEventQueue(cid ConnId) (int64, bool) {
 	if nil != qss {
 		if qss.runid != cid.RunId {
 			for _, qs := range qss.qs {
-				qs.Close()
+				if nil != qs {
+					qs.Close()
+				}
 			}
 			delete(queueTable, cid.User)
 			return qss.runid, true
