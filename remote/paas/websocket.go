@@ -32,7 +32,7 @@ func websocketInvoke(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Error Upgrading to websockets", 400)
 		return
 	}
-	ctx := &remote.ConnContex{}
+	ctx := remote.NewConnContext()
 	writeEvent := func(ev event.Event) error {
 		var buf bytes.Buffer
 		event.EncryptEvent(&buf, ev, ctx.IV)

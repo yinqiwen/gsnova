@@ -22,9 +22,14 @@ type ConnId struct {
 	RunId     int64
 }
 
-type ConnContex struct {
+type ConnContext struct {
 	ConnId
 	IV uint64
+}
+
+func NewConnContext() *ConnContext {
+	ctx := new(ConnContext)
+	return ctx
 }
 
 type SessionId struct {
@@ -39,6 +44,8 @@ type ProxySession struct {
 	addr       string
 	network    string
 	ch         chan event.Event
+
+	closeByRemote bool
 }
 
 func GetSessionTableSize() int {
@@ -186,6 +193,7 @@ func (p *ProxySession) open(network, to string) error {
 	}
 	p.conn = c
 	p.addr = to
+	p.closeByRemote = false
 	go p.readNetwork()
 	return nil
 }
@@ -212,7 +220,7 @@ func (p *ProxySession) readNetwork() error {
 		conn.SetReadDeadline(time.Now().Add(10 * time.Second))
 		b := make([]byte, 8192)
 		n, err := conn.Read(b)
-		if n > 0 {
+		if n > 0 && !p.closeByRemote {
 			var ev event.Event
 			if p.network == "tcp" {
 				ev = &event.TCPChunkEvent{Content: b[0:n]}
@@ -273,7 +281,7 @@ func (p *ProxySession) handle(ev event.Event) error {
 	return nil
 }
 
-func authConnection(auth *event.AuthEvent, ctx *ConnContex) error {
+func authConnection(auth *event.AuthEvent, ctx *ConnContext) error {
 	//log.Printf("###Recv auth IV = %d, ctx IV = %d", auth.IV, ctx.IV)
 	if len(ctx.User) == 0 {
 		if !ServerConf.VerifyUser(auth.User) {
@@ -300,7 +308,7 @@ func authConnection(auth *event.AuthEvent, ctx *ConnContex) error {
 	}
 }
 
-func handleEvent(ev event.Event, ctx *ConnContex) (event.Event, error) {
+func handleEvent(ev event.Event, ctx *ConnContext) (event.Event, error) {
 	switch ev.(type) {
 	case *event.AuthEvent:
 		auth := ev.(*event.AuthEvent)
@@ -315,18 +323,24 @@ func handleEvent(ev event.Event, ctx *ConnContex) (event.Event, error) {
 		return &authres, nil
 	default:
 		session := getProxySessionByEvent(ctx.ConnId, ev)
-		if nil != session {
-			session.offer(ev)
+		if _, ok := ev.(*event.TCPCloseEvent); ok {
+			if nil != session {
+				session.closeByRemote = true
+			}
 		} else {
-			if _, ok := ev.(*event.TCPCloseEvent); !ok {
+			if nil == session {
 				log.Printf("No session:%d found for event %T", ev.GetId(), ev)
 			}
 		}
+		if nil != session {
+			session.offer(ev)
+		}
+
 	}
 	return nil, nil
 }
 
-func HandleRequestBuffer(reqbuf *bytes.Buffer, ctx *ConnContex) ([]event.Event, error) {
+func HandleRequestBuffer(reqbuf *bytes.Buffer, ctx *ConnContext) ([]event.Event, error) {
 	var ress []event.Event
 	for reqbuf.Len() > 0 {
 		var ev event.Event

@@ -22,7 +22,7 @@ func readRequestBuffer(r *http.Request) *bytes.Buffer {
 
 // handleWebsocket connection. Update to
 func httpInvoke(w http.ResponseWriter, r *http.Request) {
-	ctx := &remote.ConnContex{}
+	ctx := remote.NewConnContext()
 	writeEvent := func(ev event.Event) error {
 		var buf bytes.Buffer
 		event.EncryptEvent(&buf, ev, ctx.IV)

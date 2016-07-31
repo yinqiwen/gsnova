@@ -4,21 +4,30 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
+	"io"
 	"log"
 	"net"
+	"sync/atomic"
 	"time"
 
 	"github.com/yinqiwen/gotoolkit/ots"
 	"github.com/yinqiwen/gsnova/common/event"
-	"github.com/yinqiwen/gsnova/common/logger"
 	"github.com/yinqiwen/gsnova/remote"
 )
 
-func serveProxyConn(conn net.Conn) {
-	bufconn := bufio.NewReader(conn)
-	defer conn.Close()
+var totalConn int32
 
-	ctx := &remote.ConnContex{}
+func serveProxyConn(conn net.Conn) {
+	atomic.AddInt32(&totalConn, 1)
+	bufconn := bufio.NewReader(conn)
+
+	deferFunc := func() {
+		conn.Close()
+		atomic.AddInt32(&totalConn, -1)
+	}
+	defer deferFunc()
+
+	ctx := remote.NewConnContext()
 
 	writeEvent := func(ev event.Event) error {
 		var buf bytes.Buffer
@@ -105,22 +114,18 @@ func startLocalProxyServer(addr string) error {
 	return nil
 }
 
-func dumpServerStat() {
-	log.Printf("=========Stat Begin==========")
-	fmt.Fprintf(logger.GetLoggerWriter(), "NumSession: %d\n", remote.GetSessionTableSize())
-	ots.Handle("stat", logger.GetLoggerWriter())
-	log.Printf("=========Stat End==========")
+func dumpServerStat(args []string, c io.Writer) error {
+	fmt.Fprintf(c, "NumSession:    %d\n", remote.GetSessionTableSize())
+	fmt.Fprintf(c, "TotalUserConn: %d\n", totalConn)
+	return nil
 }
 
 func main() {
-	ticker := time.NewTicker(1 * time.Minute)
-	go func() {
-		for {
-			select {
-			case <-ticker.C:
-				dumpServerStat()
-			}
-		}
-	}()
+	ots.RegisterHandler("vstat", dumpServerStat, 0, 0, "VStat                                 Dump server stat")
+	err := ots.StartTroubleShootingServer(remote.ServerConf.AdminListen)
+	if nil != err {
+		log.Printf("Failed to start admin server with reason:%v", err)
+		return
+	}
 	startLocalProxyServer(remote.ServerConf.Listen)
 }

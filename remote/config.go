@@ -16,10 +16,11 @@ type EncryptConfig struct {
 }
 
 type ServerConfig struct {
-	Listen  string
-	Auth    []string
-	Encrypt EncryptConfig
-	Log     []string
+	Listen      string
+	AdminListen string
+	Auth        []string
+	Encrypt     EncryptConfig
+	Log         []string
 }
 
 func (conf *ServerConfig) VerifyUser(user string) bool {
