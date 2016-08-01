@@ -321,6 +321,8 @@ func handleEvent(ev event.Event, ctx *ConnContext) (event.Event, error) {
 			authres.Code = event.ErrAuthFailed
 		}
 		return &authres, nil
+	case *event.HeartBeatEvent:
+		//do nothing
 	default:
 		session := getProxySessionByEvent(ctx.ConnId, ev)
 		if _, ok := ev.(*event.TCPCloseEvent); ok {

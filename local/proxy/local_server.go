@@ -75,7 +75,7 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 		//this is a ip from local dns query
 		if net.ParseIP(socksTargetHost) != nil {
 			tryRemoteResolve = true
-			if socksTargetPort == "80" || socksTargetPort == "8080" {
+			if socksTargetPort == "80" {
 				//we can parse http request directly
 				session.Hijacked = false
 			}
@@ -226,6 +226,11 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 		}
 		if strings.EqualFold(req.Method, "Connect") && (session.SSLHijacked || session.Hijacked) {
 			conn.Write([]byte("HTTP/1.1 200 Connection established\r\n\r\n"))
+		}
+
+		//do not parse http rquest for next process
+		if strings.EqualFold(req.Method, "Get") && req.Header.Get("Upgrade") == "websocket" {
+			session.Hijacked = true
 		}
 		if session.SSLHijacked {
 			if tlsconn, ok := conn.(*tls.Conn); !ok {

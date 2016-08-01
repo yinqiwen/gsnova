@@ -82,6 +82,7 @@ func HandleEvent(ev event.Event) error {
 		switch ev.(type) {
 		case *event.TCPCloseEvent:
 		case *event.NotifyEvent:
+		case *event.HeartBeatEvent:
 		default:
 			log.Printf("No session:%d found for %T", ev.GetId(), ev)
 		}
