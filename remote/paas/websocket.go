@@ -33,9 +33,11 @@ func websocketInvoke(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := remote.NewConnContext()
-	writeEvent := func(ev event.Event) error {
+	writeEvents := func(evs []event.Event) error {
 		var buf bytes.Buffer
-		event.EncryptEvent(&buf, ev, ctx.IV)
+		for _, ev := range evs {
+			event.EncryptEvent(&buf, ev, ctx.IV)
+		}
 		return ws.WriteMessage(websocket.BinaryMessage, buf.Bytes())
 	}
 	//log.Printf("###Recv websocket connection")
@@ -66,26 +68,24 @@ func websocketInvoke(w http.ResponseWriter, r *http.Request) {
 				ws.Close()
 				wsClosed = true
 			} else {
+				writeEvents(ress)
 				if nil == queue && len(ctx.User) > 0 && ctx.ConnIndex >= 0 {
 					queue = remote.GetEventQueue(ctx.ConnId, true)
 					go func() {
 						for !wsClosed {
-							ev, err := queue.Peek(1 * time.Millisecond)
+							evs, err := queue.PeekMulti(1 * time.Millisecond)
 							if nil != err {
 								continue
 							}
-							err = writeEvent(ev)
+							err = writeEvents(evs)
 							if nil != err {
 								log.Printf("Websoket write error:%v", err)
 								return
 							} else {
-								queue.ReadPeek()
+								queue.DiscardPeeks()
 							}
 						}
 					}()
-				}
-				for _, res := range ress {
-					writeEvent(res)
 				}
 			}
 		default:

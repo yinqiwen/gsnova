@@ -29,10 +29,19 @@ func serveProxyConn(conn net.Conn) {
 
 	ctx := remote.NewConnContext()
 
-	writeEvent := func(ev event.Event) error {
+	// writeEvent := func(ev event.Event) error {
+	// 	var buf bytes.Buffer
+	// 	event.EncryptEvent(&buf, ev, ctx.IV)
+	// 	conn.SetWriteDeadline(time.Now().Add(15 * time.Second))
+	// 	_, err := conn.Write(buf.Bytes())
+	// 	return err
+	// }
+	writeEvents := func(evs []event.Event) error {
 		var buf bytes.Buffer
-		event.EncryptEvent(&buf, ev, ctx.IV)
-		conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+		for _, ev := range evs {
+			event.EncryptEvent(&buf, ev, ctx.IV)
+		}
+		conn.SetWriteDeadline(time.Now().Add(15 * time.Second))
 		_, err := conn.Write(buf.Bytes())
 		return err
 	}
@@ -62,31 +71,28 @@ func serveProxyConn(conn net.Conn) {
 				return
 			}
 		} else {
-			for _, res := range ress {
-				writeEvent(res)
-			}
+			writeEvents(ress)
 			if nil == queue && len(ctx.User) > 0 && ctx.ConnIndex >= 0 {
 				queue = remote.GetEventQueue(ctx.ConnId, true)
 				go func() {
 					var lastEventTime time.Time
 					for !connClosed {
-						ev, err := queue.Peek(1 * time.Millisecond)
+						evs, err := queue.PeekMulti(1 * time.Millisecond)
 						if nil != err {
 							if remote.GetSessionTableSize() > 0 && lastEventTime.Add(5*time.Second).Before(time.Now()) {
-								ev = &event.HeartBeatEvent{}
+								evs = []event.Event{&event.HeartBeatEvent{}}
 							} else {
 								continue
 							}
 						}
-
-						err = writeEvent(ev)
+						err = writeEvents(evs)
 						lastEventTime = time.Now()
 						if nil != err {
 							log.Printf("TCP write error:%v", err)
 							conn.Close()
 							return
 						} else {
-							queue.ReadPeek()
+							queue.DiscardPeeks()
 						}
 					}
 				}()
