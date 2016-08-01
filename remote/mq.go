@@ -1,101 +1,83 @@
 package remote
 
 import (
+	"log"
 	"sync"
+	"time"
 
 	"github.com/yinqiwen/gsnova/common/event"
 )
 
-type UserEventQueue struct {
-	runid int64
-	qs    []*event.EventQueue
+type ConnEventQueue struct {
+	event.EventQueue
+	id         ConnId
+	activeTime time.Time
 }
 
-var queueTable map[string]*UserEventQueue = make(map[string]*UserEventQueue)
+var queueTable map[ConnId]*ConnEventQueue = make(map[ConnId]*ConnEventQueue)
 var queueMutex sync.Mutex
 
-func closeUserEventQueue(user string) {
+var freeQueueTable = make(map[*ConnEventQueue]bool)
+var freeQueueMutex sync.Mutex
+
+func removeExpiredConnEventQueue(id ConnId) {
 	queueMutex.Lock()
 	defer queueMutex.Unlock()
-
-	delete(queueTable, user)
+	delete(queueTable, id)
 }
 
-func getUnmatchedUserRunId(cid ConnId) (int64, bool) {
+func getEventQueue(cid ConnId, createIfMissing bool) *ConnEventQueue {
 	queueMutex.Lock()
 	defer queueMutex.Unlock()
-	qss := queueTable[cid.User]
-	if nil != qss {
-		if qss.runid != cid.RunId {
-			return qss.runid, true
-		}
-	}
-	return 0, false
-}
-
-func closeUnmatchedUserEventQueue(cid ConnId) (int64, bool) {
-	queueMutex.Lock()
-	defer queueMutex.Unlock()
-	qss := queueTable[cid.User]
-	if nil != qss {
-		if qss.runid != cid.RunId {
-			// for _, qs := range qss.qs {
-			// 	if nil != qs {
-			// 		qs.Close()
-			// 	}
-			// }
-			delete(queueTable, cid.User)
-			return qss.runid, true
-		}
-	}
-	return 0, false
-}
-
-func getEventQueue(cid ConnId, createIfMissing bool) (*event.EventQueue, bool) {
-	queueMutex.Lock()
-	defer queueMutex.Unlock()
-	qss := queueTable[cid.User]
-	if nil == qss {
+	q := queueTable[cid]
+	if nil == q {
 		if createIfMissing {
-			qss = new(UserEventQueue)
-			qss.runid = cid.RunId
-			queueTable[cid.User] = qss
+			q = new(ConnEventQueue)
+			q.activeTime = time.Now()
+			q.id = cid
+			queueTable[cid] = q
+			return q
 		} else {
-			return nil, true
+			return nil
 		}
 	}
-	if qss.runid != cid.RunId {
-		return nil, false
-	}
-	qs := qss.qs
-	if len(qs) < (cid.ConnIndex + 1) {
-		tmp := make([]*event.EventQueue, cid.ConnIndex+1)
-		copy(tmp, qs)
-		qs = tmp
-		qss.qs = qs
-	}
-	q := qs[cid.ConnIndex]
-	if nil == q && createIfMissing {
-		q = event.NewEventQueue()
-		qs[cid.ConnIndex] = q
-		qss.qs = qs
-	}
-	return q, true
+	return q
 }
 
-// func publishEventQueue(cid ConnId, ev event.Event) (bool, bool) {
-// 	queueMutex.Lock()
-// 	defer queueMutex.Unlock()
-// 	p, matched := getEventQueue(cid, false)
-// 	if nil != p {
-// 		p.Publish(ev)
-// 		return true, true
-// 	}
-// 	return false, matched
-// }
+func GetEventQueue(cid ConnId, createIfMissing bool) *ConnEventQueue {
+	q := getEventQueue(cid, createIfMissing)
+	if nil != q {
+		freeQueueMutex.Lock()
+		delete(freeQueueTable, q)
+		freeQueueMutex.Unlock()
+	}
+	return q
+}
 
-func GetEventQueue(cid ConnId, createIfMissing bool) *event.EventQueue {
+func ReleaseEventQueue(q *ConnEventQueue) {
+	if nil != q {
+		freeQueueMutex.Lock()
+		freeQueueTable[q] = true
+		freeQueueMutex.Unlock()
+	}
+}
 
-	p, _ := getEventQueue(cid, createIfMissing)
-	return p
+func init() {
+	go func() {
+		ticker := time.NewTicker(1 * time.Minute)
+		for {
+			select {
+			case <-ticker.C:
+				freeQueueMutex.Lock()
+				for q, _ := range freeQueueTable {
+					if q.activeTime.Add(30 * time.Second).Before(time.Now()) {
+						removeExpiredConnEventQueue(q.id)
+						delete(freeQueueTable, q)
+						log.Printf("Remove old conn event queue by id:%v", q.id)
+					}
+				}
+				freeQueueMutex.Unlock()
+			}
+		}
+	}()
 }

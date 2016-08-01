@@ -46,6 +46,7 @@ func httpInvoke(w http.ResponseWriter, r *http.Request) {
 				writeEvent(res)
 			}
 			queue := remote.GetEventQueue(ctx.ConnId, true)
+			defer remote.ReleaseEventQueue(queue)
 			for {
 				if time.Now().After(begin.Add(10 * time.Second)) {
 					log.Printf("Stop puller after 10s for conn:%d", ctx.ConnIndex)

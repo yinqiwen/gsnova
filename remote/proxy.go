@@ -118,11 +118,7 @@ func (p *ProxySession) publish(ev event.Event) {
 	ev.SetId(p.Id.Id)
 	start := time.Now()
 	for {
-		queue, match := getEventQueue(p.Id.ConnId, false)
-		if !match {
-			p.forceClose()
-			return
-		}
+		queue := getEventQueue(p.Id.ConnId, false)
 		if nil != queue {
 			err := queue.Publish(ev, 10*time.Second)
 			if nil != err {
@@ -293,15 +289,8 @@ func authConnection(auth *event.AuthEvent, ctx *ConnContext) error {
 		ctx.ConnIndex = int(auth.Index)
 		ctx.IV = auth.IV
 		ctx.RunId = auth.RunId
-		cid := ctx.ConnId
 		GetEventQueue(ctx.ConnId, true)
 		//log.Printf("###Recv IV = %d", ctx.IV)
-		lastRunId, ok := closeUnmatchedUserEventQueue(cid)
-		if ok {
-			log.Printf("Remove old user sessions for runid:%d, while new runid:%d", lastRunId, ctx.RunId)
-			removeUserSessions(cid.User, lastRunId)
-			closeUnmatchedUserEventQueue(cid)
-		}
 		return nil
 	} else {
 		return fmt.Errorf("Duplicate auth/login event in same connection")

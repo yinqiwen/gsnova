@@ -40,8 +40,9 @@ func serveProxyConn(conn net.Conn) {
 	var buf bytes.Buffer
 	b := make([]byte, 8192)
 
-	var queue *event.EventQueue
+	var queue *remote.ConnEventQueue
 	connClosed := false
+	defer remote.ReleaseEventQueue(queue)
 	for !connClosed {
 		conn.SetReadDeadline(time.Now().Add(60 * time.Second))
 		n, cerr := bufconn.Read(b)

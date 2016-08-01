@@ -42,8 +42,8 @@ func websocketInvoke(w http.ResponseWriter, r *http.Request) {
 	buf := bytes.NewBuffer(nil)
 
 	wsClosed := false
-	var queue *event.EventQueue
-
+	var queue *remote.ConnEventQueue
+	defer remote.ReleaseEventQueue(queue)
 	for {
 		mt, data, err := ws.ReadMessage()
 		if err != nil {
