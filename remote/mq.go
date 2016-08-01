@@ -63,6 +63,7 @@ func GetEventQueue(cid ConnId, createIfMissing bool) *ConnEventQueue {
 
 func ReleaseEventQueue(q *ConnEventQueue) {
 	if nil != q {
+		q.activeTime = time.Now()
 		freeQueueMutex.Lock()
 		freeQueueTable[q] = true
 		freeQueueMutex.Unlock()
