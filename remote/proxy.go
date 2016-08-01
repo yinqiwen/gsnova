@@ -184,7 +184,7 @@ func (p *ProxySession) open(network, to string) error {
 			ev := &event.TCPCloseEvent{}
 			p.publish(ev)
 		}
-		log.Printf("Failed to connect %s for reason:%v", to, err)
+		log.Printf("Failed to connect %s:%s for reason:%v", network, to, err)
 		return err
 	}
 	p.conn = c

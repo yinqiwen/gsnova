@@ -33,6 +33,7 @@ func getEventQueue(cid ConnId, createIfMissing bool) *ConnEventQueue {
 	if nil == q {
 		if createIfMissing {
 			q = new(ConnEventQueue)
+			q.EventQueue = *(event.NewEventQueue())
 			q.activeTime = time.Now()
 			q.id = cid
 			queueTable[cid] = q
