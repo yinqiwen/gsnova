@@ -1,6 +1,9 @@
 package helper
 
-import "errors"
+import (
+	"errors"
+	"log"
+)
 
 var ErrTLSIncomplete = errors.New("TLS header incomplete")
 var ErrNoSNI = errors.New("No SNI in protocol")
@@ -17,12 +20,13 @@ func TLSParseSNI(data []byte) (string, error) {
 
 	tlsContentType := int(data[0])
 	if tlsContentType != 0x16 {
-		//log.Printf("#####1")
+		log.Printf("Invaid content type:%d with %v", tlsContentType, ErrTLSClientHello)
 		return "", ErrTLSClientHello
 	}
 	tlsMajorVer := int(data[1])
 	tlsMinorVer := int(data[2])
 	if tlsMajorVer < 3 {
+		log.Printf("Invaid tls ver:%d with %v", tlsMajorVer, ErrNoSNI)
 		return "", ErrNoSNI
 	}
 
@@ -33,12 +37,12 @@ func TLSParseSNI(data []byte) (string, error) {
 	//log.Printf("####TLS %d %d", tlsLen, len(data))
 	pos := tlsHederLen
 	if pos+1 > len(data) {
-		//log.Printf("#####2")
+		log.Printf("Less data 1 %v", ErrTLSClientHello)
 		return "", ErrTLSClientHello
 	}
 	tlsHandshakeTypeClientHello := 0x01
 	if int(data[pos]) != tlsHandshakeTypeClientHello {
-		//log.Printf("#####3")
+		log.Printf("Not client hello type:%d with err:%v", data[pos], ErrTLSClientHello)
 		return "", ErrTLSClientHello
 	}
 	/* Skip past fixed length records:
@@ -50,38 +54,39 @@ func TLSParseSNI(data []byte) (string, error) {
 	*/
 	pos += 38
 	if pos+1 > len(data) {
-		//log.Printf("#####4")
+		log.Printf("Less data 2 with err:%v", ErrTLSClientHello)
 		return "", ErrTLSClientHello
 	}
 	nextLen := int(data[pos])
 	pos = pos + 1 + nextLen
 
 	if pos+2 > len(data) {
-		//log.Printf("#####5")
+		log.Printf("Less data 3 with err:%v", ErrTLSClientHello)
 		return "", ErrTLSClientHello
 	}
 	nextLen = (int(data[pos]) << 8) + int(data[pos+1])
 	pos = pos + 2 + nextLen
 
 	if pos+1 > len(data) {
-		//log.Printf("#####6")
+		log.Printf("Less data 4 with err:%v", ErrTLSClientHello)
 		return "", ErrTLSClientHello
 	}
 	nextLen = int(data[pos])
 	pos = pos + 1 + nextLen
 
 	if pos == len(data) && tlsMajorVer == 3 && tlsMinorVer == 0 {
+		log.Printf("No sni in 3.0 %v", ErrNoSNI)
 		return "", ErrNoSNI
 	}
 
 	if pos+2 > len(data) {
-		//log.Printf("#####7")
+		log.Printf("Less data 5 with err:%v", ErrTLSClientHello)
 		return "", ErrTLSClientHello
 	}
 	nextLen = (int(data[pos]) << 8) + int(data[pos+1])
 	pos += 2
 	if pos+nextLen > len(data) {
-		//log.Printf("#####8")
+		log.Printf("Less data 6 with err:%v", ErrTLSClientHello)
 		return "", ErrTLSClientHello
 	}
 	return parseExtension(data[pos:])
@@ -93,7 +98,7 @@ func parseExtension(data []byte) (string, error) {
 		nextLen := (int(data[pos+2]) << 8) + int(data[pos+3])
 		if int(data[pos]) == 0x00 && int(data[pos+1]) == 0x00 {
 			if pos+4+nextLen > len(data) {
-				//log.Printf("#####9")
+				log.Printf("Less data 7 with err:%v", ErrTLSClientHello)
 				return "", ErrTLSClientHello
 			}
 			return parseServerNameExtension(data[pos+4:])
@@ -101,7 +106,7 @@ func parseExtension(data []byte) (string, error) {
 		pos = pos + 4 + nextLen
 	}
 	if pos != len(data) {
-		//log.Printf("#####10")
+		log.Printf("Less data 8 with err:%v", ErrTLSClientHello)
 		return "", ErrTLSClientHello
 	}
 	return "", ErrNoSNI
@@ -112,7 +117,7 @@ func parseServerNameExtension(data []byte) (string, error) {
 	for pos+3 < len(data) {
 		nextLen := (int(data[pos+1]) << 8) + int(data[pos+2])
 		if pos+3+nextLen > len(data) {
-			//log.Printf("#####11")
+			log.Printf("Less data 9 with err:%v", ErrTLSClientHello)
 			return "", ErrTLSClientHello
 		}
 
@@ -124,7 +129,7 @@ func parseServerNameExtension(data []byte) (string, error) {
 		pos = pos + 3 + nextLen
 	}
 	if pos != len(data) {
-		//log.Printf("#####12")
+		log.Printf("Less data 10 with err:%v", ErrTLSClientHello)
 		return "", ErrTLSClientHello
 	}
 	return "", ErrNoSNI

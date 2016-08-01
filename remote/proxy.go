@@ -124,14 +124,14 @@ func (p *ProxySession) publish(ev event.Event) {
 			return
 		}
 		if nil != queue {
-			err := queue.Publish(ev, 5*time.Second)
+			err := queue.Publish(ev, 10*time.Second)
 			if nil != err {
 				log.Printf("Session[%s:%d] write event error:%v.", p.Id.User, p.Id.Id, err)
 				p.forceClose()
 			}
 			return
 		}
-		if time.Now().After(start.Add(5 * time.Second)) {
+		if time.Now().After(start.Add(10 * time.Second)) {
 			log.Printf("No avaliable connection to write event")
 			p.close()
 			break

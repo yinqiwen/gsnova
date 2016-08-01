@@ -1,10 +1,12 @@
 package gsnova
 
 import (
+	"github.com/getlantern/netx"
 	_ "github.com/yinqiwen/gsnova/local/handler/direct"
 	_ "github.com/yinqiwen/gsnova/local/handler/gae"
 	_ "github.com/yinqiwen/gsnova/local/handler/paas"
 	_ "github.com/yinqiwen/gsnova/local/handler/vps"
+	"github.com/yinqiwen/gsnova/local/protector"
 	"github.com/yinqiwen/gsnova/local/proxy"
 )
 
@@ -27,8 +29,9 @@ type SocketProtector interface {
 // routing via a VPN. This is useful when running Lantern as a VPN on Android,
 // because it keeps Lantern's own connections from being captured by the VPN and
 // resulting in an infinite loop.
-func ProtectConnections(dnsServer string, protector SocketProtector) {
-	// p := protected.New(protector.Protect, dnsServer)
-	// netx.OverrideDial(p.Dial)
-	// netx.OverrideResolve(p.Resolve)
+func ProtectConnections(dnsServer string, p SocketProtector) {
+	protector.Configure(p.Protect, dnsServer)
+	//p := New(protector.Protect, dnsServer)
+	netx.OverrideDial(protector.Dial)
+	netx.OverrideResolve(protector.Resolve)
 }

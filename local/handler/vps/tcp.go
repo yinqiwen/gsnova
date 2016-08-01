@@ -45,7 +45,7 @@ func (tc *tcpChannel) Read(p []byte) (int, error) {
 	if nil == conn {
 		return 0, io.EOF
 	}
-	conn.SetReadDeadline(time.Now().Add(10 * time.Second))
+	conn.SetReadDeadline(time.Now().Add(15 * time.Second))
 	return conn.Read(p)
 }
 
@@ -64,6 +64,7 @@ func newTCPChannel(addr string, idx int) (*proxy.RemoteChannel, error) {
 		DirectIO:      false,
 		OpenJoinAuth:  true,
 		WriteJoinAuth: false,
+		HeartBeat:     true,
 	}
 	tc := new(tcpChannel)
 	tc.addr = addr

@@ -13,6 +13,7 @@ import (
 
 	"github.com/yinqiwen/gsnova/common/event"
 	"github.com/yinqiwen/gsnova/common/fakecert"
+	"github.com/yinqiwen/gsnova/common/helper"
 	"github.com/yinqiwen/gsnova/local/socks"
 )
 
@@ -26,47 +27,61 @@ func getSessionId() uint32 {
 func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 	var p Proxy
 	proxyName := ""
+	protocol := "tcp"
 	sid := getSessionId()
 	queue := event.NewEventQueue()
 	connClosed := false
 	session := newProxySession(sid, queue)
 	defer closeProxySession(sid)
 
-	findProxy := func(req *http.Request) {
-		if nil == p {
-			for _, pac := range proxy.PAC {
-				if pac.Match(req) {
-					p = getProxyByName(pac.Remote)
-					proxyName = pac.Remote
-					break
-				}
-
-			}
-			if nil == p {
-				log.Printf("No proxy found.")
-				return
-			}
-		}
-	}
-	//isSocksConn := false
+	socksTargetHost := ""
+	socksTargetPort := ""
+	tryRemoteResolve := false
 	socksConn, bufconn, err := socks.NewSocksConn(conn)
-	if nil == err {
-		log.Printf("Local proxy recv %s proxy conn to %s", socksConn.Version(), socksConn.Req.Target)
-		//isSocksConn = true
-		if socksConn.Req.Target == GConf.UDPGW.VirtualAddr {
-			handleUDPGatewayConn(conn, p)
+
+	socksInitProxy := func(addr string) {
+		creq, _ := http.NewRequest("Connect", addr, nil)
+		p, proxyName = proxy.findProxyByRequest(protocol, creq)
+		if nil == p {
+			conn.Close()
 			return
 		}
-		socksConn.Grant(&net.TCPAddr{
-			IP: net.ParseIP("0.0.0.0"), Port: 0})
-		conn = socksConn
-		creq, _ := http.NewRequest("Connect", socksConn.Req.Target, nil)
-		findProxy(creq)
-		session.Hijacked = true
+
 		tcpOpen := &event.TCPOpenEvent{}
 		tcpOpen.SetId(sid)
-		tcpOpen.Addr = socksConn.Req.Target
+		tcpOpen.Addr = addr
 		p.Serve(session, tcpOpen)
+	}
+
+	if nil == err {
+		log.Printf("###Local proxy recv %s proxy conn to %s", socksConn.Version(), socksConn.Req.Target)
+		socksConn.Grant(&net.TCPAddr{
+			IP: net.ParseIP("0.0.0.0"), Port: 0})
+
+		if socksConn.Req.Target == GConf.UDPGWAddr {
+			log.Printf("Handle udpgw conn for %v", socksConn.Req.Target)
+			handleUDPGatewayConn(conn, proxy)
+			return
+		}
+		log.Printf("Handle tcp conn for %v", socksConn.Req.Target)
+		conn = socksConn
+		session.Hijacked = true
+
+		socksTargetHost, socksTargetPort, err = net.SplitHostPort(socksConn.Req.Target)
+		if nil != err {
+			log.Printf("Invalid socks target addresss:%s with reason %v", socksConn.Req.Target, err)
+			return
+		}
+		//this is a ip from local dns query
+		if net.ParseIP(socksTargetHost) != nil {
+			tryRemoteResolve = true
+			if socksTargetPort == "80" || socksTargetPort == "8080" {
+				//we can parse http request directly
+				session.Hijacked = false
+			}
+		} else {
+			socksInitProxy(socksConn.Req.Target)
+		}
 	} else {
 		if nil == bufconn {
 			conn.Close()
@@ -106,8 +121,11 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 		}
 	}()
 
-	// sniSniffed := false
-	// tmp := make([]byte, 0)
+	sniSniffed := true
+	if tryRemoteResolve && session.Hijacked {
+		sniSniffed = false
+	}
+	sniChunk := make([]byte, 0)
 	for {
 		if session.Hijacked {
 			buffer := make([]byte, 8192)
@@ -117,23 +135,29 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 				break
 			}
 			chunkContent := buffer[0:n]
-			// if !sniSniffed {
-			// 	tmp = append(tmp, chunkContent...)
-			// 	sni, err := helper.TLSParseSNI(tmp)
-			// 	if err != nil {
-			// 		if err != helper.ErrTLSIncomplete {
-			// 			sniSniffed = true
-			// 			chunkContent = tmp
-			// 			log.Printf("####%v", err)
-			// 		} else {
-			// 			continue
-			// 		}
-			// 	} else {
-			// 		sniSniffed = true
-			// 		chunkContent = tmp
-			// 		log.Printf("####SNI = %v", sni)
-			// 	}
-			// }
+			if !sniSniffed {
+				sniChunk = append(sniChunk, chunkContent...)
+				sni, err := helper.TLSParseSNI(sniChunk)
+				if err != nil {
+					if err != helper.ErrTLSIncomplete {
+						sniSniffed = true
+						chunkContent = sniChunk
+						//downgrade to use old address
+						tryRemoteResolve = false
+						socksInitProxy(net.JoinHostPort(socksTargetHost, socksTargetPort))
+					} else {
+						continue
+					}
+				} else {
+					sniSniffed = true
+					chunkContent = sniChunk
+					log.Printf("####SNI = %v", sni)
+					socksInitProxy(net.JoinHostPort(sni, socksTargetPort))
+				}
+			}
+			if nil == p {
+				return
+			}
 			var chunk event.TCPChunkEvent
 			chunk.SetId(sid)
 			chunk.Content = chunkContent
@@ -145,7 +169,14 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 			log.Printf("Session:%d read request failed from proxy connection:%v", sid, err)
 			break
 		}
-		findProxy(req)
+		if nil == p {
+			p, proxyName = proxy.findProxyByRequest("http", req)
+			if nil == p {
+				conn.Close()
+				connClosed = true
+				return
+			}
+		}
 		reqUrl := req.URL.String()
 		if strings.EqualFold(req.Method, "Connect") {
 			reqUrl = req.URL.Host

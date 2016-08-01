@@ -61,11 +61,12 @@ type VPSConfig struct {
 }
 
 type PACConfig struct {
-	Method []string
-	Host   []string
-	Path   []string
-	Rule   []string
-	Remote string
+	Method   []string
+	Host     []string
+	Path     []string
+	Rule     []string
+	Protocol []string
+	Remote   string
 
 	methodRegex []*regexp.Regexp
 	hostRegex   []*regexp.Regexp
@@ -76,9 +77,24 @@ func (pac *PACConfig) ruleInHosts(req *http.Request) bool {
 	return hosts.InHosts(req.Host)
 }
 
+func (pac *PACConfig) matchProtocol(protocol string) bool {
+	if len(pac.Protocol) == 0 {
+		return true
+	}
+	for _, p := range pac.Protocol {
+		if p == "*" || strings.EqualFold(p, protocol) {
+			return true
+		}
+	}
+	return false
+}
+
 func (pac *PACConfig) matchRules(req *http.Request) bool {
 	if len(pac.Rule) == 0 {
 		return true
+	}
+	if nil == req {
+		return false
 	}
 	ok := true
 	for _, rule := range pac.Rule {
@@ -137,13 +153,44 @@ func NewRegex(rules []string) ([]*regexp.Regexp, error) {
 	return regexs, nil
 }
 
-func (pac *PACConfig) Match(req *http.Request) bool {
-	return pac.matchRules(req) && MatchRegexs(req.Host, pac.hostRegex) && MatchRegexs(req.Method, pac.methodRegex) && MatchRegexs(req.URL.Path, pac.pathRegex)
+func (pac *PACConfig) Match(protocol string, req *http.Request) bool {
+	ret := pac.matchProtocol(protocol)
+	if !ret {
+		return false
+	}
+	ret = pac.matchRules(req)
+	if !ret {
+		return false
+	}
+	if nil == req {
+		if len(pac.hostRegex) > 0 || len(pac.methodRegex) > 0 || len(pac.pathRegex) > 0 {
+			return false
+		}
+		return true
+	}
+	return MatchRegexs(req.Host, pac.hostRegex) && MatchRegexs(req.Method, pac.methodRegex) && MatchRegexs(req.URL.Path, pac.pathRegex)
 }
 
 type ProxyConfig struct {
 	Local string
 	PAC   []PACConfig
+}
+
+func (cfg *ProxyConfig) findProxyByRequest(proto string, req *http.Request) (Proxy, string) {
+	var p Proxy
+	var proxyName string
+	for _, pac := range cfg.PAC {
+		if pac.Match(proto, req) {
+			p = getProxyByName(pac.Remote)
+			proxyName = pac.Remote
+			break
+		}
+
+	}
+	if nil == p {
+		log.Printf("No proxy found.")
+	}
+	return p, proxyName
 }
 
 type DirectConfig struct {
@@ -155,16 +202,12 @@ type EncryptConfig struct {
 	Key    string
 }
 
-type UDPGWConfig struct {
-	VirtualAddr string
-}
-
 type LocalConfig struct {
 	Log       []string
 	Encrypt   EncryptConfig
 	UserAgent string
 	Auth      string
-	UDPGW     UDPGWConfig
+	UDPGWAddr string
 	Proxy     []ProxyConfig
 	PAAS      PAASConfig
 	GAE       GAEConfig

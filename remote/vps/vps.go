@@ -67,12 +67,19 @@ func serveProxyConn(conn net.Conn) {
 			if nil == queue && len(ctx.User) > 0 && ctx.ConnIndex >= 0 {
 				queue = remote.GetEventQueue(ctx.ConnId, true)
 				go func() {
+					var lastEventTime time.Time
 					for !connClosed {
 						ev, err := queue.Peek(1 * time.Millisecond)
 						if nil != err {
-							continue
+							if lastEventTime.Add(5 * time.Second).Before(time.Now()) {
+								ev = &event.HeartBeatEvent{}
+							} else {
+								continue
+							}
 						}
+
 						err = writeEvent(ev)
+						lastEventTime = time.Now()
 						if nil != err {
 							log.Printf("TCP write error:%v", err)
 							conn.Close()

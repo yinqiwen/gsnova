@@ -18,8 +18,9 @@ import (
 
 type directChannel struct {
 	sid            uint32
-	httpsProxyConn bool
 	conn           net.Conn
+	httpsProxyConn bool
+	udpProxyConn   bool
 }
 
 func (tc *directChannel) Open(iv uint64) error {
@@ -60,23 +61,32 @@ func (tc *directChannel) Write(p []byte) (n int, err error) {
 }
 
 func (d *directChannel) read() {
+	defer d.Close()
 	for {
 		c := d.conn
 		if nil == c {
 			return
 		}
-		c.SetReadDeadline(time.Now().Add(10 * time.Second))
-		b := make([]byte, 8192)
+		c.SetReadDeadline(time.Now().Add(5 * time.Second))
+		b := make([]byte, 1500)
 		n, err := c.Read(b)
 		if n > 0 {
-			ev := &event.TCPChunkEvent{Content: b[0:n]}
+			var ev event.Event
+			if !d.udpProxyConn {
+				ev = &event.TCPChunkEvent{Content: b[0:n]}
+			} else {
+				ev = &event.UDPEvent{Content: b[0:n]}
+			}
+			//log.Printf("######recv %T", ev)
 			ev.SetId(d.sid)
 			proxy.HandleEvent(ev)
 		}
 		if nil != err {
-			closeEv := &event.TCPCloseEvent{}
-			closeEv.SetId(d.sid)
-			proxy.HandleEvent(closeEv)
+			if !d.udpProxyConn {
+				closeEv := &event.TCPCloseEvent{}
+				closeEv.SetId(d.sid)
+				proxy.HandleEvent(closeEv)
+			}
 			return
 		}
 	}
@@ -85,8 +95,12 @@ func (d *directChannel) read() {
 func newDirectChannel(ev event.Event, useTLS bool) (*directChannel, error) {
 	host := ""
 	port := ""
+	network := "tcp"
 	fromHttpsConnect := false
 	switch ev.(type) {
+	case *event.UDPEvent:
+		network = "udp"
+		host = ev.(*event.UDPEvent).Addr
 	case *event.TCPOpenEvent:
 		host = ev.(*event.TCPOpenEvent).Addr
 	case *event.HTTPRequestEvent:
@@ -126,15 +140,14 @@ func newDirectChannel(ev event.Event, useTLS bool) (*directChannel, error) {
 			}
 		}
 	}
-
-	c, err := netx.DialTimeout("tcp", addr, 5*time.Second)
-	log.Printf("Session:%d connect %s for %s", ev.GetId(), addr, host)
+	c, err := netx.DialTimeout(network, addr, 5*time.Second)
+	log.Printf("Session:%d connect %s:%s for %s %T", ev.GetId(), network, addr, host, c)
 	if nil != err {
 		log.Printf("Failed to connect %s for %s with error:%v", addr, host, err)
 		return nil, err
 	}
 
-	d := &directChannel{ev.GetId(), fromHttpsConnect, c}
+	d := &directChannel{ev.GetId(), c, fromHttpsConnect, network == "udp"}
 	if useTLS {
 		tlcfg := &tls.Config{}
 		tlcfg.InsecureSkipVerify = true
@@ -174,6 +187,7 @@ func (p *DirectProxy) Serve(session *proxy.ProxySession, ev event.Event) error {
 		switch ev.(type) {
 		case *event.TCPOpenEvent:
 		case *event.HTTPRequestEvent:
+		case *event.UDPEvent:
 		default:
 			return fmt.Errorf("Can NOT create direct channel by event:%T", ev)
 		}
@@ -195,7 +209,7 @@ func (p *DirectProxy) Serve(session *proxy.ProxySession, ev event.Event) error {
 	}
 	switch ev.(type) {
 	case *event.UDPEvent:
-		session.Remote.Write(ev)
+		session.Remote.WriteRaw(ev.(*event.UDPEvent).Content)
 	case *event.TCPCloseEvent:
 		session.Remote.Close()
 	case *event.TCPOpenEvent:

@@ -33,6 +33,7 @@ type RemoteChannel struct {
 	DirectIO      bool
 	WriteJoinAuth bool
 	OpenJoinAuth  bool
+	HeartBeat     bool
 	C             RemoteProxyChannel
 
 	connSendedEvents uint32
@@ -61,6 +62,9 @@ func (rc *RemoteChannel) Init() error {
 		rc.wch = make(chan event.Event, 5)
 		go rc.processWrite()
 		go rc.processRead()
+	}
+	if rc.HeartBeat {
+		go rc.heartbeat()
 	}
 
 	start := time.Now()
@@ -91,6 +95,18 @@ func (rc *RemoteChannel) Close() {
 func (rc *RemoteChannel) Stop() {
 	rc.running = false
 	rc.Close()
+}
+
+func (rc *RemoteChannel) heartbeat() {
+	ticker := time.NewTicker(5 * time.Second)
+	for rc.running {
+		select {
+		case <-ticker.C:
+			if !rc.C.Closed() {
+				rc.Write(&event.HeartBeatEvent{})
+			}
+		}
+	}
 }
 
 func (rc *RemoteChannel) processWrite() {

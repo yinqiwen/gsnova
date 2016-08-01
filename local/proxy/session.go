@@ -77,7 +77,6 @@ func getProxySessionSize() int {
 }
 
 func HandleEvent(ev event.Event) error {
-
 	session := getProxySession(ev.GetId())
 	if nil == session {
 		switch ev.(type) {
