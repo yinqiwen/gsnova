@@ -64,6 +64,7 @@ func httpInvoke(w http.ResponseWriter, r *http.Request) {
 					queue.DiscardPeeks()
 				}
 			}
+			remote.ReleaseEventQueue(queue)
 		}
 	}
 }

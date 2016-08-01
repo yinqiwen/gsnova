@@ -95,6 +95,7 @@ func serveProxyConn(conn net.Conn) {
 							queue.DiscardPeeks()
 						}
 					}
+					remote.ReleaseEventQueue(queue)
 				}()
 			}
 		}

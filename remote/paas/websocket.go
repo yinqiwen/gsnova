@@ -85,6 +85,7 @@ func websocketInvoke(w http.ResponseWriter, r *http.Request) {
 								queue.DiscardPeeks()
 							}
 						}
+						remote.ReleaseEventQueue(queue)
 					}()
 				}
 			}
