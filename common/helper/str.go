@@ -4,11 +4,27 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
+	"math/rand"
 	"net/http"
 	"os"
 	"regexp"
 	"strings"
+	"time"
 )
+
+func init() {
+	rand.Seed(time.Now().UnixNano())
+}
+
+var letterRunes = []byte("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+
+func RandAsciiString(n int) string {
+	b := make([]byte, n)
+	for i := range b {
+		b[i] = letterRunes[rand.Intn(len(letterRunes))]
+	}
+	return string(b)
+}
 
 func GetRequestURLString(req *http.Request) string {
 	if nil == req {

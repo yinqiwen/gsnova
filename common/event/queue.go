@@ -13,7 +13,7 @@ var EventWriteTimeout = errors.New("EventQueue write timeout")
 type EventQueue struct {
 	closed bool
 	mutex  sync.Mutex
-	peek   Event
+	peeks  []Event
 	queue  chan Event
 }
 
@@ -38,29 +38,61 @@ func (q *EventQueue) Close() {
 	}
 }
 
-func (q *EventQueue) Peek(timeout time.Duration) (Event, error) {
-	q.mutex.Lock()
-	defer q.mutex.Unlock()
-	if nil != q.peek {
-		return q.peek, nil
+func (q *EventQueue) peek(timeout time.Duration) (Event, error) {
+	if len(q.peeks) > 0 {
+		return q.peeks[0], nil
 	}
 	select {
 	case ev := <-q.queue:
 		if nil == ev {
 			return nil, io.EOF
 		}
-		q.peek = ev
+		q.peeks = []Event{ev}
 		return ev, nil
 	case <-time.After(timeout):
 		return nil, EventReadTimeout
 	}
 }
+
+func (q *EventQueue) Peek(timeout time.Duration) (Event, error) {
+	q.mutex.Lock()
+	defer q.mutex.Unlock()
+	return q.peek(timeout)
+}
+
+func (q *EventQueue) PeekMulti(timeout time.Duration) ([]Event, error) {
+	q.mutex.Lock()
+	defer q.mutex.Unlock()
+	if len(q.peeks) > 0 {
+		return q.peeks, nil
+	}
+	if len(q.queue) > 0 {
+		for len(q.queue) > 0 && len(q.peeks) < 10 {
+			ev := <-q.queue
+			q.peeks = append(q.peeks, ev)
+		}
+		return q.peeks, nil
+	} else {
+		_, err := q.peek(timeout)
+		return q.peeks, err
+	}
+}
+
+func (q *EventQueue) DiscardPeeks() {
+	q.mutex.Lock()
+	defer q.mutex.Unlock()
+	q.peeks = nil
+}
+
 func (q *EventQueue) ReadPeek() Event {
 	q.mutex.Lock()
 	defer q.mutex.Unlock()
-	ev := q.peek
-	q.peek = nil
-	return ev
+	if len(q.peeks) > 0 {
+		ev := q.peeks[0]
+		q.peeks = q.peeks[1:]
+		return ev
+	}
+	return nil
 }
 
 func (q *EventQueue) Read(timeout time.Duration) (Event, error) {
