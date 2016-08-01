@@ -20,6 +20,12 @@ var queueMutex sync.Mutex
 var freeQueueTable = make(map[*ConnEventQueue]bool)
 var freeQueueMutex sync.Mutex
 
+func GetEventQueueSize() int {
+	queueMutex.Lock()
+	defer queueMutex.Unlock()
+	return len(queueTable)
+}
+
 func removeExpiredConnEventQueue(id ConnId) {
 	queueMutex.Lock()
 	defer queueMutex.Unlock()

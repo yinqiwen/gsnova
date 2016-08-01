@@ -130,6 +130,7 @@ func startLocalProxyServer(addr string) error {
 
 func dumpServerStat(args []string, c io.Writer) error {
 	fmt.Fprintf(c, "NumSession:    %d\n", remote.GetSessionTableSize())
+	fmt.Fprintf(c, "NumEventQueue: %d\n", remote.GetEventQueueSize())
 	fmt.Fprintf(c, "TotalUserConn: %d\n", totalConn)
 	return nil
 }
