@@ -71,7 +71,7 @@ func serveProxyConn(conn net.Conn) {
 					for !connClosed {
 						ev, err := queue.Peek(1 * time.Millisecond)
 						if nil != err {
-							if lastEventTime.Add(5 * time.Second).Before(time.Now()) {
+							if GetSessionTableSize() > 0 && lastEventTime.Add(5*time.Second).Before(time.Now()) {
 								ev = &event.HeartBeatEvent{}
 							} else {
 								continue

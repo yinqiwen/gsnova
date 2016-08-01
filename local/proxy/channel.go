@@ -102,7 +102,7 @@ func (rc *RemoteChannel) heartbeat() {
 	for rc.running {
 		select {
 		case <-ticker.C:
-			if !rc.C.Closed() {
+			if !rc.C.Closed() && getProxySessionSize() > 0 {
 				rc.Write(&event.HeartBeatEvent{})
 			}
 		}
@@ -178,7 +178,7 @@ func (rc *RemoteChannel) processRead() {
 		conn := rc.C
 		if conn.Closed() {
 			if getProxySessionSize() == 0 {
-				time.Sleep(10 * time.Second)
+				time.Sleep(10 * time.Millisecond)
 				continue
 			}
 			rc.generateIV()
