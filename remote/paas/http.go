@@ -24,15 +24,22 @@ func readRequestBuffer(r *http.Request) *bytes.Buffer {
 func httpInvoke(w http.ResponseWriter, r *http.Request) {
 	ctx := remote.NewConnContext()
 	writeEvents := func(evs []event.Event) error {
-		var buf bytes.Buffer
-		for _, ev := range evs {
-			event.EncryptEvent(&buf, ev, ctx.IV)
+		if len(evs) > 0 {
+			var buf bytes.Buffer
+			for _, ev := range evs {
+				if nil != ev {
+					event.EncryptEvent(&buf, ev, ctx.IV)
+				}
+			}
+			if buf.Len() > 0 {
+				_, err := w.Write(buf.Bytes())
+				if nil == err {
+					w.(http.Flusher).Flush()
+				}
+				return err
+			}
 		}
-		_, err := w.Write(buf.Bytes())
-		if nil == err {
-			w.(http.Flusher).Flush()
-		}
-		return err
+		return nil
 	}
 	reqbuf := readRequestBuffer(r)
 
@@ -52,7 +59,7 @@ func httpInvoke(w http.ResponseWriter, r *http.Request) {
 					log.Printf("Stop puller after 10s for conn:%d", ctx.ConnIndex)
 					break
 				}
-				evs, err := queue.PeekMulti(1 * time.Millisecond)
+				evs, err := queue.PeekMulti(2, 1*time.Millisecond)
 				if nil != err {
 					continue
 				}

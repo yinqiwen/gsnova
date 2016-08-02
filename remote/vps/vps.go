@@ -37,13 +37,23 @@ func serveProxyConn(conn net.Conn) {
 	// 	return err
 	// }
 	writeEvents := func(evs []event.Event) error {
-		var buf bytes.Buffer
-		for _, ev := range evs {
-			event.EncryptEvent(&buf, ev, ctx.IV)
+		if len(evs) > 0 {
+			var buf bytes.Buffer
+			for _, ev := range evs {
+				if nil != ev {
+					event.EncryptEvent(&buf, ev, ctx.IV)
+				}
+			}
+			if buf.Len() > 0 {
+				conn.SetWriteDeadline(time.Now().Add(15 * time.Second))
+				_, err := conn.Write(buf.Bytes())
+				return err
+			}
+			return nil
+
+		} else {
+			return nil
 		}
-		conn.SetWriteDeadline(time.Now().Add(15 * time.Second))
-		_, err := conn.Write(buf.Bytes())
-		return err
 	}
 
 	var buf bytes.Buffer
@@ -77,7 +87,7 @@ func serveProxyConn(conn net.Conn) {
 				go func() {
 					var lastEventTime time.Time
 					for !connClosed {
-						evs, err := queue.PeekMulti(1 * time.Millisecond)
+						evs, err := queue.PeekMulti(10, 1*time.Millisecond)
 						if nil != err {
 							if remote.GetSessionTableSize() > 0 && lastEventTime.Add(5*time.Second).Before(time.Now()) {
 								evs = []event.Event{&event.HeartBeatEvent{}}
@@ -132,6 +142,7 @@ func startLocalProxyServer(addr string) error {
 func dumpServerStat(args []string, c io.Writer) error {
 	fmt.Fprintf(c, "NumSession:    %d\n", remote.GetSessionTableSize())
 	fmt.Fprintf(c, "NumEventQueue: %d\n", remote.GetEventQueueSize())
+	fmt.Fprintf(c, "PassiveCloseSetSize: %d\n", remote.GetPassiveCloseSetSize())
 	fmt.Fprintf(c, "TotalUserConn: %d\n", totalConn)
 	return nil
 }

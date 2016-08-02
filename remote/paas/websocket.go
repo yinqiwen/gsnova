@@ -34,11 +34,19 @@ func websocketInvoke(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx := remote.NewConnContext()
 	writeEvents := func(evs []event.Event) error {
-		var buf bytes.Buffer
-		for _, ev := range evs {
-			event.EncryptEvent(&buf, ev, ctx.IV)
+		if len(evs) > 0 {
+			var buf bytes.Buffer
+			for _, ev := range evs {
+				if nil != ev {
+					event.EncryptEvent(&buf, ev, ctx.IV)
+				}
+			}
+			if buf.Len() > 0 {
+				return ws.WriteMessage(websocket.BinaryMessage, buf.Bytes())
+			}
+			return nil
 		}
-		return ws.WriteMessage(websocket.BinaryMessage, buf.Bytes())
+		return nil
 	}
 	//log.Printf("###Recv websocket connection")
 	buf := bytes.NewBuffer(nil)
@@ -73,7 +81,7 @@ func websocketInvoke(w http.ResponseWriter, r *http.Request) {
 					queue = remote.GetEventQueue(ctx.ConnId, true)
 					go func() {
 						for !wsClosed {
-							evs, err := queue.PeekMulti(1 * time.Millisecond)
+							evs, err := queue.PeekMulti(2, 1*time.Millisecond)
 							if nil != err {
 								continue
 							}

@@ -12,6 +12,26 @@ type ConnEventQueue struct {
 	event.EventQueue
 	id         ConnId
 	activeTime time.Time
+	acuired    bool
+}
+
+func (q *ConnEventQueue) PeekMulti(n int, timeout time.Duration) ([]event.Event, error) {
+	evs, err := q.EventQueue.PeekMulti(n, timeout)
+	if nil != err {
+		return evs, err
+	}
+	for i, ev := range evs {
+		var sid SessionId
+		sid.ConnId = q.id
+		sid.Id = ev.GetId()
+		if isSessionPassiveClosed(sid) {
+			evs[i] = nil
+		}
+		if _, ok := ev.(*event.TCPCloseEvent); ok {
+			updatePassiveCloseSet(sid, false)
+		}
+	}
+	return evs, nil
 }
 
 var queueTable map[ConnId]*ConnEventQueue = make(map[ConnId]*ConnEventQueue)
@@ -54,6 +74,7 @@ func getEventQueue(cid ConnId, createIfMissing bool) *ConnEventQueue {
 func GetEventQueue(cid ConnId, createIfMissing bool) *ConnEventQueue {
 	q := getEventQueue(cid, createIfMissing)
 	if nil != q {
+		q.acuired = true
 		freeQueueMutex.Lock()
 		delete(freeQueueTable, q)
 		freeQueueMutex.Unlock()
@@ -63,6 +84,7 @@ func GetEventQueue(cid ConnId, createIfMissing bool) *ConnEventQueue {
 
 func ReleaseEventQueue(q *ConnEventQueue) {
 	if nil != q {
+		q.acuired = false
 		q.activeTime = time.Now()
 		freeQueueMutex.Lock()
 		freeQueueTable[q] = true

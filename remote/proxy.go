@@ -16,6 +16,32 @@ import (
 var proxySessionMap map[SessionId]*ProxySession = make(map[SessionId]*ProxySession)
 var sessionMutex sync.Mutex
 
+var passiveCloseSet = make(map[SessionId]bool)
+var passiveCloseSetLock sync.Mutex
+
+func GetPassiveCloseSetSize() int {
+	passiveCloseSetLock.Lock()
+	defer passiveCloseSetLock.Unlock()
+	return len(passiveCloseSet)
+}
+
+func updatePassiveCloseSet(sid SessionId, addOrRemove bool) {
+	passiveCloseSetLock.Lock()
+	if addOrRemove {
+		passiveCloseSet[sid] = true
+	} else {
+		delete(passiveCloseSet, sid)
+	}
+
+	passiveCloseSetLock.Unlock()
+}
+func isSessionPassiveClosed(id SessionId) bool {
+	passiveCloseSetLock.Lock()
+	defer passiveCloseSetLock.Unlock()
+	_, ok := passiveCloseSet[id]
+	return ok
+}
+
 type ConnId struct {
 	User      string
 	ConnIndex int
@@ -44,8 +70,6 @@ type ProxySession struct {
 	addr       string
 	network    string
 	ch         chan event.Event
-
-	closeByRemote bool
 }
 
 func GetSessionTableSize() int {
@@ -122,8 +146,12 @@ func (p *ProxySession) publish(ev event.Event) {
 		if nil != queue {
 			err := queue.Publish(ev, 10*time.Second)
 			if nil != err {
-				log.Printf("Session[%s:%d] write event error:%v.", p.Id.User, p.Id.Id, err)
-				p.forceClose()
+				if !queue.acuired {
+					log.Printf("Session[%s:%d] write event error:%v.", p.Id.User, p.Id.Id, err)
+					p.forceClose()
+				} else {
+					continue
+				}
 			}
 			return
 		}
@@ -189,7 +217,6 @@ func (p *ProxySession) open(network, to string) error {
 	}
 	p.conn = c
 	p.addr = to
-	p.closeByRemote = false
 	go p.readNetwork()
 	return nil
 }
@@ -216,7 +243,7 @@ func (p *ProxySession) readNetwork() error {
 		conn.SetReadDeadline(time.Now().Add(10 * time.Second))
 		b := make([]byte, 8192)
 		n, err := conn.Read(b)
-		if n > 0 && !p.closeByRemote {
+		if n > 0 {
 			var ev event.Event
 			if p.network == "tcp" {
 				ev = &event.TCPChunkEvent{Content: b[0:n]}
@@ -249,6 +276,9 @@ func (p *ProxySession) handle(ev event.Event) error {
 	case *event.TCPOpenEvent:
 		return p.open("tcp", ev.(*event.TCPOpenEvent).Addr)
 	case *event.TCPCloseEvent:
+		updatePassiveCloseSet(p.Id, true)
+		ev := &event.TCPCloseEvent{}
+		p.publish(ev)
 		p.close()
 		removeProxySession(p)
 	case *event.TCPChunkEvent:
@@ -314,19 +344,13 @@ func handleEvent(ev event.Event, ctx *ConnContext) (event.Event, error) {
 		//do nothing
 	default:
 		session := getProxySessionByEvent(ctx.ConnId, ev)
-		if _, ok := ev.(*event.TCPCloseEvent); ok {
-			if nil != session {
-				session.closeByRemote = true
-			}
+		if nil != session {
+			session.offer(ev)
 		} else {
-			if nil == session {
+			if _, ok := ev.(*event.TCPCloseEvent); !ok {
 				log.Printf("No session:%d found for event %T", ev.GetId(), ev)
 			}
 		}
-		if nil != session {
-			session.offer(ev)
-		}
-
 	}
 	return nil, nil
 }
