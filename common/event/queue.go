@@ -60,14 +60,14 @@ func (q *EventQueue) Peek(timeout time.Duration) (Event, error) {
 	return q.peek(timeout)
 }
 
-func (q *EventQueue) PeekMulti(timeout time.Duration) ([]Event, error) {
+func (q *EventQueue) PeekMulti(n int, timeout time.Duration) ([]Event, error) {
 	q.mutex.Lock()
 	defer q.mutex.Unlock()
 	if len(q.peeks) > 0 {
 		return q.peeks, nil
 	}
 	if len(q.queue) > 0 {
-		for len(q.queue) > 0 && len(q.peeks) < 10 {
+		for len(q.queue) > 0 && len(q.peeks) < n {
 			ev := <-q.queue
 			q.peeks = append(q.peeks, ev)
 		}
