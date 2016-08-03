@@ -202,7 +202,6 @@ func handleUDPGatewayConn(conn net.Conn, proxy ProxyConfig) {
 				}
 				return
 			}
-			log.Printf("####Recv event:%T", ev)
 			switch ev.(type) {
 			case *event.UDPEvent:
 				cid, exist := getCid(ev.GetId())
@@ -218,11 +217,11 @@ func handleUDPGatewayConn(conn net.Conn, proxy ProxyConfig) {
 						}
 						err = packet.write(conn)
 						if nil != err {
-							log.Printf("###write udp error %v", err)
+							//log.Printf("###write udp error %v", err)
 							connClosed = true
 							conn.Close()
 						} else {
-							log.Printf("###UDP Recv after %v", time.Now().Sub(usession.activeTime))
+							//log.Printf("###UDP Recv after %v", time.Now().Sub(usession.activeTime))
 							updateUdpSession(usession)
 						}
 						continue
@@ -252,23 +251,36 @@ func handleUDPGatewayConn(conn net.Conn, proxy ProxyConfig) {
 		if len(packet.content) > 0 {
 			//log.Printf("###Recv udpgw packet to %s:%d", packet.addr.ip.String(), packet.addr.port)
 		} else {
-			log.Printf("###Recv udpgw control %d %d", packet.flags, packet.conid)
-			continue
-		}
 
-		var p Proxy
-		if packet.addr.port == 53 {
-			p, _ = proxy.findProxyByRequest("dns", nil)
-			// msg := new(dns.Msg)
-			// msg.Unpack(packet.content)
-			// log.Printf("###Recv dns %s", msg.String())
-		} else {
-			p, _ = proxy.findProxyByRequest("udp", nil)
+			continue
 		}
 		usession := getUDPSession(packet.conid, queue, true)
 		usession.addr = packet.addr
 		updateUdpSession(usession)
 		usession.activeTime = time.Now()
+		var p Proxy
+		if packet.addr.port == 53 {
+			p = proxy.findProxyByRequest("dns", packet.addr.ip.String(), nil)
+			if p.Name() == "Direct" {
+				go func(sid uint32, dnsReq []byte) {
+					res, derr := dnsQueryRaw(dnsReq)
+					if nil != derr {
+						log.Printf("DNS query error:%v", derr)
+					} else {
+						var udpEvent event.UDPEvent
+						udpEvent.Content = res
+						udpEvent.SetId(usession.session.id)
+						HandleEvent(&udpEvent)
+					}
+				}(usession.session.id, packet.content)
+				continue
+			}
+		} else {
+			log.Printf("###Recv non dns udp to %s:%d", packet.addr.ip.String(), packet.addr.port)
+			p = proxy.findProxyByRequest("udp", packet.addr.ip.String(), nil)
+
+		}
+
 		ev := &event.UDPEvent{Content: packet.content, Addr: packet.address()}
 		ev.SetId(usession.session.id)
 		if nil != p {

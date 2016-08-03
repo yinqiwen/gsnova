@@ -26,7 +26,6 @@ func getSessionId() uint32 {
 
 func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 	var p Proxy
-	proxyName := ""
 	protocol := "tcp"
 	sid := getSessionId()
 	queue := event.NewEventQueue()
@@ -40,13 +39,20 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 	socksConn, bufconn, err := socks.NewSocksConn(conn)
 
 	socksInitProxy := func(addr string) {
-		creq, _ := http.NewRequest("Connect", addr, nil)
-		p, proxyName = proxy.findProxyByRequest(protocol, creq)
+		if socksTargetHost == "127.0.0.1" {
+			proxyName := "Direct"
+			p = getProxyByName(proxyName)
+		} else {
+			creq, _ := http.NewRequest("Connect", addr, nil)
+			p = proxy.findProxyByRequest(protocol, socksTargetHost, creq)
+		}
 		if nil == p {
 			conn.Close()
 			return
 		}
-
+		if p.Name() == "Direct" && net.ParseIP(socksTargetHost) != nil {
+			addr = net.JoinHostPort(socksTargetHost, socksTargetPort)
+		}
 		tcpOpen := &event.TCPOpenEvent{}
 		tcpOpen.SetId(sid)
 		tcpOpen.Addr = addr
@@ -54,7 +60,7 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 	}
 
 	if nil == err {
-		log.Printf("###Local proxy recv %s proxy conn to %s", socksConn.Version(), socksConn.Req.Target)
+		log.Printf("Local proxy recv %s proxy conn to %s", socksConn.Version(), socksConn.Req.Target)
 		socksConn.Grant(&net.TCPAddr{
 			IP: net.ParseIP("0.0.0.0"), Port: 0})
 
@@ -63,7 +69,7 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 			handleUDPGatewayConn(conn, proxy)
 			return
 		}
-		log.Printf("Handle tcp conn for %v", socksConn.Req.Target)
+		//log.Printf("Handle tcp conn for %v", socksConn.Req.Target)
 		conn = socksConn
 		session.Hijacked = true
 
@@ -72,16 +78,17 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 			log.Printf("Invalid socks target addresss:%s with reason %v", socksConn.Req.Target, err)
 			return
 		}
-		//this is a ip from local dns query
-		if net.ParseIP(socksTargetHost) != nil {
+		if socksTargetHost != "127.0.0.1" && net.ParseIP(socksTargetHost) != nil {
+			//this is a ip from local dns query
 			tryRemoteResolve = true
 			if socksTargetPort == "80" {
 				//we can parse http request directly
 				session.Hijacked = false
 			}
 		} else {
-			socksInitProxy(socksConn.Req.Target)
+			socksInitProxy(net.JoinHostPort(socksTargetHost, socksTargetPort))
 		}
+
 	} else {
 		if nil == bufconn {
 			conn.Close()
@@ -151,7 +158,8 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 				} else {
 					sniSniffed = true
 					chunkContent = sniChunk
-					log.Printf("####SNI = %v", sni)
+					log.Printf("####SNI = %v:%s   %s", sni, socksTargetPort, net.JoinHostPort(sni, socksTargetPort))
+
 					socksInitProxy(net.JoinHostPort(sni, socksTargetPort))
 				}
 			}
@@ -170,7 +178,7 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 			break
 		}
 		if nil == p {
-			p, proxyName = proxy.findProxyByRequest("http", req)
+			p = proxy.findProxyByRequest("http", socksTargetHost, req)
 			if nil == p {
 				conn.Close()
 				connClosed = true
@@ -189,7 +197,7 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 				}
 			}
 		}
-		log.Printf("[%s]Session:%d request:%s %v", proxyName, sid, req.Method, reqUrl)
+		log.Printf("[%s]Session:%d request:%s %v", p.Name(), sid, req.Method, reqUrl)
 
 		req.Header.Del("Proxy-Connection")
 		ev := event.NewHTTPRequestEvent(req)
@@ -210,6 +218,13 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 			}
 		}
 
+		if tryRemoteResolve && p.Name() == "Direct" && socksTargetHost != "" && net.ParseIP(socksTargetHost) != nil {
+			tcpOpen := &event.TCPOpenEvent{}
+			tcpOpen.SetId(sid)
+			tcpOpen.Addr = net.JoinHostPort(socksTargetHost, socksTargetPort)
+			p.Serve(session, tcpOpen)
+		}
+
 		p.Serve(session, ev)
 		if maxBody < 0 && req.ContentLength != 0 {
 			for nil != req.Body {
@@ -228,8 +243,9 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 			conn.Write([]byte("HTTP/1.1 200 Connection established\r\n\r\n"))
 		}
 
-		//do not parse http rquest for next process
-		if strings.EqualFold(req.Method, "Get") && req.Header.Get("Upgrade") == "websocket" {
+		//do not parse http rquest next process,since it would upgrade to websocket/spdy/http2
+		if len(req.Header.Get("Upgrade")) > 0 {
+			log.Printf("Session:%d upgrade protocol to %s", sid, req.Header.Get("Upgrade"))
 			session.Hijacked = true
 		}
 		if session.SSLHijacked {
@@ -251,6 +267,7 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 		p.Serve(session, tcpclose)
 	}
 	connClosed = true
+	conn.Close()
 }
 
 func startLocalProxyServer(proxy ProxyConfig) (*net.TCPListener, error) {

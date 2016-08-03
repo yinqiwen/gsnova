@@ -2,7 +2,11 @@ package helper
 
 import (
 	"errors"
+	"fmt"
 	"log"
+	"math"
+	"strconv"
+	"strings"
 )
 
 var ErrTLSIncomplete = errors.New("TLS header incomplete")
@@ -133,5 +137,40 @@ func parseServerNameExtension(data []byte) (string, error) {
 		return "", ErrTLSClientHello
 	}
 	return "", ErrNoSNI
+}
 
+func Long2IPv4(i uint64) string {
+	return fmt.Sprintf("%d.%d.%d.%d", (i>>24)&0xFF, (i>>16)&0xFF, (i>>8)&0xFF, i&0xFF)
+}
+
+func IPv42Int(ip string) (int64, error) {
+	addrArray := strings.Split(ip, ".")
+	var num int64
+	num = 0
+	for i := 0; i < len(addrArray); i++ {
+		power := 3 - i
+		if v, err := strconv.Atoi(addrArray[i]); nil != err {
+			return -1, err
+		} else {
+			num += (int64(v) % 256 * int64(math.Pow(float64(256), float64(power))))
+		}
+	}
+	return num, nil
+}
+
+func IsPrivateIP(ip string) bool {
+	if strings.EqualFold(ip, "localhost") {
+		return true
+	}
+	value, err := IPv42Int(ip)
+	if nil != err {
+		return false
+	}
+	if strings.HasPrefix(ip, "127.0") {
+		return true
+	}
+	if (value >= 0x0A000000 && value <= 0x0AFFFFFF) || (value >= 0xAC100000 && value <= 0xAC1FFFFF) || (value >= 0xC0A80000 && value <= 0xC0A8FFFF) {
+		return true
+	}
+	return false
 }

@@ -170,6 +170,14 @@ type DirectProxy struct {
 	useTLS bool
 }
 
+func (p *DirectProxy) Name() string {
+	if p.useTLS {
+		return "TLSDirect"
+	} else {
+		return "Direct"
+	}
+}
+
 func (p *DirectProxy) Init() error {
 	return nil
 }
@@ -239,6 +247,6 @@ var tlsDirectProy DirectProxy
 
 func init() {
 	tlsDirectProy.useTLS = true
-	proxy.RegisterProxy("Direct", &directProxy)
-	proxy.RegisterProxy("TLSDirect", &tlsDirectProy)
+	proxy.RegisterProxy(&directProxy)
+	proxy.RegisterProxy(&tlsDirectProy)
 }

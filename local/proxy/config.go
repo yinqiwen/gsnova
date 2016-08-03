@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"log"
+	"net"
 	"net/http"
 	"regexp"
 	"strings"
@@ -89,7 +90,7 @@ func (pac *PACConfig) matchProtocol(protocol string) bool {
 	return false
 }
 
-func (pac *PACConfig) matchRules(req *http.Request) bool {
+func (pac *PACConfig) matchRules(ip string, req *http.Request) bool {
 	if len(pac.Rule) == 0 {
 		return true
 	}
@@ -111,6 +112,18 @@ func (pac *PACConfig) matchRules(req *http.Request) bool {
 			} else {
 				log.Printf("NIL GFWList object")
 			}
+		} else if strings.EqualFold(rule, "IsCNIP") {
+			if len(ip) == 0 {
+				ok = false
+			} else {
+				if net.ParseIP(ip) == nil {
+					ok = false
+				} else {
+					_, err := cnIPRange.FindCountry(ip)
+					ok = (nil == err)
+				}
+			}
+			log.Printf("ip:%s is CNIP:%v", ip, ok)
 		}
 		if not {
 			ok = ok != true
@@ -153,12 +166,12 @@ func NewRegex(rules []string) ([]*regexp.Regexp, error) {
 	return regexs, nil
 }
 
-func (pac *PACConfig) Match(protocol string, req *http.Request) bool {
+func (pac *PACConfig) Match(protocol string, ip string, req *http.Request) bool {
 	ret := pac.matchProtocol(protocol)
 	if !ret {
 		return false
 	}
-	ret = pac.matchRules(req)
+	ret = pac.matchRules(ip, req)
 	if !ret {
 		return false
 	}
@@ -176,13 +189,11 @@ type ProxyConfig struct {
 	PAC   []PACConfig
 }
 
-func (cfg *ProxyConfig) findProxyByRequest(proto string, req *http.Request) (Proxy, string) {
+func (cfg *ProxyConfig) findProxyByRequest(proto string, ip string, req *http.Request) Proxy {
 	var p Proxy
-	var proxyName string
 	for _, pac := range cfg.PAC {
-		if pac.Match(proto, req) {
+		if pac.Match(proto, ip, req) {
 			p = getProxyByName(pac.Remote)
-			proxyName = pac.Remote
 			break
 		}
 
@@ -190,7 +201,7 @@ func (cfg *ProxyConfig) findProxyByRequest(proto string, req *http.Request) (Pro
 	if nil == p {
 		log.Printf("No proxy found.")
 	}
-	return p, proxyName
+	return p
 }
 
 type DirectConfig struct {
@@ -200,6 +211,12 @@ type DirectConfig struct {
 type EncryptConfig struct {
 	Method string
 	Key    string
+}
+
+type LocalDNSConfig struct {
+	Listen     string
+	TrustedDNS []string
+	TCPConnect bool
 }
 
 type LocalConfig struct {
@@ -212,6 +229,7 @@ type LocalConfig struct {
 	PAAS      PAASConfig
 	GAE       GAEConfig
 	VPS       VPSConfig
+	LocalDNS  LocalDNSConfig
 	Direct    DirectConfig
 }
 

@@ -13,6 +13,10 @@ type VPSProxy struct {
 	cs *proxy.RemoteChannelTable
 }
 
+func (p *VPSProxy) Name() string {
+	return "VPS"
+}
+
 func (p *VPSProxy) Destory() error {
 	p.cs.StopAll()
 	return nil
@@ -77,5 +81,5 @@ var myvps VPSProxy
 
 func init() {
 	myvps.cs = proxy.NewRemoteChannelTable()
-	proxy.RegisterProxy("VPS", &myvps)
+	proxy.RegisterProxy(&myvps)
 }

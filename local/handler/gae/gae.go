@@ -15,6 +15,10 @@ type GAEProxy struct {
 	injectRangeRegex []*regexp.Regexp
 }
 
+func (p *GAEProxy) Name() string {
+	return "GAE"
+}
+
 func (p *GAEProxy) Init() error {
 	if !proxy.GConf.GAE.Enable {
 		return nil
@@ -143,5 +147,5 @@ func init() {
 	initGAEClient()
 	mygae.cs = proxy.NewRemoteChannelTable()
 	mygae.Init()
-	proxy.RegisterProxy("GAE", &mygae)
+	proxy.RegisterProxy(&mygae)
 }

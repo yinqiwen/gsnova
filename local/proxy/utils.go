@@ -1,33 +1,39 @@
 package proxy
 
 import (
-	"log"
+	"io/ioutil"
 	"math/rand"
-	"net"
+	"strings"
 	"time"
 
 	"github.com/yinqiwen/gsnova/common/event"
+	"github.com/yinqiwen/gsnova/common/helper"
 )
 
-var currentMacAddress string
+var currentDeviceId string
+
+func getDeviceId() string {
+	if len(currentDeviceId) > 0 {
+		return currentDeviceId
+	}
+	deviceIdFile := proxyHome + "/.deviceid"
+	storedId, err := ioutil.ReadFile(deviceIdFile)
+	if nil == err && len(storedId) > 0 {
+		currentDeviceId = string(storedId)
+		currentDeviceId = strings.TrimSpace(currentDeviceId)
+		if len(currentDeviceId) > 0 {
+			return currentDeviceId
+		}
+	}
+	currentDeviceId = helper.RandAsciiString(32)
+	ioutil.WriteFile(deviceIdFile, []byte(currentDeviceId), 0660)
+	return currentDeviceId
+}
 
 func NewAuthEvent() *event.AuthEvent {
 	auth := &event.AuthEvent{}
 	auth.User = GConf.Auth
-	if len(currentMacAddress) == 0 {
-		interfaces, err := net.Interfaces()
-		if err != nil {
-			log.Printf("No interface found:%v", err)
-			return auth
-		}
-		for _, inter := range interfaces {
-			currentMacAddress = inter.HardwareAddr.String()
-			if len(currentMacAddress) > 0 {
-				break
-			}
-		}
-	}
-	auth.Mac = currentMacAddress
+	auth.Mac = getDeviceId()
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	auth.SetId(uint32(r.Int31()))
 	return auth

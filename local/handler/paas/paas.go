@@ -21,12 +21,24 @@ func paasDial(network, addr string) (net.Conn, error) {
 		host = hosts.GetHost(proxy.GConf.PAAS.SNIProxy)
 		addr = host + ":" + port
 	}
-	log.Printf("[PAAS]Connect %s:%s", host, port)
+	if net.ParseIP(host) == nil {
+		tcpaddr, err := netx.Resolve("tcp", addr)
+		if nil != err {
+			return nil, err
+		}
+		addr = tcpaddr.String()
+		//addr = net.JoinHostPort(host, port)
+	}
+	log.Printf("[PAAS]Connect %s", addr)
 	return netx.DialTimeout(network, addr, 3*time.Second)
 }
 
 type PaasProxy struct {
 	cs *proxy.RemoteChannelTable
+}
+
+func (p *PaasProxy) Name() string {
+	return "PAAS"
 }
 
 func newRemoteChannel(server string, idx int) (*proxy.RemoteChannel, error) {
@@ -109,10 +121,10 @@ func init() {
 		Dial:                  paasDial,
 		DisableCompression:    true,
 		MaxIdleConnsPerHost:   2 * int(proxy.GConf.PAAS.ConnsPerServer),
-		ResponseHeaderTimeout: 15 * time.Second,
+		ResponseHeaderTimeout: 30 * time.Second,
 	}
 	paasHttpClient = &http.Client{}
-	paasHttpClient.Timeout = 20 * time.Second
+	paasHttpClient.Timeout = 30 * time.Second
 	paasHttpClient.Transport = tr
-	proxy.RegisterProxy("PAAS", &mypaas)
+	proxy.RegisterProxy(&mypaas)
 }

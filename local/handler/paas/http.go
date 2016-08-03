@@ -104,6 +104,9 @@ func (hc *httpChannel) postURL(p []byte, u *url.URL) (n int, err error) {
 		req.Header.Set("User-Agent", proxy.GConf.UserAgent)
 	}
 	response, err := paasHttpClient.Do(req)
+	if nil != err || response.StatusCode != 200 { //try once more
+		response, err = paasHttpClient.Do(req)
+	}
 	if nil != err || response.StatusCode != 200 {
 		log.Printf("Failed to write data to PAAS:%s for reason:%v or res:%v", u.String(), err, response)
 		return 0, err

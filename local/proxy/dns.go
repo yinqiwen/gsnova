@@ -1,47 +1,63 @@
 package proxy
 
-// import (
-// 	"log"
-// 	"math/rand"
-// 	"time"
+import (
+	"log"
+	"math/rand"
+	"net"
+	"strings"
+	"time"
 
-// 	"github.com/miekg/dns"
-// )
+	"github.com/getlantern/netx"
+	"github.com/miekg/dns"
+)
 
-// func proxyDNS(w dns.ResponseWriter, r *dns.Msg) {
-// 	server := GConf.LocalDNS.DNS[rand.Intn(len(GConf.LocalDNS.DNS))] + ":53"
-// 	c, err := dns.Dial("udp", server)
-// 	if nil != err {
-// 		log.Printf("dns dial error %v", err)
-// 		return
-// 	}
-// 	defer c.Close()
-// 	start := time.Now()
-// 	c.WriteMsg(r)
+func dnsQuery(r *dns.Msg) (*dns.Msg, error) {
+	serverLen := len(GConf.LocalDNS.TrustedDNS)
+	network := "udp"
+	if GConf.LocalDNS.TCPConnect {
+		network = "tcp"
+	}
+	server := GConf.LocalDNS.TrustedDNS[rand.Intn(serverLen)]
+	if !strings.Contains(server, ":") {
+		server = net.JoinHostPort(server, "53")
+	}
+	log.Printf("DNS query to %s", server)
+	c, err := netx.DialTimeout(network, server, 3*time.Second)
+	if nil != err {
+		return nil, err
+	}
+	defer c.Close()
+	dnsConn := new(dns.Conn)
+	dnsConn.Conn = c
+	dnsConn.WriteMsg(r)
+	return dnsConn.ReadMsg()
+}
 
-// 	var dnsres *dns.Msg
-// 	count := 0
-// 	for {
-// 		c.SetReadDeadline(start.Add(500 * time.Millisecond))
-// 		res, err := c.ReadMsg()
-// 		if nil != err {
-// 			log.Printf("read1 dial error %v", err)
-// 			break
-// 		}
-// 		dnsres = res
-// 		count++
-// 		if time.Now().Sub(start) < 300*time.Millisecond {
-// 			continue
-// 		}
-// 		log.Printf("####%d res in %v", count, time.Now().Sub(start))
+func dnsQueryRaw(r []byte) ([]byte, error) {
+	req := new(dns.Msg)
+	req.Unpack(r)
+	res, err := dnsQuery(req)
+	if nil != err {
+		return nil, err
+	}
+	return res.Pack()
+}
 
-// 		break
-// 	}
-// 	if nil != dnsres {
-// 		w.WriteMsg(dnsres)
-// 	}
-// }
+func proxyDNS(w dns.ResponseWriter, r *dns.Msg) {
+	dnsres, err := dnsQuery(r)
+	if nil != err {
+		log.Printf("DNS query error:%v", err)
+		return
+	}
+	if nil != dnsres {
+		w.WriteMsg(dnsres)
+	}
+}
 
-// func startLocalDNS(addr string) error {
-// 	return dns.ListenAndServe(addr, "udp4", dns.HandlerFunc(proxyDNS))
-// }
+func startLocalDNS(addr string) error {
+	err := dns.ListenAndServe(addr, "udp", dns.HandlerFunc(proxyDNS))
+	if nil != err {
+		log.Printf("Failed to start dns server:%v", err)
+	}
+	return err
+}
