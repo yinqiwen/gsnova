@@ -109,6 +109,6 @@ func (q *EventQueue) Read(timeout time.Duration) (Event, error) {
 
 func NewEventQueue() *EventQueue {
 	q := new(EventQueue)
-	q.queue = make(chan Event, 100)
+	q.queue = make(chan Event, 10)
 	return q
 }

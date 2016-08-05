@@ -20,17 +20,17 @@ func (q *ConnEventQueue) PeekMulti(n int, timeout time.Duration) ([]event.Event,
 	if nil != err {
 		return evs, err
 	}
-	for i, ev := range evs {
-		var sid SessionId
-		sid.ConnId = q.id
-		sid.Id = ev.GetId()
-		if isSessionPassiveClosed(sid) {
-			evs[i] = nil
-		}
-		if _, ok := ev.(*event.TCPCloseEvent); ok {
-			updatePassiveCloseSet(sid, false)
-		}
-	}
+	// for i, ev := range evs {
+	// 	var sid SessionId
+	// 	sid.ConnId = q.id
+	// 	sid.Id = ev.GetId()
+	// 	if isSessionPassiveClosed(sid) {
+	// 		evs[i] = nil
+	// 	}
+	// 	if _, ok := ev.(*event.TCPCloseEvent); ok {
+	// 		updatePassiveCloseSet(sid, false)
+	// 	}
+	// }
 	return evs, nil
 }
 

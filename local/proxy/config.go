@@ -94,9 +94,7 @@ func (pac *PACConfig) matchRules(ip string, req *http.Request) bool {
 	if len(pac.Rule) == 0 {
 		return true
 	}
-	if nil == req {
-		return false
-	}
+
 	ok := true
 	for _, rule := range pac.Rule {
 		not := false
@@ -105,12 +103,16 @@ func (pac *PACConfig) matchRules(ip string, req *http.Request) bool {
 			rule = rule[1:]
 		}
 		if strings.EqualFold(rule, "InHosts") {
-			ok = pac.ruleInHosts(req)
+			if nil == req {
+				ok = false
+			} else {
+				ok = pac.ruleInHosts(req)
+			}
 		} else if strings.EqualFold(rule, "BlockedByGFW") {
-			if nil != mygfwlist {
+			if nil != mygfwlist && nil != req {
 				ok = mygfwlist.IsBlockedByGFW(req)
 			} else {
-				log.Printf("NIL GFWList object")
+				log.Printf("NIL GFWList object or request")
 			}
 		} else if strings.EqualFold(rule, "IsCNIP") {
 			if len(ip) == 0 {
@@ -124,6 +126,8 @@ func (pac *PACConfig) matchRules(ip string, req *http.Request) bool {
 				}
 			}
 			log.Printf("ip:%s is CNIP:%v", ip, ok)
+		} else {
+			log.Printf("###Invalid rule:%s", rule)
 		}
 		if not {
 			ok = ok != true

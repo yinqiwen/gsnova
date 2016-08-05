@@ -11,16 +11,21 @@ import (
 	"github.com/miekg/dns"
 )
 
-func dnsQuery(r *dns.Msg) (*dns.Msg, error) {
+func selectDNSServer() string {
 	serverLen := len(GConf.LocalDNS.TrustedDNS)
-	network := "udp"
-	if GConf.LocalDNS.TCPConnect {
-		network = "tcp"
-	}
 	server := GConf.LocalDNS.TrustedDNS[rand.Intn(serverLen)]
 	if !strings.Contains(server, ":") {
 		server = net.JoinHostPort(server, "53")
 	}
+	return server
+}
+
+func dnsQuery(r *dns.Msg) (*dns.Msg, error) {
+	network := "udp"
+	if GConf.LocalDNS.TCPConnect {
+		network = "tcp"
+	}
+	server := selectDNSServer()
 	log.Printf("DNS query to %s", server)
 	c, err := netx.DialTimeout(network, server, 3*time.Second)
 	if nil != err {

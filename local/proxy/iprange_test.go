@@ -95,11 +95,13 @@ func TestCNMatch(t *testing.T) {
 216.139.213.144
 221.8.69.27
 243.185.187.3
-243.185.187.30`
+243.185.187.30
+203.116.5.14`
 
 	ips := strings.Split(ss, "\n")
 	for _, ip := range ips {
 		ip = strings.TrimSpace(ip)
+		//fmt.Printf("###%s\n", ip)
 		country, err := ir.FindCountry(ip)
 		if nil != err {
 			//fmt.Printf("#####%s %s %v\n", ip, country, err)

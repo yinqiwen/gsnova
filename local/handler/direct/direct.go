@@ -116,7 +116,7 @@ func newDirectChannel(ev event.Event, useTLS bool) (*directChannel, error) {
 	if strings.Contains(host, ":") {
 		host, port, _ = net.SplitHostPort(host)
 	}
-	if hosts.InHosts(hosts.SNIProxy) && port == "443" {
+	if hosts.InHosts(hosts.SNIProxy) && port == "443" && network == "tcp" {
 		host = hosts.SNIProxy
 	}
 
@@ -141,7 +141,7 @@ func newDirectChannel(ev event.Event, useTLS bool) (*directChannel, error) {
 		}
 	}
 	c, err := netx.DialTimeout(network, addr, 5*time.Second)
-	log.Printf("Session:%d connect %s:%s for %s %T", ev.GetId(), network, addr, host, c)
+	log.Printf("Session:%d connect %s:%s for %s %T", ev.GetId(), network, addr, host, ev)
 	if nil != err {
 		log.Printf("Failed to connect %s for %s with error:%v", addr, host, err)
 		return nil, err

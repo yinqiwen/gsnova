@@ -159,7 +159,6 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 					sniSniffed = true
 					chunkContent = sniChunk
 					log.Printf("####SNI = %v:%s   %s", sni, socksTargetPort, net.JoinHostPort(sni, socksTargetPort))
-
 					socksInitProxy(net.JoinHostPort(sni, socksTargetPort))
 				}
 			}
@@ -218,7 +217,7 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 			}
 		}
 
-		if tryRemoteResolve && p.Name() == "Direct" && socksTargetHost != "" && net.ParseIP(socksTargetHost) != nil {
+		if tryRemoteResolve && p.Name() == "Direct" && net.ParseIP(socksTargetHost) != nil && session.Remote == nil {
 			tcpOpen := &event.TCPOpenEvent{}
 			tcpOpen.SetId(sid)
 			tcpOpen.Addr = net.JoinHostPort(socksTargetHost, socksTargetPort)

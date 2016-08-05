@@ -254,36 +254,27 @@ func handleUDPGatewayConn(conn net.Conn, proxy ProxyConfig) {
 
 			continue
 		}
+
 		usession := getUDPSession(packet.conid, queue, true)
 		usession.addr = packet.addr
 		updateUdpSession(usession)
 		usession.activeTime = time.Now()
+
+		ev := &event.UDPEvent{Content: packet.content, Addr: packet.address()}
+		ev.SetId(usession.session.id)
 		var p Proxy
 		if packet.addr.port == 53 {
 			p = proxy.findProxyByRequest("dns", packet.addr.ip.String(), nil)
 			if p.Name() == "Direct" {
-				go func(sid uint32, dnsReq []byte) {
-					res, derr := dnsQueryRaw(dnsReq)
-					if nil != derr {
-						log.Printf("DNS query error:%v", derr)
-					} else {
-						var udpEvent event.UDPEvent
-						udpEvent.Content = res
-						udpEvent.SetId(usession.session.id)
-						HandleEvent(&udpEvent)
-					}
-				}(usession.session.id, packet.content)
-				continue
+				ev.Addr = selectDNSServer()
 			}
 		} else {
-			log.Printf("###Recv non dns udp to %s:%d", packet.addr.ip.String(), packet.addr.port)
+			//log.Printf("###Recv non dns udp to %s:%d", packet.addr.ip.String(), packet.addr.port)
 			p = proxy.findProxyByRequest("udp", packet.addr.ip.String(), nil)
-
 		}
 
-		ev := &event.UDPEvent{Content: packet.content, Addr: packet.address()}
-		ev.SetId(usession.session.id)
 		if nil != p {
+			log.Printf("Session:%d request udp:%s", usession.session.id, ev.Addr)
 			p.Serve(usession.session, ev)
 		}
 	}
