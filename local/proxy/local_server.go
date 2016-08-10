@@ -159,7 +159,8 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 					sniSniffed = true
 					chunkContent = sniChunk
 					log.Printf("####SNI = %v:%s   %s", sni, socksTargetPort, net.JoinHostPort(sni, socksTargetPort))
-					socksInitProxy(net.JoinHostPort(sni, socksTargetPort))
+		//			socksInitProxy(net.JoinHostPort(sni, socksTargetPort))
+					socksInitProxy(net.JoinHostPort(socksTargetHost, socksTargetPort))
 				}
 			}
 			if nil == p {
