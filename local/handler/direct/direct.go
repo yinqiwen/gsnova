@@ -191,7 +191,7 @@ func (p *DirectProxy) Features() proxy.Feature {
 }
 
 func (p *DirectProxy) Serve(session *proxy.ProxySession, ev event.Event) error {
-	if nil == session.Remote {
+	if nil == session.Remote || session.Remote.C.Closed() {
 		switch ev.(type) {
 		case *event.TCPOpenEvent:
 		case *event.HTTPRequestEvent:

@@ -70,6 +70,20 @@ func closeProxySession(sid uint32) {
 	//log.Printf("Close proxy session:%d, %d left", sid, len(sessions))
 }
 
+func closeAllProxySession() {
+	sessionMutex.Lock()
+	defer sessionMutex.Unlock()
+	for id, _ := range sessions {
+		// closeEv := &event.TCPCloseEvent{}
+		// closeEv.SetId(id)
+		// //session.handle(closeEv)
+		// if nil != session.Remote {
+		// 	session.Remote.Write(closeEv)
+		// }
+		delete(sessions, id)
+	}
+}
+
 func getProxySessionSize() int {
 	sessionMutex.Lock()
 	defer sessionMutex.Unlock()

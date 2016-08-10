@@ -9,6 +9,7 @@ import (
 
 	"github.com/getlantern/netx"
 	"github.com/miekg/dns"
+	"github.com/yinqiwen/gsnova/local/protector"
 )
 
 func selectDNSServer() string {
@@ -33,6 +34,9 @@ func dnsQuery(r *dns.Msg) (*dns.Msg, error) {
 	}
 	defer c.Close()
 	dnsConn := new(dns.Conn)
+	if pc, ok := c.(*protector.ProtectedConn); ok {
+		c = pc.Conn
+	}
 	dnsConn.Conn = c
 	dnsConn.WriteMsg(r)
 	return dnsConn.ReadMsg()

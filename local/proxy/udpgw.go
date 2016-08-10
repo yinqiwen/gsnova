@@ -39,8 +39,9 @@ func (s *udpSessionId) Less(than btree.Item) bool {
 
 type udpSession struct {
 	udpSessionId
-	addr    udpgwAddr
-	session *ProxySession
+	addr       udpgwAddr
+	targetAddr string
+	session    *ProxySession
 }
 
 type udpgwAddr struct {
@@ -118,9 +119,20 @@ var udpSessionIdSet = btree.New(4)
 var cidTable = make(map[uint32]uint16)
 var udpSessionMutex sync.Mutex
 
+func closeAllUDPSession() {
+	udpSessionMutex.Lock()
+	defer udpSessionMutex.Unlock()
+	for id, _ := range udpSessionTable {
+		delete(udpSessionTable, id)
+		//closeProxySession(session.session.id)
+	}
+	cidTable = make(map[uint32]uint16)
+}
+
 func removeUdpSession(id *udpSessionId) {
 	s, exist := udpSessionTable[id.id]
 	if exist {
+		log.Printf("###Delete %d(%d) udpsession", id.id, s.session.id)
 		delete(cidTable, s.session.id)
 		delete(udpSessionTable, s.id)
 		closeProxySession(s.session.id)
@@ -221,7 +233,7 @@ func handleUDPGatewayConn(conn net.Conn, proxy ProxyConfig) {
 							connClosed = true
 							conn.Close()
 						} else {
-							//log.Printf("###UDP Recv after %v", time.Now().Sub(usession.activeTime))
+							log.Printf("###UDP Recv for %d(%d)", usession.session.id, usession.id)
 							updateUdpSession(usession)
 						}
 						continue
@@ -248,11 +260,9 @@ func handleUDPGatewayConn(conn net.Conn, proxy ProxyConfig) {
 				return
 			}
 		}
-		if len(packet.content) > 0 {
-			//log.Printf("###Recv udpgw packet to %s:%d", packet.addr.ip.String(), packet.addr.port)
-		} else {
-
+		if len(packet.content) == 0 {
 			continue
+			//log.Printf("###Recv udpgw packet to %s:%d", packet.addr.ip.String(), packet.addr.port)
 		}
 
 		usession := getUDPSession(packet.conid, queue, true)
@@ -267,14 +277,23 @@ func handleUDPGatewayConn(conn net.Conn, proxy ProxyConfig) {
 			p = proxy.findProxyByRequest("dns", packet.addr.ip.String(), nil)
 			if p.Name() == "Direct" {
 				ev.Addr = selectDNSServer()
+				//dnsQueryRaw(packet.content)
 			}
 		} else {
 			//log.Printf("###Recv non dns udp to %s:%d", packet.addr.ip.String(), packet.addr.port)
 			p = proxy.findProxyByRequest("udp", packet.addr.ip.String(), nil)
 		}
+		if len(usession.targetAddr) > 0 {
+			if usession.targetAddr != ev.Addr {
+				closeEv := &event.TCPCloseEvent{}
+				closeEv.SetId(usession.session.id)
+				p.Serve(usession.session, closeEv)
+			}
+		}
+		usession.targetAddr = ev.Addr
 
 		if nil != p {
-			log.Printf("Session:%d request udp:%s", usession.session.id, ev.Addr)
+			log.Printf("Session:%d(%d) request udp:%s", usession.session.id, usession.id, ev.Addr)
 			p.Serve(usession.session, ev)
 		}
 	}

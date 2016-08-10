@@ -196,7 +196,7 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 				}
 			}
 		}
-		log.Printf("[%s]Session:%d request:%s %v", p.Name(), sid, req.Method, reqUrl)
+		log.Printf("[%s]Session:%d request:%s %v  with origin host:%s", p.Name(), sid, req.Method, reqUrl, socksTargetHost)
 
 		req.Header.Del("Proxy-Connection")
 		ev := event.NewHTTPRequestEvent(req)
@@ -314,4 +314,6 @@ func stopLocalServers() {
 	for _, l := range runningServers {
 		l.Close()
 	}
+	closeAllProxySession()
+	closeAllUDPSession()
 }
