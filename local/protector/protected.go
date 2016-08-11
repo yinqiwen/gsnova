@@ -1,3 +1,5 @@
+// +build !windows
+
 // Package protected is used for creating "protected" connections
 // that bypass Android's VpnService
 package protector
@@ -14,17 +16,6 @@ import (
 	"time"
 )
 
-const (
-	defaultDnsServer = "8.8.4.4"
-	connectTimeOut   = 15 * time.Second
-	readDeadline     = 15 * time.Second
-	writeDeadline    = 15 * time.Second
-	socketError      = -1
-	dnsPort          = 53
-)
-
-type Protect func(fileDescriptor int) error
-
 type ProtectedConn struct {
 	net.Conn
 	mutex    sync.Mutex
@@ -34,19 +25,7 @@ type ProtectedConn struct {
 	port     int
 }
 
-var (
-	currentProtect   Protect
-	currentDnsServer string
-)
 
-func Configure(protect Protect, dnsServer string) {
-	currentProtect = protect
-	if dnsServer != "" {
-		currentDnsServer = dnsServer
-	} else {
-		dnsServer = defaultDnsServer
-	}
-}
 
 // Resolve resolves the given address using a DNS lookup on a UDP socket
 // protected by the currnet Protector.
@@ -212,6 +191,13 @@ func (conn *ProtectedConn) convert() error {
 	conn.Conn = fileConn
 	conn.mutex.Unlock()
 	return nil
+}
+
+// cleanup is ran whenever we encounter a socket error
+// we use a mutex since this connection is active in a variety
+// of goroutines and to prevent any possible race conditions
+func (conn *ProtectedConn) GetConn() net.Conn{
+	return conn.Conn
 }
 
 // cleanup is ran whenever we encounter a socket error
