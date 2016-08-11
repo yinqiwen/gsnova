@@ -1,0 +1,9 @@
+{
+	 //this is just a example
+	"Listen":":8080",
+	"AdminListen": "127.0.0.1:60000",
+	//user name auth
+	"Auth":["*", "gsnova"],
+	"Encrypt":{"Method":"salsa20", "Key":"809240d3a021449f6e67aa73221d42df942a308a"},
+	"Log": ["stdout", "server.log"]
+}

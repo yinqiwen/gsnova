@@ -1,0 +1,83 @@
+{
+    //this is just a example
+
+	"Log": ["stdout", "gsnova.log"],
+	"UserAgent":"Mozilla/5.0 (Windows NT 6.1; WOW64; rv:15.0) Gecko/20100101 Firefox/15.0.1",
+	"Encrypt":{"Method":"salsa20", "Key":"809240d3a021449f6e67aa73221d42df942a308a"},
+   
+    //user name auth
+    "Auth": "gsnova",
+
+    "LocalDNS":{
+    	//only listen UDP
+    	"Listen": "127.0.0.1:48100",
+    	"TrustedDNS": ["208.67.222.222:443", "208.67.220.220:443"],
+    	"TCPConnect": false 
+    },
+
+    //fake address, only used as udp traffic indicator in VPN mode
+    "UDPGWAddr": "20.20.20.20:1111",
+
+	"Proxy":[
+		{
+			"Local": ":48100",
+			"PAC":[
+				{"Protocol":["dns", "udp"],"Remote":"Direct"},
+				{"Rule":["IsCNIP"],"Remote":"Direct"},
+				{"Rule":["InHosts"],"Remote":"TLSDirect"},
+				{"Host":["*"],"Remote":"VPS"}
+			]
+		},
+		{
+			"Local": ":48101",
+			"PAC":[
+				{"Remote":"GAE"}
+			]
+		},
+		{
+			"Local": ":48102",
+			"PAC":[
+				{"Remote":"PAAS"}
+			]
+		},
+		{
+			"Local": ":48103",
+			"PAC":[
+				{"Remote":"VPS"}
+			]
+		}
+	],
+
+	"Direct":{
+		"SNI":["www.google.com.hk", "www.google.co.jp"]
+	},
+
+	"PAAS":{
+		"Enable":false,
+		"ServerList":[
+			 "wss://example.paasapp.com"
+		],
+		//'cn_sni_proxy' is defined in hosts.json if u want use more than one IP for this
+		"SNIProxy" : "cn_sni_proxy",
+		//if u are behind a HTTP proxy
+		"HTTPProxy":"",
+		"ConnsPerServer":1
+	},
+	"GAE":{
+	    "Enable":false,
+		"ServerList":[
+			"appid"
+		],
+		"SNI":["www.google.com.hk", "www.google.co.jp"],
+		//if u are behind a HTTP proxy
+		"HTTPProxy":"",
+		"ConnsPerServer":2
+	},
+	"VPS":{
+	    "Enable":false,
+	    "Server":"10.10.10.10:8080",
+	    //if u are behind a HTTP proxy
+	    "HTTPProxy":"",
+		"ConnsPerServer":2
+	}
+}
