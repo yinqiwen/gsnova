@@ -196,7 +196,7 @@ func (conn *ProtectedConn) convert() error {
 // cleanup is ran whenever we encounter a socket error
 // we use a mutex since this connection is active in a variety
 // of goroutines and to prevent any possible race conditions
-func (conn *ProtectedConn) GetConn() net.Conn{
+func (conn *ProtectedConn) GetConn() {
 	return conn.Conn
 }
 
