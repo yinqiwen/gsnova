@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"net/url"
 	"time"
+	"crypto/tls"
+	"strings"
 
 	"github.com/gorilla/websocket"
 	"github.com/yinqiwen/gsnova/local/proxy"
@@ -32,6 +34,13 @@ func (wc *websocketChannel) Open(iv uint64) error {
 	wsDialer.NetDial = paasDial
 	if nil != paasLocalProxyUrl{
 		wsDialer.Proxy = http.ProxyURL(paasLocalProxyUrl)
+	}
+
+	if strings.HasSuffix(u.Host, ".herokuapp.com") {
+		wsDialer.TLSClientConfig = &tls.Config{
+			ServerName:         "herokuapp.com",
+			MinVersion:         tls.VersionTLS12,
+		}
 	}
 
 	c, _, err := wsDialer.Dial(u.String(), nil)
