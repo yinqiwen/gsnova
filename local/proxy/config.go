@@ -44,6 +44,7 @@ type PAASConfig struct {
 	Enable         bool
 	ServerList     []string
 	ConnsPerServer int
+	SNI            string
 	SNIProxy       string
 	HTTPProxy      string
 }

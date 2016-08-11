@@ -57,6 +57,8 @@
 		"ServerList":[
 			 "wss://example.paasapp.com"
 		],
+		//if u want to use another sni to replace the default
+		"SNI": "",
 		//'cn_sni_proxy' is defined in hosts.json if u want use more than one IP for this
 		"SNIProxy" : "cn_sni_proxy",
 		//if u are behind a HTTP proxy

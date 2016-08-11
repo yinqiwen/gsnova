@@ -276,7 +276,19 @@ func handleUDPGatewayConn(conn net.Conn, proxy ProxyConfig) {
 		if packet.addr.port == 53 {
 			p = proxy.findProxyByRequest("dns", packet.addr.ip.String(), nil)
 			if p.Name() == "Direct" {
-				ev.Addr = selectDNSServer()
+				go func() {
+					res, err := dnsQueryRaw(packet.content)
+					if nil == err {
+						resev := &event.UDPEvent{}
+						resev.Content = res
+						resev.SetId(usession.session.id)
+						HandleEvent(resev)
+					} else {
+						log.Printf("[ERROR]Failed to query dns with reason:%v", err)
+					}
+				}()
+				continue
+				//ev.Addr = selectDNSServer()
 				//dnsQueryRaw(packet.content)
 			}
 		} else {

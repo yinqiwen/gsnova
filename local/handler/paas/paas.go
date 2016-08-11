@@ -1,6 +1,7 @@
 package paas
 
 import (
+	"crypto/tls"
 	"fmt"
 	"log"
 	"net"
@@ -68,9 +69,15 @@ func (p *PaasProxy) Init() error {
 		MaxIdleConnsPerHost:   2 * int(proxy.GConf.PAAS.ConnsPerServer),
 		ResponseHeaderTimeout: 30 * time.Second,
 	}
-	if len(proxy.GConf.PAAS.HTTPProxy) > 0{
-		proxyUrl, err :=  url.Parse(proxy.GConf.PAAS.HTTPProxy)
-		if nil != err{
+	if len(proxy.GConf.PAAS.SNI) > 0 {
+		tlscfg := &tls.Config{}
+		tlscfg.InsecureSkipVerify = true
+		tlscfg.ServerName = proxy.GConf.PAAS.SNI
+		tr.TLSClientConfig = tlscfg
+	}
+	if len(proxy.GConf.PAAS.HTTPProxy) > 0 {
+		proxyUrl, err := url.Parse(proxy.GConf.PAAS.HTTPProxy)
+		if nil != err {
 			return err
 		}
 		paasLocalProxyUrl = proxyUrl
@@ -139,7 +146,5 @@ var mypaas PaasProxy
 func init() {
 	mypaas.cs = proxy.NewRemoteChannelTable()
 
-
-	
 	proxy.RegisterProxy(&mypaas)
 }

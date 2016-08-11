@@ -2,6 +2,7 @@ package paas
 
 import (
 	"bytes"
+	"crypto/tls"
 	"io"
 	"log"
 	"net/http"
@@ -30,10 +31,15 @@ func (wc *websocketChannel) Open(iv uint64) error {
 	u.Path = "/ws"
 	wsDialer := &websocket.Dialer{}
 	wsDialer.NetDial = paasDial
-	if nil != paasLocalProxyUrl{
+	if nil != paasLocalProxyUrl {
 		wsDialer.Proxy = http.ProxyURL(paasLocalProxyUrl)
 	}
-
+	if len(proxy.GConf.PAAS.SNI) > 0 {
+		tlscfg := &tls.Config{}
+		tlscfg.InsecureSkipVerify = true
+		tlscfg.ServerName = proxy.GConf.PAAS.SNI
+		wsDialer.TLSClientConfig = tlscfg
+	}
 	c, _, err := wsDialer.Dial(u.String(), nil)
 	if err != nil {
 		log.Printf("dial websocket error:%v", err)

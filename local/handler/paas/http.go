@@ -28,7 +28,7 @@ type httpChannel struct {
 
 func (hc *httpChannel) Open(iv uint64) error {
 	hc.iv = iv
-	
+
 	return hc.pull()
 }
 
@@ -87,7 +87,6 @@ func (hc *httpChannel) Read(p []byte) (int, error) {
 }
 
 func (hc *httpChannel) postURL(p []byte, u *url.URL) (n int, err error) {
-	buf := bytes.NewBuffer(p)
 	req := &http.Request{
 		Method:        "POST",
 		URL:           u,
@@ -95,8 +94,8 @@ func (hc *httpChannel) postURL(p []byte, u *url.URL) (n int, err error) {
 		ProtoMinor:    1,
 		Host:          u.Host,
 		Header:        make(http.Header),
-		Body:          ioutil.NopCloser(buf),
-		ContentLength: int64(buf.Len()),
+		Body:          ioutil.NopCloser(bytes.NewBuffer(p)),
+		ContentLength: int64(len(p)),
 	}
 	req.Close = false
 	req.Header.Set("Connection", "keep-alive")
@@ -106,6 +105,7 @@ func (hc *httpChannel) postURL(p []byte, u *url.URL) (n int, err error) {
 	}
 	response, err := paasHttpClient.Do(req)
 	if nil != err || response.StatusCode != 200 { //try once more
+		req.Body = ioutil.NopCloser(bytes.NewBuffer(p))
 		response, err = paasHttpClient.Do(req)
 	}
 	if nil != err || response.StatusCode != 200 {
