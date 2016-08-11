@@ -28,6 +28,7 @@ type httpChannel struct {
 
 func (hc *httpChannel) Open(iv uint64) error {
 	hc.iv = iv
+	
 	return hc.pull()
 }
 

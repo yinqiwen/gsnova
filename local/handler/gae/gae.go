@@ -23,6 +23,10 @@ func (p *GAEProxy) Init() error {
 	if !proxy.GConf.GAE.Enable {
 		return nil
 	}
+	err := initGAEClient()
+	if nil != err {
+		return err
+	}
 	for _, server := range proxy.GConf.GAE.ServerList {
 		channel, err := newHTTPChannel(server)
 		if nil != err {
@@ -144,7 +148,7 @@ func (p *GAEProxy) Serve(session *proxy.ProxySession, ev event.Event) error {
 var mygae GAEProxy
 
 func init() {
-	initGAEClient()
+
 	mygae.cs = proxy.NewRemoteChannelTable()
 	mygae.Init()
 	proxy.RegisterProxy(&mygae)

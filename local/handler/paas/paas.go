@@ -5,6 +5,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -13,6 +14,8 @@ import (
 	"github.com/yinqiwen/gsnova/local/hosts"
 	"github.com/yinqiwen/gsnova/local/proxy"
 )
+
+var paasLocalProxyUrl *url.URL
 
 func paasDial(network, addr string) (net.Conn, error) {
 	host, port, _ := net.SplitHostPort(addr)
@@ -59,6 +62,24 @@ func (p *PaasProxy) Init() error {
 	if !proxy.GConf.PAAS.Enable {
 		return nil
 	}
+	tr := &http.Transport{
+		Dial:                  paasDial,
+		DisableCompression:    true,
+		MaxIdleConnsPerHost:   2 * int(proxy.GConf.PAAS.ConnsPerServer),
+		ResponseHeaderTimeout: 30 * time.Second,
+	}
+	if len(proxy.GConf.PAAS.HTTPProxy) > 0{
+		proxyUrl, err :=  url.Parse(proxy.GConf.PAAS.HTTPProxy)
+		if nil != err{
+			return err
+		}
+		paasLocalProxyUrl = proxyUrl
+		tr.Proxy = http.ProxyURL(paasLocalProxyUrl)
+	}
+	paasHttpClient = &http.Client{}
+	paasHttpClient.Timeout = 30 * time.Second
+	paasHttpClient.Transport = tr
+
 	for _, server := range proxy.GConf.PAAS.ServerList {
 		for i := 0; i < proxy.GConf.PAAS.ConnsPerServer; i++ {
 			channel, err := newRemoteChannel(server, i)
@@ -117,14 +138,8 @@ var mypaas PaasProxy
 
 func init() {
 	mypaas.cs = proxy.NewRemoteChannelTable()
-	tr := &http.Transport{
-		Dial:                  paasDial,
-		DisableCompression:    true,
-		MaxIdleConnsPerHost:   2 * int(proxy.GConf.PAAS.ConnsPerServer),
-		ResponseHeaderTimeout: 30 * time.Second,
-	}
-	paasHttpClient = &http.Client{}
-	paasHttpClient.Timeout = 30 * time.Second
-	paasHttpClient.Transport = tr
+
+
+	
 	proxy.RegisterProxy(&mypaas)
 }

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"io"
 	"log"
+	"net/http"
 	"net/url"
 	"time"
 
@@ -29,6 +30,9 @@ func (wc *websocketChannel) Open(iv uint64) error {
 	u.Path = "/ws"
 	wsDialer := &websocket.Dialer{}
 	wsDialer.NetDial = paasDial
+	if nil != paasLocalProxyUrl{
+		wsDialer.Proxy = http.ProxyURL(paasLocalProxyUrl)
+	}
 
 	c, _, err := wsDialer.Dial(u.String(), nil)
 	if err != nil {

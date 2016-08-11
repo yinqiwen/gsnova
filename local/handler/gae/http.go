@@ -21,9 +21,9 @@ import (
 
 var gaeHttpClient *http.Client
 
-func initGAEClient() {
+func initGAEClient() error {
 	if nil != gaeHttpClient {
-		return
+		return nil
 	}
 	client := new(http.Client)
 
@@ -58,8 +58,14 @@ func initGAEClient() {
 		MaxIdleConnsPerHost:   int(proxy.GConf.GAE.ConnsPerServer),
 		ResponseHeaderTimeout: 15 * time.Second,
 	}
+	proxyURL, err := url.Parse(proxy.GConf.GAE.HTTPProxy)
+	if nil != err {
+		return err
+	}
+	tr.Proxy = http.ProxyURL(proxyURL)
 	client.Transport = tr
 	gaeHttpClient = client
+	return nil
 }
 
 type httpChannel struct {

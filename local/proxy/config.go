@@ -45,6 +45,7 @@ type PAASConfig struct {
 	ServerList     []string
 	ConnsPerServer int
 	SNIProxy       string
+	HTTPProxy      string
 }
 
 type GAEConfig struct {
@@ -53,12 +54,14 @@ type GAEConfig struct {
 	SNI            []string
 	InjectRange    []string
 	ConnsPerServer int
+	HTTPProxy      string
 }
 
 type VPSConfig struct {
 	Enable         bool
 	Server         string
 	ConnsPerServer int
+	HTTPProxy      string
 }
 
 type PACConfig struct {

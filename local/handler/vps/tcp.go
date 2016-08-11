@@ -1,8 +1,12 @@
 package vps
 
 import (
+	"bufio"
+	"fmt"
 	"io"
 	"net"
+	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/getlantern/netx"
@@ -15,9 +19,35 @@ type tcpChannel struct {
 }
 
 func (tc *tcpChannel) Open(iv uint64) error {
-	c, err := netx.DialTimeout("tcp", tc.addr, 5*time.Second)
+	connAddr := tc.addr
+	if len(proxy.GConf.VPS.HTTPProxy) > 0 {
+		proxyURL, err := url.Parse(proxy.GConf.VPS.HTTPProxy)
+		if nil != err {
+			return err
+		}
+		connAddr = proxyURL.Host
+	}
+
+	c, err := netx.DialTimeout("tcp", connAddr, 5*time.Second)
 	if err != nil {
 		return err
+	}
+	if len(proxy.GConf.VPS.HTTPProxy) > 0 {
+		connReq, _ := http.NewRequest("Connect", tc.addr, nil)
+		err = connReq.Write(c)
+		if err != nil {
+			return err
+		}
+		connRes, err := http.ReadResponse(bufio.NewReader(c), connReq)
+		if err != nil {
+			return err
+		}
+		if nil != connRes.Body {
+			connRes.Body.Close()
+		}
+		if connRes.StatusCode >= 300 {
+			return fmt.Errorf("Invalid Connect response:%d", connRes.StatusCode)
+		}
 	}
 	tc.conn = c
 	return nil
