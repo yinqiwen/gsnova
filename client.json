@@ -21,7 +21,7 @@
 	"Proxy":[
 		{
 			"Local": ":48100",
-			//sniff sni for non 80 port(http) traffic instead of real target address, default is true
+			//sniff sni for non 80 port(http) traffic instead of real target address, default is false
 			"SNISniff": true,
 			"PAC":[
 				{"Protocol":["dns", "udp"],"Remote":"Direct"},
