@@ -78,7 +78,7 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 			log.Printf("Invalid socks target addresss:%s with reason %v", socksConn.Req.Target, err)
 			return
 		}
-		if socksTargetHost != "127.0.0.1" && net.ParseIP(socksTargetHost) != nil {
+		if socksTargetHost != "127.0.0.1" && net.ParseIP(socksTargetHost) != nil && !proxy.SNISniff {
 			//this is a ip from local dns query
 			tryRemoteResolve = true
 			if socksTargetPort == "80" {

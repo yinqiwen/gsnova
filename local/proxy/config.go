@@ -193,8 +193,9 @@ func (pac *PACConfig) Match(protocol string, ip string, req *http.Request) bool 
 }
 
 type ProxyConfig struct {
-	Local string
-	PAC   []PACConfig
+	Local    string
+	PAC      []PACConfig
+	SNISniff bool
 }
 
 func (cfg *ProxyConfig) findProxyByRequest(proto string, ip string, req *http.Request) Proxy {
