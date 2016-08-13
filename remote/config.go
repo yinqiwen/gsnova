@@ -3,10 +3,10 @@ package remote
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"log"
 
 	"github.com/yinqiwen/gsnova/common/event"
+	"github.com/yinqiwen/gsnova/common/helper"
 	"github.com/yinqiwen/gsnova/common/logger"
 )
 
@@ -41,7 +41,8 @@ var ServerConf ServerConfig
 
 func init() {
 	file := "server.json"
-	data, err := ioutil.ReadFile(file)
+	data, err := helper.ReadWithoutComment(file, "//")
+	//data, err := ioutil.ReadFile(file)
 	if nil == err {
 		err = json.Unmarshal(data, &ServerConf)
 	}

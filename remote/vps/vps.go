@@ -145,9 +145,14 @@ func dumpServerStat(args []string, c io.Writer) error {
 	fmt.Fprintf(c, "TotalUserConn: %d\n", totalConn)
 	return nil
 }
+func dumpServerSession(args []string, c io.Writer) error {
+	remote.DumpAllSession(c)
+	return nil
+}
 
 func main() {
 	ots.RegisterHandler("vstat", dumpServerStat, 0, 0, "VStat                                 Dump server stat")
+	ots.RegisterHandler("vss", dumpServerSession, 0, 0, "VSS                                  Dump server sessions")
 	err := ots.StartTroubleShootingServer(remote.ServerConf.AdminListen)
 	if nil != err {
 		log.Printf("Failed to start admin server with reason:%v", err)

@@ -4,6 +4,7 @@ import (
 	//"fmt"
 	"bytes"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"strings"
@@ -15,32 +16,6 @@ import (
 
 var proxySessionMap map[SessionId]*ProxySession = make(map[SessionId]*ProxySession)
 var sessionMutex sync.Mutex
-
-// var passiveCloseSet = make(map[SessionId]bool)
-// var passiveCloseSetLock sync.Mutex
-
-// func GetPassiveCloseSetSize() int {
-// 	passiveCloseSetLock.Lock()
-// 	defer passiveCloseSetLock.Unlock()
-// 	return len(passiveCloseSet)
-// }
-
-// func updatePassiveCloseSet(sid SessionId, addOrRemove bool) {
-// 	passiveCloseSetLock.Lock()
-// 	if addOrRemove {
-// 		passiveCloseSet[sid] = true
-// 	} else {
-// 		delete(passiveCloseSet, sid)
-// 	}
-
-// 	passiveCloseSetLock.Unlock()
-// }
-// func isSessionPassiveClosed(id SessionId) bool {
-// 	passiveCloseSetLock.Lock()
-// 	defer passiveCloseSetLock.Unlock()
-// 	_, ok := passiveCloseSet[id]
-// 	return ok
-// }
 
 type ConnId struct {
 	User      string
@@ -77,6 +52,13 @@ func GetSessionTableSize() int {
 	sessionMutex.Lock()
 	defer sessionMutex.Unlock()
 	return len(proxySessionMap)
+}
+func DumpAllSession(wr io.Writer) {
+	sessionMutex.Lock()
+	defer sessionMutex.Unlock()
+	for _, session := range proxySessionMap {
+		session.dump(wr)
+	}
 }
 
 func getProxySessionByEvent(cid ConnId, ev event.Event) *ProxySession {
@@ -137,6 +119,11 @@ func removeUserSessions(user string, runid int64) {
 			destroyProxySession(s)
 		}
 	}
+}
+
+//just for debug
+func (p *ProxySession) dump(wr io.Writer) {
+	fmt.Fprintf(wr, "[%d]network=%s,addr=%s,closed=%v\n", p.Id.Id, p.network, p.addr, p.conn == nil)
 }
 
 func (p *ProxySession) publish(ev event.Event) {
@@ -209,10 +196,7 @@ func (p *ProxySession) open(network, to string) error {
 	//log.Printf("Session[%s:%d] open connection to %s.", p.Id.User, p.Id.Id, to)
 	c, err := net.DialTimeout(network, to, 5*time.Second)
 	if nil != err {
-		if network == "tcp" {
-			ev := &event.TCPCloseEvent{}
-			p.publish(ev)
-		}
+		p.initialClose()
 		log.Printf("Failed to connect %s:%s for reason:%v", network, to, err)
 		return err
 	}
