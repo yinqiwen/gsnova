@@ -26,6 +26,14 @@ type httpChannel struct {
 	pulling bool
 }
 
+func (hc *httpChannel) ReadTimeout() time.Duration {
+	readTimeout := proxy.GConf.PAAS.HTTPReadTimeout
+	if 0 == readTimeout {
+		readTimeout = 30
+	}
+	return time.Duration(readTimeout) * time.Second
+}
+
 func (hc *httpChannel) Open(iv uint64) error {
 	hc.iv = iv
 
@@ -73,11 +81,7 @@ func (hc *httpChannel) Read(p []byte) (int, error) {
 	}
 	start := time.Now()
 	for nil == hc.rbody {
-		readTimeout := proxy.GConf.PAAS.HTTPReadTimeout
-		if 0 == readTimeout {
-			readTimeout = 30
-		}
-		if time.Now().After(start.Add(time.Duration(readTimeout) * time.Second)) {
+		if time.Now().After(start.Add(hc.ReadTimeout())) {
 			return 0, proxy.ErrChannelReadTimeout
 		}
 		time.Sleep(1 * time.Millisecond)

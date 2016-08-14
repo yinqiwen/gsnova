@@ -221,7 +221,9 @@ func (cfg *ProxyConfig) findProxyByRequest(proto string, ip string, req *http.Re
 }
 
 type DirectConfig struct {
-	SNI []string
+	SNI         []string
+	DialTimeout int
+	ReadTimeout int
 }
 
 type EncryptConfig struct {

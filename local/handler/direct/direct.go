@@ -23,6 +23,14 @@ type directChannel struct {
 	udpProxyConn   bool
 }
 
+func (tc *directChannel) ReadTimeout() time.Duration {
+	readTimeout := proxy.GConf.Direct.ReadTimeout
+	if 0 == readTimeout {
+		readTimeout = 15
+	}
+	return time.Duration(readTimeout) * time.Second
+}
+
 func (tc *directChannel) Open(iv uint64) error {
 	return nil
 }
@@ -67,7 +75,7 @@ func (d *directChannel) read() {
 		if nil == c {
 			return
 		}
-		c.SetReadDeadline(time.Now().Add(5 * time.Second))
+		c.SetReadDeadline(time.Now().Add(d.ReadTimeout()))
 		b := make([]byte, 1500)
 		n, err := c.Read(b)
 		if n > 0 {
@@ -140,7 +148,11 @@ func newDirectChannel(ev event.Event, useTLS bool) (*directChannel, error) {
 			}
 		}
 	}
-	c, err := netx.DialTimeout(network, addr, 5*time.Second)
+	dailTimeout := proxy.GConf.PAAS.DialTimeout
+	if 0 == dailTimeout {
+		dailTimeout = 5
+	}
+	c, err := netx.DialTimeout(network, addr, time.Duration(dailTimeout)*time.Second)
 	log.Printf("Session:%d connect %s:%s for %s %T", ev.GetId(), network, addr, host, ev)
 	if nil != err {
 		log.Printf("Failed to connect %s for %s with error:%v", addr, host, err)

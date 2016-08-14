@@ -80,6 +80,14 @@ type httpChannel struct {
 	server string
 }
 
+func (tc *httpChannel) ReadTimeout() time.Duration {
+	readTimeout := proxy.GConf.GAE.ReadTimeout
+	if 0 == readTimeout {
+		readTimeout = 15
+	}
+	return time.Duration(readTimeout) * time.Second
+}
+
 func (h *httpChannel) Open(iv uint64) error {
 	return nil
 }

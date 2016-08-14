@@ -51,7 +51,11 @@
 	],
 
 	"Direct":{
-		"SNI":["www.google.com.hk", "www.google.co.jp"]
+		"SNI":["www.google.com.hk", "www.google.co.jp"],
+		//Unit: second
+		"DialTimeout":5,
+		//Unit: second
+		"ReadTimeout":15
 	},
 
 	"PAAS":{

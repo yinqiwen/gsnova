@@ -24,6 +24,7 @@ type RemoteProxyChannel interface {
 	Open(iv uint64) error
 	Closed() bool
 	Request([]byte) ([]byte, error)
+	ReadTimeout() time.Duration
 	io.ReadWriteCloser
 }
 
@@ -68,8 +69,9 @@ func (rc *RemoteChannel) Init() error {
 	}
 
 	start := time.Now()
+	authTimeout := rc.C.ReadTimeout()
 	for rc.authResult == 0 {
-		if time.Now().After(start.Add(5 * time.Second)) {
+		if time.Now().After(start.Add(authTimeout)) {
 			rc.Stop()
 			return fmt.Errorf("Server:%s auth timeout after %v", rc.Addr, time.Now().Sub(start))
 		}

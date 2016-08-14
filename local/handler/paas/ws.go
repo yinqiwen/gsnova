@@ -19,6 +19,14 @@ type websocketChannel struct {
 	readbuf bytes.Buffer
 }
 
+func (tc *websocketChannel) ReadTimeout() time.Duration {
+	readTimeout := proxy.GConf.PAAS.WSReadTimeout
+	if 0 == readTimeout {
+		readTimeout = 15
+	}
+	return time.Duration(readTimeout) * time.Second
+}
+
 func (tc *websocketChannel) Request([]byte) ([]byte, error) {
 	return nil, nil
 }
@@ -72,11 +80,7 @@ func (wc *websocketChannel) Read(p []byte) (int, error) {
 	if nil == c {
 		return 0, io.EOF
 	}
-	readTimeout := proxy.GConf.PAAS.WSReadTimeout
-	if 0 == readTimeout {
-		readTimeout = 15
-	}
-	c.SetReadDeadline(time.Now().Add(time.Duration(readTimeout) * time.Second))
+	c.SetReadDeadline(time.Now().Add(wc.ReadTimeout()))
 	mt, data, err := c.ReadMessage()
 	if err != nil {
 		if err != io.EOF {
