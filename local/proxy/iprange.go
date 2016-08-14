@@ -24,6 +24,10 @@ type IPRangeHolder struct {
 	ranges []*IPRange
 }
 
+func (h *IPRangeHolder) Clear() {
+	h.ranges = make([]*IPRange, 0)
+}
+
 func (h *IPRangeHolder) Len() int {
 	return len(h.ranges)
 }

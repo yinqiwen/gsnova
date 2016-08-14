@@ -58,11 +58,13 @@ func initGAEClient() error {
 		MaxIdleConnsPerHost:   int(proxy.GConf.GAE.ConnsPerServer),
 		ResponseHeaderTimeout: 15 * time.Second,
 	}
-	proxyURL, err := url.Parse(proxy.GConf.GAE.HTTPProxy)
-	if nil != err {
-		return err
+	if len(proxy.GConf.GAE.HTTPProxy) > 0 {
+		proxyURL, err := url.Parse(proxy.GConf.GAE.HTTPProxy)
+		if nil != err {
+			return err
+		}
+		tr.Proxy = http.ProxyURL(proxyURL)
 	}
-	tr.Proxy = http.ProxyURL(proxyURL)
 	client.Transport = tr
 	gaeHttpClient = client
 	return nil

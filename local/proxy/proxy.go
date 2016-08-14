@@ -101,5 +101,6 @@ func Stop() error {
 			log.Printf("Proxy:%s destroy success.", name)
 		}
 	}
+	hosts.Clear()
 	return nil
 }

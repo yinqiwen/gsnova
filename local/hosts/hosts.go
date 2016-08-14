@@ -77,6 +77,12 @@ func InHosts(host string) bool {
 	return ok
 }
 
+func Clear() {
+	mappingMutex.Lock()
+	defer mappingMutex.Unlock()
+	hostMappingTable = make(map[string]*hostMapping)
+}
+
 func Init(confile string) error {
 	//file := "hosts.json"
 	hs := make(map[string][]string)
