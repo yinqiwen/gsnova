@@ -102,5 +102,8 @@ func Stop() error {
 		}
 	}
 	hosts.Clear()
+	if nil != cnIPRange {
+		cnIPRange.Clear()
+	}
 	return nil
 }

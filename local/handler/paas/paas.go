@@ -34,7 +34,11 @@ func paasDial(network, addr string) (net.Conn, error) {
 		//addr = net.JoinHostPort(host, port)
 	}
 	log.Printf("[PAAS]Connect %s", addr)
-	return netx.DialTimeout(network, addr, 3*time.Second)
+	dailTimeout := proxy.GConf.PAAS.DialTimeout
+	if 0 == dailTimeout {
+		dailTimeout = 5
+	}
+	return netx.DialTimeout(network, addr, time.Duration(dailTimeout)*time.Second)
 }
 
 type PaasProxy struct {
@@ -63,11 +67,15 @@ func (p *PaasProxy) Init() error {
 	if !proxy.GConf.PAAS.Enable {
 		return nil
 	}
+	readTimeout := proxy.GConf.PAAS.HTTPReadTimeout
+	if 0 == readTimeout {
+		readTimeout = 30
+	}
 	tr := &http.Transport{
 		Dial:                  paasDial,
 		DisableCompression:    true,
 		MaxIdleConnsPerHost:   2 * int(proxy.GConf.PAAS.ConnsPerServer),
-		ResponseHeaderTimeout: 30 * time.Second,
+		ResponseHeaderTimeout: time.Duration(readTimeout) * time.Second,
 	}
 	if len(proxy.GConf.PAAS.SNI) > 0 {
 		tlscfg := &tls.Config{}
@@ -84,7 +92,7 @@ func (p *PaasProxy) Init() error {
 		tr.Proxy = http.ProxyURL(paasLocalProxyUrl)
 	}
 	paasHttpClient = &http.Client{}
-	paasHttpClient.Timeout = 30 * time.Second
+	paasHttpClient.Timeout = tr.ResponseHeaderTimeout
 	paasHttpClient.Transport = tr
 
 	for _, server := range proxy.GConf.PAAS.ServerList {

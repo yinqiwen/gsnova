@@ -65,7 +65,12 @@
 		"SNIProxy" : "cn_sni_proxy",
 		//if u are behind a HTTP proxy
 		"HTTPProxy":"",
-		"ConnsPerServer":1
+		//Max connections per server
+		"ConnsPerServer":1,
+		//Unit: second
+		"DialTimeout":5,
+		//Unit: second
+		"ReadTimeout":15
 	},
 	"GAE":{
 	    "Enable":false,
@@ -75,13 +80,23 @@
 		"SNI":["www.google.com.hk", "www.google.co.jp"],
 		//if u are behind a HTTP proxy
 		"HTTPProxy":"",
-		"ConnsPerServer":2
+		"ConnsPerServer":2,
+		//Unit: second
+		"DialTimeout":5,
+		//Unit: second
+		"HTTPReadTimeout":30,
+		//Webosocket read timeout
+		"WSReadTimeout":15
 	},
 	"VPS":{
 	    "Enable":false,
 	    "Server":"10.10.10.10:8080",
 	    //if u are behind a HTTP proxy
 	    "HTTPProxy":"",
-		"ConnsPerServer":2
+		"ConnsPerServer":2,
+		//Unit: second
+		"DialTimeout":5,
+		//Unit: second
+		"ReadTimeout":15
 	}
 }

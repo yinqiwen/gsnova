@@ -34,8 +34,11 @@ func initGAEClient() error {
 		host, _, _ := net.SplitHostPort(addr)
 		for i := 0; i < 3; i++ {
 			remote = hosts.GetHost(host)
-			//log.Printf("SSL Dial %s:%s", remote, port)
-			conn, err = netx.DialTimeout(n, remote+":443", 5*time.Second)
+			timeout := proxy.GConf.GAE.DialTimeout
+			if 0 == timeout {
+				timeout = 5
+			}
+			conn, err = netx.DialTimeout(n, remote+":443", time.Duration(timeout)*time.Second)
 			if err == nil {
 				break
 			}
@@ -51,12 +54,15 @@ func initGAEClient() error {
 		}
 		return tls.Client(conn, tlcfg), nil
 	}
-
+	readTimeout := proxy.GConf.GAE.ReadTimeout
+	if 0 == readTimeout {
+		readTimeout = 15
+	}
 	tr := &http.Transport{
 		Dial:                  sslDial,
 		DisableCompression:    true,
 		MaxIdleConnsPerHost:   int(proxy.GConf.GAE.ConnsPerServer),
-		ResponseHeaderTimeout: 15 * time.Second,
+		ResponseHeaderTimeout: time.Duration(readTimeout) * time.Second,
 	}
 	if len(proxy.GConf.GAE.HTTPProxy) > 0 {
 		proxyURL, err := url.Parse(proxy.GConf.GAE.HTTPProxy)

@@ -72,7 +72,11 @@ func (wc *websocketChannel) Read(p []byte) (int, error) {
 	if nil == c {
 		return 0, io.EOF
 	}
-	c.SetReadDeadline(time.Now().Add(10 * time.Second))
+	readTimeout := proxy.GConf.PAAS.WSReadTimeout
+	if 0 == readTimeout {
+		readTimeout = 15
+	}
+	c.SetReadDeadline(time.Now().Add(time.Duration(readTimeout) * time.Second))
 	mt, data, err := c.ReadMessage()
 	if err != nil {
 		if err != io.EOF {

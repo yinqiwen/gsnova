@@ -73,7 +73,11 @@ func (hc *httpChannel) Read(p []byte) (int, error) {
 	}
 	start := time.Now()
 	for nil == hc.rbody {
-		if time.Now().After(start.Add(5 * time.Second)) {
+		readTimeout := proxy.GConf.PAAS.HTTPReadTimeout
+		if 0 == readTimeout {
+			readTimeout = 30
+		}
+		if time.Now().After(start.Add(time.Duration(readTimeout) * time.Second)) {
 			return 0, proxy.ErrChannelReadTimeout
 		}
 		time.Sleep(1 * time.Millisecond)

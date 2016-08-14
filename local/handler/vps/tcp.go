@@ -27,8 +27,11 @@ func (tc *tcpChannel) Open(iv uint64) error {
 		}
 		connAddr = proxyURL.Host
 	}
-
-	c, err := netx.DialTimeout("tcp", connAddr, 5*time.Second)
+	dailTimeout := proxy.GConf.VPS.DialTimeout
+	if 0 == dailTimeout {
+		dailTimeout = 5
+	}
+	c, err := netx.DialTimeout("tcp", connAddr, time.Duration(dailTimeout)*time.Second)
 	if err != nil {
 		return err
 	}
@@ -75,7 +78,11 @@ func (tc *tcpChannel) Read(p []byte) (int, error) {
 	if nil == conn {
 		return 0, io.EOF
 	}
-	conn.SetReadDeadline(time.Now().Add(15 * time.Second))
+	readTimeout := proxy.GConf.VPS.ReadTimeout
+	if 0 == readTimeout {
+		readTimeout = 15
+	}
+	conn.SetReadDeadline(time.Now().Add(time.Duration(readTimeout) * time.Second))
 	return conn.Read(p)
 }
 
