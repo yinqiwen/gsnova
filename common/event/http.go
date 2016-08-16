@@ -258,6 +258,9 @@ func NewHTTPRequestEvent(req *http.Request) *HTTPRequestEvent {
 		ev.URL = ev.URL[len(req.Host):]
 	}
 	ev.Headers.Set("Host", req.Host)
+	if len(req.TransferEncoding) > 0 && req.TransferEncoding[0] == "chunked" {
+		ev.Headers.Add("Transfer-Encoding", "chunked")
+	}
 	if req.ContentLength != 0 {
 		readLen := 8092
 		if req.ContentLength > 0 && req.ContentLength < int64(readLen) {

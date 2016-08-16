@@ -145,7 +145,7 @@ func (p *ProxySession) publish(ev event.Event) {
 		}
 		if time.Now().After(start.Add(10 * time.Second)) {
 			log.Printf("No avaliable connection to write event")
-			p.close()
+			p.forceClose()
 			break
 		}
 		time.Sleep(1 * time.Millisecond)

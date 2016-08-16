@@ -2,7 +2,9 @@ package proxy
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/tls"
+	"fmt"
 	"io"
 	"log"
 	"net"
@@ -196,7 +198,7 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 				}
 			}
 		}
-		log.Printf("[%s]Session:%d request:%s %v  with origin host:%s", p.Name(), sid, req.Method, reqUrl, socksTargetHost)
+		log.Printf("[%s]Session:%d request:%s %v", p.Name(), sid, req.Method, reqUrl)
 
 		req.Header.Del("Proxy-Connection")
 		ev := event.NewHTTPRequestEvent(req)
@@ -207,6 +209,7 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 				log.Printf("[ERROR]Too large request:%d for limit:%d", req.ContentLength, maxBody)
 				return
 			}
+			ev.Headers.Del("Transfer-Encoding")
 			for int64(len(ev.Content)) < req.ContentLength {
 				buffer := make([]byte, 8192)
 				n, err := req.Body.Read(buffer)
@@ -230,11 +233,28 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 				buffer := make([]byte, 8192)
 				n, err := req.Body.Read(buffer)
 				if nil != err {
+					//HTTP chunked body EOF
+					if err == io.EOF && req.ContentLength < 0 {
+						var eofChunk event.TCPChunkEvent
+						eofChunk.SetId(sid)
+						eofChunk.Content = []byte("0\r\n")
+						p.Serve(session, &eofChunk)
+					}
 					break
 				}
+				buffer = buffer[0:n]
 				var chunk event.TCPChunkEvent
 				chunk.SetId(sid)
-				chunk.Content = buffer[0:n]
+				if req.ContentLength > 0 {
+					chunk.Content = buffer
+				} else {
+					//HTTP chunked body
+					var chunkBuffer bytes.Buffer
+					fmt.Fprintf(&chunkBuffer, "%x\r\n", len(buffer))
+					chunkBuffer.Write(buffer)
+					chunkBuffer.WriteString("\r\n")
+					chunk.Content = chunkBuffer.Bytes()
+				}
 				p.Serve(session, &chunk)
 			}
 		}

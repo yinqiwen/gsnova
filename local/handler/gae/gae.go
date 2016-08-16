@@ -78,7 +78,7 @@ func (p *GAEProxy) Serve(session *proxy.ProxySession, ev event.Event) error {
 			if len(rangeHeader) > 0 {
 				rangeFetch = true
 			}
-			if !rangeFetch && strings.EqualFold(req.Method, "Get") && proxy.MatchRegexs(req.GetHost(), p.injectRangeRegex) {
+			if !rangeFetch && strings.EqualFold(req.Method, "Get") && len(p.injectRangeRegex) > 0 && proxy.MatchRegexs(req.GetHost(), p.injectRangeRegex) {
 				rangeFetch = true
 			}
 			adjustResp := func(r *event.HTTPResponseEvent) {
@@ -101,6 +101,7 @@ func (p *GAEProxy) Serve(session *proxy.ProxySession, ev event.Event) error {
 				case *event.NotifyEvent:
 					rerr := rev.(*event.NotifyEvent)
 					if rerr.Code == event.ErrTooLargeResponse {
+						log.Printf("[Range]Recv too large response")
 						rangeFetch = true
 					} else {
 						log.Printf("[ERROR]:%d(%s)", rerr.Code, rerr.Reason)

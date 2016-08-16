@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/getlantern/netx"
+	"github.com/yinqiwen/gsnova/common/helper"
 	"github.com/yinqiwen/gsnova/local/hosts"
 	"github.com/yinqiwen/gsnova/local/proxy"
 )
@@ -38,7 +39,17 @@ func initGAEClient() error {
 			if 0 == timeout {
 				timeout = 5
 			}
-			conn, err = netx.DialTimeout(n, remote+":443", time.Duration(timeout)*time.Second)
+			dialTimeout := time.Duration(timeout) * time.Second
+			connAddr := addr
+			if !strings.EqualFold(remote, host) {
+				connAddr = remote + ":443"
+			}
+			if len(proxy.GConf.GAE.HTTPProxy) > 0 {
+				conn, err = helper.HTTPProxyConn(proxy.GConf.GAE.HTTPProxy, connAddr, dialTimeout)
+			} else {
+				conn, err = netx.DialTimeout(n, connAddr, time.Duration(timeout)*time.Second)
+			}
+
 			if err == nil {
 				break
 			}
@@ -52,7 +63,14 @@ func initGAEClient() error {
 		if sniLen > 0 {
 			tlcfg.ServerName = proxy.GConf.GAE.SNI[rand.Intn(sniLen)]
 		}
-		return tls.Client(conn, tlcfg), nil
+		tlsConn := tls.Client(conn, tlcfg)
+		err = tlsConn.Handshake()
+		if err != nil {
+			log.Printf("TLS handshake error:%v", err)
+			tlsConn.Close()
+			return nil, err
+		}
+		return tlsConn, nil
 	}
 	readTimeout := proxy.GConf.GAE.ReadTimeout
 	if 0 == readTimeout {
@@ -63,13 +81,6 @@ func initGAEClient() error {
 		DisableCompression:    true,
 		MaxIdleConnsPerHost:   int(proxy.GConf.GAE.ConnsPerServer),
 		ResponseHeaderTimeout: time.Duration(readTimeout) * time.Second,
-	}
-	if len(proxy.GConf.GAE.HTTPProxy) > 0 {
-		proxyURL, err := url.Parse(proxy.GConf.GAE.HTTPProxy)
-		if nil != err {
-			return err
-		}
-		tr.Proxy = http.ProxyURL(proxyURL)
 	}
 	client.Transport = tr
 	gaeHttpClient = client

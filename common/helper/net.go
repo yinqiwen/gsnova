@@ -1,12 +1,19 @@
 package helper
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
 	"log"
 	"math"
+	"net"
+	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
+	"time"
+
+	"github.com/getlantern/netx"
 )
 
 var ErrTLSIncomplete = errors.New("TLS header incomplete")
@@ -173,4 +180,31 @@ func IsPrivateIP(ip string) bool {
 		return true
 	}
 	return false
+}
+
+func HTTPProxyConn(proxyURL string, addr string, timeout time.Duration) (net.Conn, error) {
+	u, err := url.Parse(proxyURL)
+	if nil != err {
+		return nil, err
+	}
+	c, err := netx.DialTimeout("tcp", u.Host, timeout)
+	if err != nil {
+		return nil, err
+	}
+	connReq, _ := http.NewRequest("Connect", addr, nil)
+	err = connReq.Write(c)
+	if err != nil {
+		return nil, err
+	}
+	connRes, err := http.ReadResponse(bufio.NewReader(c), connReq)
+	if err != nil {
+		return nil, err
+	}
+	if nil != connRes.Body {
+		connRes.Body.Close()
+	}
+	if connRes.StatusCode >= 300 {
+		return nil, fmt.Errorf("Invalid Connect response:%d", connRes.StatusCode)
+	}
+	return c, nil
 }

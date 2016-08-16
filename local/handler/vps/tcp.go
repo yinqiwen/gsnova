@@ -1,15 +1,12 @@
 package vps
 
 import (
-	"bufio"
-	"fmt"
 	"io"
 	"net"
-	"net/http"
-	"net/url"
 	"time"
 
 	"github.com/getlantern/netx"
+	"github.com/yinqiwen/gsnova/common/helper"
 	"github.com/yinqiwen/gsnova/local/proxy"
 )
 
@@ -27,38 +24,20 @@ func (tc *tcpChannel) ReadTimeout() time.Duration {
 }
 
 func (tc *tcpChannel) Open(iv uint64) error {
-	connAddr := tc.addr
-	if len(proxy.GConf.VPS.HTTPProxy) > 0 {
-		proxyURL, err := url.Parse(proxy.GConf.VPS.HTTPProxy)
-		if nil != err {
-			return err
-		}
-		connAddr = proxyURL.Host
-	}
 	dailTimeout := proxy.GConf.VPS.DialTimeout
 	if 0 == dailTimeout {
 		dailTimeout = 5
 	}
-	c, err := netx.DialTimeout("tcp", connAddr, time.Duration(dailTimeout)*time.Second)
+	timeout := time.Duration(dailTimeout) * time.Second
+	var c net.Conn
+	var err error
+	if len(proxy.GConf.VPS.HTTPProxy) > 0 {
+		c, err = helper.HTTPProxyConn(proxy.GConf.VPS.HTTPProxy, tc.addr, timeout)
+	} else {
+		c, err = netx.DialTimeout("tcp", tc.addr, timeout)
+	}
 	if err != nil {
 		return err
-	}
-	if len(proxy.GConf.VPS.HTTPProxy) > 0 {
-		connReq, _ := http.NewRequest("Connect", tc.addr, nil)
-		err = connReq.Write(c)
-		if err != nil {
-			return err
-		}
-		connRes, err := http.ReadResponse(bufio.NewReader(c), connReq)
-		if err != nil {
-			return err
-		}
-		if nil != connRes.Body {
-			connRes.Body.Close()
-		}
-		if connRes.StatusCode >= 300 {
-			return fmt.Errorf("Invalid Connect response:%d", connRes.StatusCode)
-		}
 	}
 	tc.conn = c
 	return nil
