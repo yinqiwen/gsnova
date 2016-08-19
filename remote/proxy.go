@@ -25,7 +25,8 @@ type ConnId struct {
 
 type ConnContext struct {
 	ConnId
-	IV uint64
+	IV            uint64
+	EncryptMethod int
 }
 
 func NewConnContext() *ConnContext {

@@ -3,6 +3,7 @@ package event
 import (
 	"bytes"
 	"crypto/aes"
+	"crypto/cipher"
 	"crypto/rc4"
 	"encoding/binary"
 	"errors"
@@ -461,6 +462,21 @@ func EncryptEvent(buf *bytes.Buffer, ev Event, iv uint64) error {
 	ev.Encode(buf)
 	elen := uint32(buf.Len() - start)
 	eventContent := buf.Bytes()[start+4:]
+
+	var nonce []byte
+	switch header.Flags.GetEncrytFlag() {
+	case Salsa20Encypter:
+		fallthrough
+	case Chacha20Encypter:
+		nonce = make([]byte, 8)
+	case AES256Encypter:
+		nonce = make([]byte, 12)
+		//block.Encrypt(eventContent, eventContent)
+	}
+	if len(nonce) > 0 {
+		iv = iv ^ uint64(hlen) ^ uint64(elen)
+		binary.LittleEndian.PutUint64(nonce, iv)
+	}
 	// if eventBuffer.Len() >= 128 {
 	// 	header.Flags.EnableSnappy()
 	// }
@@ -472,29 +488,18 @@ func EncryptEvent(buf *bytes.Buffer, ev Event, iv uint64) error {
 	// }
 	switch header.Flags.GetEncrytFlag() {
 	case Salsa20Encypter:
-		nonce := make([]byte, 8)
-		//log.Printf("1 %d %d %d", hlen, elen, iv)
-		iv = iv ^ uint64(hlen) ^ uint64(elen)
-		binary.LittleEndian.PutUint64(nonce, iv)
 		salsa20.XORKeyStream(eventContent, eventContent, nonce, &salsa20Key)
 	case RC4Encypter:
 		rc4Cipher, _ := rc4.NewCipher(secretKey)
 		rc4Cipher.XORKeyStream(eventContent, eventContent)
 	case AES256Encypter:
 		block, _ := aes.NewCipher(secretKey)
-		block.Encrypt(eventContent, eventContent)
+		aesgcm, _ := cipher.NewGCM(block)
+		aesgcm.Seal(eventContent, nonce, eventContent, nil)
+		//block.Encrypt(eventContent, eventContent)
 	case Chacha20Encypter:
-		nonce := make([]byte, 8)
-		iv = iv ^ uint64(hlen) ^ uint64(elen)
-		binary.LittleEndian.PutUint64(nonce, iv)
 		chacha20Cipher, _ := chacha20.New(secretKey, nonce)
 		chacha20Cipher.XORKeyStream(eventContent, eventContent)
-		// case Chacha20Encypter:
-		// 	nonce := make([]byte, 24)
-		// 	iv = iv ^ uint64(ev.GetId())
-		// 	binary.LittleEndian.PutUint64(nonce, iv)
-		// 	cipher, _ := chacha20.NewXChaCha(secretKey, nonce)
-		// 	cipher.XORKeyStream(eventContent, eventContent)
 	}
 	elen = (elen << 8) + hlen
 	binary.LittleEndian.PutUint32(buf.Bytes()[start:start+4], elen)
@@ -518,22 +523,33 @@ func DecryptEvent(buf *bytes.Buffer, iv uint64) (err error, ev Event) {
 	}
 	buf.Next(4)
 	body := buf.Next(int(elen - 4))
+
+	var nonce []byte
 	switch defaultEncryptMethod {
 	case Salsa20Encypter:
-		nonce := make([]byte, 8)
+		fallthrough
+	case Chacha20Encypter:
+		nonce = make([]byte, 8)
+	case AES256Encypter:
+		nonce = make([]byte, 12)
+		//block.Encrypt(eventContent, eventContent)
+	}
+	if len(nonce) > 0 {
 		iv = iv ^ uint64(hlen) ^ uint64(elen)
 		binary.LittleEndian.PutUint64(nonce, iv)
+	}
+	switch defaultEncryptMethod {
+	case Salsa20Encypter:
 		salsa20.XORKeyStream(body, body, nonce, &salsa20Key)
 	case RC4Encypter:
 		rc4Cipher, _ := rc4.NewCipher(secretKey)
 		rc4Cipher.XORKeyStream(body, body)
 	case AES256Encypter:
 		block, _ := aes.NewCipher(secretKey)
-		block.Decrypt(body, body)
+		aesgcm, _ := cipher.NewGCM(block)
+		aesgcm.Open(body, nonce, body, nil)
+		//block.Decrypt(body, body)
 	case Chacha20Encypter:
-		nonce := make([]byte, 8)
-		iv = iv ^ uint64(hlen) ^ uint64(elen)
-		binary.LittleEndian.PutUint64(nonce, iv)
 		cipher, _ := chacha20.New(secretKey, nonce)
 		cipher.XORKeyStream(body, body)
 	}
