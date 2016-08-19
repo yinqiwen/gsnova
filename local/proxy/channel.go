@@ -167,11 +167,12 @@ func (rc *RemoteChannel) processWrite() {
 			if nil != err {
 				conn.Close()
 				log.Printf("Failed to write tcp messgage:%v", err)
+				//resend `sendEvents` in next process
 			} else {
 				log.Printf("[%d]%s cost %v to write %d events.", rc.Index, rc.Addr, time.Now().Sub(start), len(sendEvents))
+				sendEvents = nil
 			}
 		}
-		sendEvents = nil
 	}
 }
 

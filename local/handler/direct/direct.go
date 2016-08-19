@@ -124,7 +124,7 @@ func newDirectChannel(ev event.Event, useTLS bool) (*directChannel, error) {
 	if strings.Contains(host, ":") {
 		host, port, _ = net.SplitHostPort(host)
 	}
-	if hosts.InHosts(hosts.SNIProxy) && port == "443" && network == "tcp" {
+	if !hosts.InHosts(host) && hosts.InHosts(hosts.SNIProxy) && port == "443" && network == "tcp" {
 		host = hosts.SNIProxy
 	}
 
