@@ -2,16 +2,13 @@ package event
 
 import (
 	"bytes"
-	"fmt"
-	"math/rand"
 	//	"reflect"
 	"net/http"
 	"testing"
 	//"time"
 )
 
-func BenchmarkRC4(b *testing.B) {
-	SetDefaultSecretKey("rc4", "AAAAAAasdadasfafasasdasfasasgagaga")
+func benchamark(n int) {
 	var request HTTPRequestEvent
 	request.Headers = make(http.Header)
 	request.Headers.Add("A", "CC")
@@ -20,78 +17,38 @@ func BenchmarkRC4(b *testing.B) {
 	request.Method = "GET"
 	request.Content = []byte("hello,world")
 
-	for i := 0; i < b.N; i++ {
+	for i := 0; i < n; i++ {
 		var buf bytes.Buffer
 		EncryptEvent(&buf, &request, 0)
 		DecryptEvent(&buf, 0)
 
 	}
-	var buf bytes.Buffer
-	EncryptEvent(&buf, &request, 0)
+	// var buf bytes.Buffer
+	// EncryptEvent(&buf, &request, 0)
 
-	//var cmp HTTPRequestEvent
-	err, tmp := DecryptEvent(&buf, 0)
-	fmt.Printf("%v\n", err)
-	cmp, _ := tmp.(*HTTPRequestEvent)
-	fmt.Printf("%s %s %s %v\n", cmp.URL, cmp.Method, string(cmp.Content), cmp.Headers)
+	// //var cmp HTTPRequestEvent
+	// err, tmp := DecryptEvent(&buf, 0)
+	// fmt.Printf("%v\n", err)
+	// cmp, _ := tmp.(*HTTPRequestEvent)
+	// fmt.Printf("%s %s %s %v\n", cmp.URL, cmp.Method, string(cmp.Content), cmp.Headers)
 }
 
+func BenchmarkRC4(b *testing.B) {
+	SetDefaultSecretKey("rc4", "AAAAAAasdadasfafasasdasfasasgagaga")
+	benchamark(b.N)
+}
+func BenchmarkChacha20(b *testing.B) {
+	SetDefaultSecretKey("chacha20", "AAAAAAasdadasfafasasdasfasasgagaga")
+	benchamark(b.N)
+}
 func BenchmarkSalsa20(b *testing.B) {
 	SetDefaultSecretKey("salsa20", "AAAAAAasdadasfafasasdasfasasgagaga")
-	var request HTTPRequestEvent
-	request.Headers = make(http.Header)
-	request.Headers.Add("A", "CC")
-	request.Headers.Add("D", "ZZ")
-	request.URL = "hello"
-	request.Method = "GET"
-	request.Content = []byte("hello,world")
-	request.SetId(1023)
-
-	iv := uint64(rand.Int63())
-
-	for i := 0; i < b.N; i++ {
-		var buf bytes.Buffer
-		EncryptEvent(&buf, &request, iv)
-		DecryptEvent(&buf, iv)
-
-	}
-	var buf bytes.Buffer
-	EncryptEvent(&buf, &request, iv)
-
-	//var cmp HTTPRequestEvent
-	err, tmp := DecryptEvent(&buf, iv)
-	fmt.Printf("%v\n", err)
-	cmp, _ := tmp.(*HTTPRequestEvent)
-	fmt.Printf("%s %s %s %v\n", cmp.URL, cmp.Method, string(cmp.Content), cmp.Headers)
+	benchamark(b.N)
 }
 
 func BenchmarkAES(b *testing.B) {
 	SetDefaultSecretKey("aes", "AAAAAAasdadasfafasasdasfasasgagaga")
-	var request HTTPRequestEvent
-	request.Headers = make(http.Header)
-	request.Headers.Add("A", "CC")
-	request.Headers.Add("D", "ZZ")
-	request.URL = "hello"
-	request.Method = "GET"
-	request.Content = []byte("hello,world")
-	request.SetId(1023)
-
-	iv := uint64(rand.Int63())
-
-	for i := 0; i < b.N; i++ {
-		var buf bytes.Buffer
-		EncryptEvent(&buf, &request, iv)
-		DecryptEvent(&buf, iv)
-
-	}
-	var buf bytes.Buffer
-	EncryptEvent(&buf, &request, iv)
-
-	//var cmp HTTPRequestEvent
-	err, tmp := DecryptEvent(&buf, iv)
-	fmt.Printf("%v\n", err)
-	cmp, _ := tmp.(*HTTPRequestEvent)
-	fmt.Printf("%s %s %s %v\n", cmp.URL, cmp.Method, string(cmp.Content), cmp.Headers)
+	benchamark(b.N)
 }
 
 type XT struct {

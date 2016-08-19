@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/codahale/chacha20"
 	"golang.org/x/crypto/salsa20"
 )
 
@@ -65,6 +66,8 @@ func SetDefaultSecretKey(method string, key string) {
 	} else if strings.EqualFold(method, "aes") {
 		defaultEncryptMethod = AES256Encypter
 		//defaultEncryptMethod = Chacha20Encypter
+	} else if strings.EqualFold(method, "chacha20") {
+		defaultEncryptMethod = Chacha20Encypter
 	} else if strings.EqualFold(method, "none") {
 		defaultEncryptMethod = 0
 	}
@@ -480,6 +483,12 @@ func EncryptEvent(buf *bytes.Buffer, ev Event, iv uint64) error {
 	case AES256Encypter:
 		block, _ := aes.NewCipher(secretKey)
 		block.Encrypt(eventContent, eventContent)
+	case Chacha20Encypter:
+		nonce := make([]byte, 8)
+		iv = iv ^ uint64(hlen) ^ uint64(elen)
+		binary.LittleEndian.PutUint64(nonce, iv)
+		chacha20Cipher, _ := chacha20.New(secretKey, nonce)
+		chacha20Cipher.XORKeyStream(eventContent, eventContent)
 		// case Chacha20Encypter:
 		// 	nonce := make([]byte, 24)
 		// 	iv = iv ^ uint64(ev.GetId())
@@ -512,7 +521,6 @@ func DecryptEvent(buf *bytes.Buffer, iv uint64) (err error, ev Event) {
 	switch defaultEncryptMethod {
 	case Salsa20Encypter:
 		nonce := make([]byte, 8)
-		//log.Printf("2 %d %d %d", hlen, elen, iv)
 		iv = iv ^ uint64(hlen) ^ uint64(elen)
 		binary.LittleEndian.PutUint64(nonce, iv)
 		salsa20.XORKeyStream(body, body, nonce, &salsa20Key)
@@ -522,12 +530,12 @@ func DecryptEvent(buf *bytes.Buffer, iv uint64) (err error, ev Event) {
 	case AES256Encypter:
 		block, _ := aes.NewCipher(secretKey)
 		block.Decrypt(body, body)
-		// case Chacha20Encypter:
-		// 	nonce := make([]byte, 24)
-		// 	iv = iv ^ uint64(header.GetId())
-		// 	binary.LittleEndian.PutUint64(nonce, iv)
-		// 	cipher, _ := chacha20.NewXChaCha(secretKey, nonce)
-		// 	cipher.XORKeyStream(body, body)
+	case Chacha20Encypter:
+		nonce := make([]byte, 8)
+		iv = iv ^ uint64(hlen) ^ uint64(elen)
+		binary.LittleEndian.PutUint64(nonce, iv)
+		cipher, _ := chacha20.New(secretKey, nonce)
+		cipher.XORKeyStream(body, body)
 	}
 	ebuf := bytes.NewBuffer(body)
 	var header EventHeader

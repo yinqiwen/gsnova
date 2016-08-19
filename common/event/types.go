@@ -17,6 +17,7 @@ const (
 	RC4Encypter      = 1
 	Salsa20Encypter  = 2
 	AES256Encypter   = 3
+	Chacha20Encypter = 4
 	//Chacha20Encypter = 3
 )
 
