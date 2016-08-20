@@ -224,6 +224,7 @@ type DirectConfig struct {
 	SNI         []string
 	DialTimeout int
 	ReadTimeout int
+	//SNIMapping  map[string]string
 }
 
 type EncryptConfig struct {
@@ -237,18 +238,24 @@ type LocalDNSConfig struct {
 	TCPConnect bool
 }
 
+type ConfigStoreConfig struct {
+	Listen string
+	Dir    string
+}
+
 type LocalConfig struct {
-	Log       []string
-	Encrypt   EncryptConfig
-	UserAgent string
-	Auth      string
-	UDPGWAddr string
-	Proxy     []ProxyConfig
-	PAAS      PAASConfig
-	GAE       GAEConfig
-	VPS       VPSConfig
-	LocalDNS  LocalDNSConfig
-	Direct    DirectConfig
+	Log         []string
+	Encrypt     EncryptConfig
+	UserAgent   string
+	Auth        string
+	LocalDNS    LocalDNSConfig
+	UDPGWAddr   string
+	ConfigStore ConfigStoreConfig
+	Proxy       []ProxyConfig
+	PAAS        PAASConfig
+	GAE         GAEConfig
+	VPS         VPSConfig
+	Direct      DirectConfig
 }
 
 func (cfg *LocalConfig) init() error {

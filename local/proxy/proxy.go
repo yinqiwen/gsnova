@@ -27,6 +27,10 @@ type Proxy interface {
 	Serve(session *ProxySession, ev event.Event) error
 }
 
+func init() {
+	proxyHome = "."
+}
+
 var proxyTable = make(map[string]Proxy)
 
 func RegisterProxy(p Proxy) error {
@@ -85,7 +89,7 @@ func Start(home string) error {
 			log.Printf("Proxy:%s init success.", name)
 		}
 	}
-
+	go startConfigStoreServer()
 	startLocalServers()
 	return nil
 }

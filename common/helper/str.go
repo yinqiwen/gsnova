@@ -31,7 +31,7 @@ func GetRequestURLString(req *http.Request) string {
 		return ""
 	}
 	str := req.URL.String()
-	if len(req.URL.Scheme) == 0 && strings.EqualFold(req.Method, "Connect") && len(req.URL.Path) == 0 {
+	if len(req.URL.Scheme) == 0 && strings.EqualFold(req.Method, "Connect") {
 		str = fmt.Sprintf("https://%s", req.Host)
 	}
 	if !strings.HasPrefix(str, "http://") && !strings.HasPrefix(str, "https://") {

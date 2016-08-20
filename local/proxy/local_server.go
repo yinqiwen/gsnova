@@ -178,6 +178,7 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 			log.Printf("Session:%d read request failed from proxy connection:%v", sid, err)
 			break
 		}
+
 		if nil == p {
 			p = proxy.findProxyByRequest("http", socksTargetHost, req)
 			if nil == p {

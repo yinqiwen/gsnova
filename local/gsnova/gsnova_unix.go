@@ -3,10 +3,9 @@
 package gsnova
 
 import (
+	"github.com/getlantern/netx"
 	"github.com/yinqiwen/gsnova/local/protector"
-    "github.com/getlantern/netx"
 )
-
 
 // SocketProtector is an interface for classes that can protect Android sockets,
 // meaning those sockets will not be passed through the VPN.
