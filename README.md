@@ -2,6 +2,8 @@
 
 部署服务端
 --------
+
+[![Join the chat at https://gitter.im/gsnova/Lobby](https://badges.gitter.im/gsnova/Lobby.svg)](https://gitter.im/gsnova/Lobby?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 >目前支持Appengine（Google），Cloudfoudry/Openshift/Heroku/Dotcloud/Jelastic等PaaS平台。任选一个部署即可。
 * Google AppEngine  
   用户需要先在[Google Appengine](http://appengine.google.com/)上注册帐号并创建appid。下载snova-gae-gserver-[version].zip，解压。windows用户直接执行deployer.exe，Linux/Mac用户需在命令行下执行python main.py，按部署工具提示进行部署。   
