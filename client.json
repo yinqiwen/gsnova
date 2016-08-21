@@ -83,7 +83,11 @@
 		//Unit: second
 		"DialTimeout":5,
 		//Unit: second
-		"ReadTimeout":15
+		"HTTPReadTimeout":30,
+		//Unit: second
+		"WSReadTimeout":15,
+		//Reconnect after 60s
+		"WSReconnectPeriod": 60
 	},
 	"GAE":{
 	    "Enable":false,
@@ -110,6 +114,8 @@
 		//Unit: second
 		"DialTimeout":5,
 		//Unit: second
-		"ReadTimeout":15
+		"ReadTimeout":15,
+		//Reconnect after 60s
+		"ReconnectPeriod": 60
 	}
 }

@@ -7,8 +7,10 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/getlantern/netx"
+	"github.com/yinqiwen/gsnova/common/helper"
 )
 
 func getConfigList(w http.ResponseWriter, r *http.Request) {
@@ -76,6 +78,7 @@ func SyncConfig(addr string, localDir string) error {
 	}
 	resp, err := syncClient.Get("http://" + addr + "/_conflist")
 	if nil != err {
+		log.Printf("Error %v with local ip:%v", err, helper.GetLocalIPv4())
 		return err
 	}
 	data, _ := ioutil.ReadAll(resp.Body)

@@ -82,10 +82,17 @@ func websocketInvoke(w http.ResponseWriter, r *http.Request) {
 					go func() {
 						for !wsClosed {
 							evs, err := queue.PeekMulti(2, 1*time.Millisecond)
-							if nil != err {
-								continue
+							if ctx.Closing {
+								evs = []event.Event{&event.ChannelCloseACKEvent{}}
+							} else {
+								if nil != err {
+									continue
+								}
 							}
 							err = writeEvents(evs)
+							if ctx.Closing {
+								return
+							}
 							if nil != err {
 								log.Printf("Websoket write error:%v", err)
 								return

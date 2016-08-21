@@ -13,6 +13,11 @@ import (
 	"github.com/yinqiwen/gsnova/common/event"
 )
 
+const (
+	stateCloseToSendReq  = 1
+	stateCloseWaitingACK = 2
+)
+
 var ErrChannelReadTimeout = errors.New("Remote channel read timeout")
 var ErrChannelAuthFailed = errors.New("Remote channel auth failed")
 
@@ -29,19 +34,23 @@ type RemoteProxyChannel interface {
 }
 
 type RemoteChannel struct {
-	Addr          string
-	Index         int
-	DirectIO      bool
-	WriteJoinAuth bool
-	OpenJoinAuth  bool
-	HeartBeat     bool
-	C             RemoteProxyChannel
+	Addr            string
+	Index           int
+	DirectIO        bool
+	WriteJoinAuth   bool
+	OpenJoinAuth    bool
+	HeartBeat       bool
+	ReconnectPeriod int
+	C               RemoteProxyChannel
 
 	connSendedEvents uint32
 	authResult       int
 	iv               uint64
 	wch              chan event.Event
 	running          bool
+
+	connectTime time.Time
+	closeState  int
 }
 
 func (rc *RemoteChannel) authed() bool {
@@ -122,6 +131,12 @@ func (rc *RemoteChannel) processWrite() {
 	var sendEvents []event.Event
 	for rc.running {
 		conn := rc.C
+		//disable write if waiting for close CK
+		if rc.closeState == stateCloseWaitingACK {
+			time.Sleep(1 * time.Millisecond)
+			continue
+		}
+
 		if len(sendEvents) == 0 {
 			if len(rc.wch) > 0 {
 				for len(rc.wch) > 0 {
@@ -139,6 +154,7 @@ func (rc *RemoteChannel) processWrite() {
 			time.Sleep(5 * time.Millisecond)
 			continue
 		}
+
 		var buf bytes.Buffer
 		civ := rc.iv
 		if rc.WriteJoinAuth || (rc.connSendedEvents == 0 && rc.OpenJoinAuth) {
@@ -148,6 +164,7 @@ func (rc *RemoteChannel) processWrite() {
 			event.EncryptEvent(&buf, auth, 0)
 			rc.connSendedEvents++
 		}
+
 		for _, sev := range sendEvents {
 			if auth, ok := sev.(*event.AuthEvent); ok {
 				if auth.IV != civ {
@@ -159,18 +176,26 @@ func (rc *RemoteChannel) processWrite() {
 				event.EncryptEvent(&buf, sev, civ)
 			}
 		}
+		if rc.closeState == stateCloseToSendReq {
+			closeReq := &event.ChannelCloseReqEvent{}
+			event.EncryptEvent(&buf, closeReq, civ)
+		}
 		rc.connSendedEvents += uint32(len(sendEvents))
 
 		if buf.Len() > 0 {
-			start := time.Now()
+			//start := time.Now()
 			_, err := conn.Write(buf.Bytes())
 			if nil != err {
 				conn.Close()
 				log.Printf("Failed to write tcp messgage:%v", err)
 				//resend `sendEvents` in next process
 			} else {
-				log.Printf("[%d]%s cost %v to write %d events.", rc.Index, rc.Addr, time.Now().Sub(start), len(sendEvents))
+				//log.Printf("[%d]%s cost %v to write %d events.", rc.Index, rc.Addr, time.Now().Sub(start), len(sendEvents))
 				sendEvents = nil
+				//set state if write success
+				if rc.closeState == stateCloseToSendReq {
+					rc.closeState = stateCloseWaitingACK
+				}
 			}
 		}
 	}
@@ -180,6 +205,7 @@ func (rc *RemoteChannel) processRead() {
 	for rc.running {
 		conn := rc.C
 		if conn.Closed() {
+			rc.closeState = 0
 			if getProxySessionSize() == 0 {
 				time.Sleep(10 * time.Millisecond)
 				continue
@@ -192,13 +218,10 @@ func (rc *RemoteChannel) processRead() {
 				time.Sleep(1 * time.Second)
 				continue
 			}
+			rc.connectTime = time.Now()
 			log.Printf("Channel[%d] connect %s success.", rc.Index, rc.Addr)
 			if rc.OpenJoinAuth {
 				rc.Write(nil)
-				// auth := NewAuthEvent()
-				// auth.Index = int64(rc.Index)
-				// auth.IV = rc.iv
-				// rc.Write(auth)
 			}
 		}
 		data := make([]byte, 8192)
@@ -206,6 +229,13 @@ func (rc *RemoteChannel) processRead() {
 		for {
 			n, cerr := conn.Read(data)
 			buf.Write(data[0:n])
+			if rc.ReconnectPeriod > 0 && rc.closeState == 0 {
+				if rc.connectTime.Add(time.Duration(rc.ReconnectPeriod) * time.Second).Before(time.Now()) {
+					rc.closeState = stateCloseToSendReq
+					rc.Write(nil) //trigger to write ChannelCloseReqEvent
+					log.Printf("Channel[%d] prepare to close %s to reconnect.", rc.Index, rc.Addr)
+				}
+			}
 			for buf.Len() > 0 {
 				err, ev := event.DecryptEvent(&buf, rc.iv)
 				if nil != err {
@@ -217,12 +247,17 @@ func (rc *RemoteChannel) processRead() {
 					}
 					break
 				}
-				auth, isNotify := ev.(*event.NotifyEvent)
-				if isNotify {
+				switch ev.(type) {
+				case *event.NotifyEvent:
 					if !rc.authed() {
+						auth := ev.(*event.NotifyEvent)
 						rc.authResult = int(auth.Code)
 						continue
 					}
+				case *event.ChannelCloseACKEvent:
+					conn.Close()
+					log.Printf("Channel[%d] close %s after recved close ACK.", rc.Index, rc.Addr)
+					continue
 				}
 				if !rc.authed() {
 					log.Printf("[ERROR]Expected auth result event for auth all connection, but got %T.", ev)

@@ -27,6 +27,7 @@ type ConnContext struct {
 	ConnId
 	IV            uint64
 	EncryptMethod int
+	Closing       bool
 }
 
 func NewConnContext() *ConnContext {
@@ -325,6 +326,12 @@ func handleEvent(ev event.Event, ctx *ConnContext) (event.Event, error) {
 		return &authres, nil
 	case *event.HeartBeatEvent:
 		//do nothing
+	case *event.ChannelCloseReqEvent:
+		ctx.Closing = true
+		queue := getEventQueue(ctx.ConnId, false)
+		if nil != queue {
+			queue.Publish(nil, 1*time.Minute)
+		}
 	default:
 		session := getProxySessionByEvent(ctx.ConnId, ev)
 		if nil != session {
