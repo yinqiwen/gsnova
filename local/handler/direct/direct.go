@@ -21,6 +21,10 @@ type directChannel struct {
 	conn           net.Conn
 	httpsProxyConn bool
 	udpProxyConn   bool
+
+	// toReplaceSNI string
+	// sniReplaced  bool
+	// sniChunk     []byte
 }
 
 func (tc *directChannel) ReadTimeout() time.Duration {
@@ -65,6 +69,24 @@ func (tc *directChannel) Write(p []byte) (n int, err error) {
 	if nil == conn {
 		return 0, io.EOF
 	}
+	// if len(tc.toReplaceSNI) > 0 && !tc.sniReplaced {
+	// 	tc.sniChunk = append(tc.sniChunk, p...)
+	// 	newData, oldSNI, err := helper.TLSReplaceSNI(tc.sniChunk, tc.toReplaceSNI)
+	// 	if nil != err {
+	// 		if err == helper.ErrTLSIncomplete {
+	// 			return len(p), nil
+	// 		} else {
+	// 			log.Printf("No SNI:%v", err)
+	// 			p = tc.sniChunk
+	// 		}
+	// 	} else {
+	// 		log.Printf("####Replaced SNI:%s from %s", tc.toReplaceSNI, oldSNI)
+	// 		ss, err1 := helper.TLSParseSNI(newData)
+	// 		log.Printf("####Parse new SNI:%s %v", ss, err1)
+	// 		p = newData
+	// 	}
+	// 	tc.sniReplaced = true
+	// }
 	return conn.Write(p)
 }
 
@@ -124,6 +146,16 @@ func newDirectChannel(ev event.Event, useTLS bool) (*directChannel, error) {
 	if strings.Contains(host, ":") {
 		host, port, _ = net.SplitHostPort(host)
 	}
+	// toReplaceSNI := ""
+	// if port == "443" {
+	// 	for pattern, sni := range proxy.GConf.Direct.SNIMapping {
+	// 		if helper.WildcardMatch(host, pattern) {
+	// 			toReplaceSNI = sni
+	// 			break
+	// 		}
+	// 	}
+	// }
+
 	if !hosts.InHosts(host) && hosts.InHosts(hosts.SNIProxy) && port == "443" && network == "tcp" {
 		host = hosts.SNIProxy
 	}
@@ -160,6 +192,7 @@ func newDirectChannel(ev event.Event, useTLS bool) (*directChannel, error) {
 	}
 
 	d := &directChannel{ev.GetId(), c, fromHttpsConnect, network == "udp"}
+	//d := &directChannel{ev.GetId(), c, fromHttpsConnect, network == "udp", toReplaceSNI, false, nil}
 	if useTLS {
 		tlcfg := &tls.Config{}
 		tlcfg.InsecureSkipVerify = true

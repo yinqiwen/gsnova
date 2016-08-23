@@ -1,15 +1,17 @@
 package event
 
 const (
-	EventHttpReq   = 10000
-	EventHttpRes   = 10001
-	EventTCPOpen   = 10002
-	EventTCPClose  = 10003
-	EventTCPChunk  = 10004
-	EventAuth      = 10005
-	EventNotify    = 10006
-	EventUDP       = 10008
-	EventHeartBeat = 10009
+	EventHttpReq         = 10000
+	EventHttpRes         = 10001
+	EventTCPOpen         = 10002
+	EventTCPClose        = 10003
+	EventTCPChunk        = 10004
+	EventAuth            = 10005
+	EventNotify          = 10006
+	EventUDP             = 10008
+	EventHeartBeat       = 10009
+	EventChannelCloseReq = 10010
+	EventChannelCloseACK = 10011
 
 	NoneCompressor   = 0
 	SnappyCompressor = 1
@@ -31,4 +33,6 @@ func init() {
 	RegistObject(EventAuth, &AuthEvent{})
 	RegistObject(EventUDP, &UDPEvent{})
 	RegistObject(EventHeartBeat, &HeartBeatEvent{})
+	RegistObject(EventChannelCloseReq, &ChannelCloseReqEvent{})
+	RegistObject(EventChannelCloseACK, &ChannelCloseACKEvent{})
 }

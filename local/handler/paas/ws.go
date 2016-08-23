@@ -117,11 +117,12 @@ func (wc *websocketChannel) Write(p []byte) (n int, err error) {
 
 func newWebsocketChannel(addr string, idx int) (*proxy.RemoteChannel, error) {
 	rc := &proxy.RemoteChannel{
-		Addr:          addr,
-		Index:         idx,
-		DirectIO:      false,
-		OpenJoinAuth:  true,
-		WriteJoinAuth: false,
+		Addr:            addr,
+		Index:           idx,
+		DirectIO:        false,
+		OpenJoinAuth:    true,
+		WriteJoinAuth:   false,
+		ReconnectPeriod: proxy.GConf.PAAS.WSReconnectPeriod,
 	}
 	tc := new(websocketChannel)
 	tc.url = addr

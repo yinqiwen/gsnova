@@ -69,7 +69,9 @@ func (q *EventQueue) PeekMulti(n int, timeout time.Duration) ([]Event, error) {
 	if len(q.queue) > 0 {
 		for len(q.queue) > 0 && len(q.peeks) < n {
 			ev := <-q.queue
-			q.peeks = append(q.peeks, ev)
+			if nil != ev {
+				q.peeks = append(q.peeks, ev)
+			}
 		}
 		return q.peeks, nil
 	} else {

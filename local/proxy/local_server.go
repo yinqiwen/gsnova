@@ -52,7 +52,7 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 			conn.Close()
 			return
 		}
-		if p.Name() == "Direct" && net.ParseIP(socksTargetHost) != nil {
+		if (p.Name() == "Direct") && net.ParseIP(socksTargetHost) != nil {
 			addr = net.JoinHostPort(socksTargetHost, socksTargetPort)
 		}
 		tcpOpen := &event.TCPOpenEvent{}
@@ -160,7 +160,7 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 				} else {
 					sniSniffed = true
 					chunkContent = sniChunk
-					log.Printf("####SNI = %v:%s   %s", sni, socksTargetPort, net.JoinHostPort(sni, socksTargetPort))
+					//log.Printf("####SNI = %v:%s   %s", sni, socksTargetPort, net.JoinHostPort(sni, socksTargetPort))
 					socksInitProxy(net.JoinHostPort(sni, socksTargetPort))
 				}
 			}
@@ -178,6 +178,7 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 			log.Printf("Session:%d read request failed from proxy connection:%v", sid, err)
 			break
 		}
+
 		if nil == p {
 			p = proxy.findProxyByRequest("http", socksTargetHost, req)
 			if nil == p {

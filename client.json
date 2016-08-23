@@ -18,6 +18,15 @@
     //fake address, only used as udp traffic indicator in VPN mode
     "UDPGWAddr": "20.20.20.20:1111",
 
+    //used to sync config files to android app    
+    "ConfigStore":{
+    	//a local http file server, do NOT expose this http server to public
+    	//listen on private IP instead of the default config 
+    	//eg: "Listen": "192.168.1.1:7788",
+    	"Listen": ":7788",
+    	"Dir":"./android"
+    },
+
 	"Proxy":[
 		{
 			"Local": ":48100",
@@ -27,7 +36,7 @@
 				{"Protocol":["dns", "udp"],"Remote":"Direct"},
 				{"Rule":["IsCNIP"],"Remote":"Direct"},
 				{"Rule":["InHosts"],"Remote":"TLSDirect"},
-				{"Host":["*"],"Remote":"VPS"}
+				{"Host":["*"],"Remote":"Direct"}
 			]
 		},
 		{
@@ -74,7 +83,11 @@
 		//Unit: second
 		"DialTimeout":5,
 		//Unit: second
-		"ReadTimeout":15
+		"HTTPReadTimeout":30,
+		//Unit: second
+		"WSReadTimeout":15,
+		//Reconnect after 60s
+		"WSReconnectPeriod": 60
 	},
 	"GAE":{
 	    "Enable":false,
@@ -101,6 +114,8 @@
 		//Unit: second
 		"DialTimeout":5,
 		//Unit: second
-		"ReadTimeout":15
+		"ReadTimeout":15,
+		//Reconnect after 60s
+		"ReconnectPeriod": 60
 	}
 }

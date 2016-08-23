@@ -79,12 +79,13 @@ func (tc *tcpChannel) Write(p []byte) (n int, err error) {
 
 func newTCPChannel(addr string, idx int) (*proxy.RemoteChannel, error) {
 	rc := &proxy.RemoteChannel{
-		Addr:          addr,
-		Index:         idx,
-		DirectIO:      false,
-		OpenJoinAuth:  true,
-		WriteJoinAuth: false,
-		HeartBeat:     true,
+		Addr:            addr,
+		Index:           idx,
+		DirectIO:        false,
+		OpenJoinAuth:    true,
+		WriteJoinAuth:   false,
+		HeartBeat:       true,
+		ReconnectPeriod: proxy.GConf.VPS.ReconnectPeriod,
 	}
 	tc := new(tcpChannel)
 	tc.addr = addr
