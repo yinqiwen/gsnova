@@ -33,6 +33,9 @@ func main() {
 		port = os.Getenv("OPENSHIFT_GO_PORT")
 	}
 	if port == "" {
+		port = os.Getenv("VCAP_APP_PORT")
+	}
+	if port == "" {
 		port = "8080"
 	}
 	host := os.Getenv("OPENSHIFT_GO_IP")
