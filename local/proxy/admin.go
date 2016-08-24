@@ -6,16 +6,18 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	//_ "net/http/pprof"
 	"os"
 	"time"
 
 	"github.com/getlantern/netx"
+	"github.com/yinqiwen/gotoolkit/ots"
 	"github.com/yinqiwen/gsnova/common/helper"
 )
 
 func getConfigList(w http.ResponseWriter, r *http.Request) {
 	var confs []string
-	files, _ := ioutil.ReadDir(GConf.ConfigStore.Dir)
+	files, _ := ioutil.ReadDir(GConf.Admin.ConfigDir)
 	for _, f := range files {
 		if f.IsDir() {
 			confs = append(confs, f.Name())
@@ -26,19 +28,31 @@ func getConfigList(w http.ResponseWriter, r *http.Request) {
 	w.Write(js)
 }
 
-func startConfigStoreServer() {
-	if len(GConf.ConfigStore.Listen) == 0 {
+func statCallback(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(200)
+	fmt.Fprintf(w, "NumSession: %d\n", getProxySessionSize())
+	ots.Handle("stat", w)
+}
+func stackdumpCallback(w http.ResponseWriter, req *http.Request) {
+	w.WriteHeader(200)
+	ots.Handle("stackdump", w)
+}
+
+func startAdminServer() {
+	if len(GConf.Admin.Listen) == 0 {
 		return
 	}
-	if len(GConf.ConfigStore.Dir) == 0 {
-		log.Printf("[ERROR]The ConfigStore's Dir must NOT be empty.")
-		return
+	if len(GConf.Admin.ConfigDir) == 0 {
+		log.Printf("[WARN]The ConfigDir's Dir is empty, use current dir instead")
+		GConf.Admin.ConfigDir = "./"
 	}
 	mux := http.NewServeMux()
-	fs := http.FileServer(http.Dir(GConf.ConfigStore.Dir))
+	fs := http.FileServer(http.Dir(GConf.Admin.ConfigDir))
 	mux.Handle("/", fs)
 	mux.HandleFunc("/_conflist", getConfigList)
-	err := http.ListenAndServe(GConf.ConfigStore.Listen, mux)
+	mux.HandleFunc("/stat", statCallback)
+	mux.HandleFunc("/stackdump", stackdumpCallback)
+	err := http.ListenAndServe(GConf.Admin.Listen, mux)
 	if nil != err {
 		log.Printf("[ERROR]Failed to start config store server:%v", err)
 	}

@@ -66,6 +66,13 @@ func newRandomSession() *ProxySession {
 func closeProxySession(sid uint32) {
 	sessionMutex.Lock()
 	defer sessionMutex.Unlock()
+	// s, exist := sessions[sid]
+	// if exist {
+	// 	if nil != s && nil != s.Remote {
+	// 		s.Remote.updateActiveSid(sid, false)
+	// 	}
+	// 	delete(sessions, sid)
+	// }
 	delete(sessions, sid)
 	//log.Printf("Close proxy session:%d, %d left", sid, len(sessions))
 }
@@ -74,11 +81,8 @@ func closeAllProxySession() {
 	sessionMutex.Lock()
 	defer sessionMutex.Unlock()
 	for id, _ := range sessions {
-		// closeEv := &event.TCPCloseEvent{}
-		// closeEv.SetId(id)
-		// //session.handle(closeEv)
-		// if nil != session.Remote {
-		// 	session.Remote.Write(closeEv)
+		// if nil != s && nil != s.Remote {
+		// 	s.Remote.updateActiveSid(id, false)
 		// }
 		delete(sessions, id)
 	}

@@ -51,7 +51,25 @@ type RemoteChannel struct {
 
 	connectTime time.Time
 	closeState  int
+	// activeSids     map[uint32]bool
+	// activeSidMutex sync.Mutex
 }
+
+// func (rc *RemoteChannel) updateActiveSid(id uint32, insertOrRemove bool) {
+// 	rc.activeSidMutex.Lock()
+// 	if insertOrRemove {
+// 		rc.activeSids[id] = true
+// 	} else {
+// 		delete(rc.activeSids, id)
+// 	}
+// 	rc.activeSidMutex.Unlock()
+// }
+// func (rc *RemoteChannel) activeSidSize() int {
+// 	rc.activeSidMutex.Lock()
+// 	s := len(rc.activeSids)
+// 	rc.activeSidMutex.Unlock()
+// 	return s
+// }
 
 func (rc *RemoteChannel) authed() bool {
 	return rc.authResult != 0
@@ -66,8 +84,9 @@ func (rc *RemoteChannel) generateIV() uint64 {
 func (rc *RemoteChannel) Init() error {
 	rc.running = true
 	rc.authResult = 0
+	//rc.activeSids = make(map[uint32]bool)
 
-	authSession := newRandomSession()
+	//authSession := newRandomSession()
 	if !rc.DirectIO {
 		rc.wch = make(chan event.Event, 5)
 		go rc.processWrite()
@@ -82,6 +101,7 @@ func (rc *RemoteChannel) Init() error {
 	for rc.authResult == 0 {
 		if time.Now().After(start.Add(authTimeout)) {
 			rc.Stop()
+			rc.authResult = -1 //timeout
 			return fmt.Errorf("Server:%s auth timeout after %v", rc.Addr, time.Now().Sub(start))
 		}
 		time.Sleep(1 * time.Millisecond)
@@ -94,7 +114,7 @@ func (rc *RemoteChannel) Init() error {
 	} else {
 		return fmt.Errorf("Server:%s auth recv unexpected code:%d.", rc.Addr, rc.authResult)
 	}
-	closeProxySession(authSession.id)
+	//closeProxySession(authSession.id)
 	return nil
 }
 func (rc *RemoteChannel) Close() {
@@ -206,7 +226,7 @@ func (rc *RemoteChannel) processRead() {
 		conn := rc.C
 		if conn.Closed() {
 			rc.closeState = 0
-			if getProxySessionSize() == 0 {
+			if rc.authed() && getProxySessionSize() == 0 {
 				time.Sleep(10 * time.Millisecond)
 				continue
 			}
@@ -299,6 +319,9 @@ func (rc *RemoteChannel) Request(ev event.Event) (event.Event, error) {
 }
 
 func (rc *RemoteChannel) Write(ev event.Event) error {
+	// if nil != ev {
+	// 	rc.updateActiveSid(ev.GetId(), true)
+	// }
 	rc.wch <- ev
 	return nil
 }

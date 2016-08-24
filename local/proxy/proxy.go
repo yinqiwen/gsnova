@@ -89,7 +89,7 @@ func Start(home string) error {
 			log.Printf("Proxy:%s init success.", name)
 		}
 	}
-	go startConfigStoreServer()
+	go startAdminServer()
 	startLocalServers()
 	return nil
 }
