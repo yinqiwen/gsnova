@@ -188,9 +188,9 @@ func (p *ProxySession) processEvents() {
 				return
 			}
 		case <-time.After(time.Second * 30):
-			log.Printf("Session[%s:%d] read channel timeout after 30s.", p.Id.User, p.Id.Id)
-			p.forceClose()
-			return
+			if nil == p.conn {
+				return
+			}
 		}
 	}
 }
