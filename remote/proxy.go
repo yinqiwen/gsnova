@@ -180,11 +180,17 @@ func (p *ProxySession) initialClose() {
 
 func (p *ProxySession) processEvents() {
 	for {
-		ev := <-p.ch
-		if nil != ev {
-			p.handle(ev)
-		} else {
-			break
+		select {
+		case ev := <-p.ch:
+			if nil != ev {
+				p.handle(ev)
+			} else {
+				return
+			}
+		case <-time.After(time.Second * 30):
+			log.Printf("Session[%s:%d] read channel timeout after 30s.", p.Id.User, p.Id.Id)
+			p.forceClose()
+			return
 		}
 	}
 }
@@ -240,11 +246,11 @@ func (p *ProxySession) readNetwork() error {
 			p.publish(ev)
 		}
 		if nil != err {
-			p.initialClose()
-			return err
+			break
 		}
 
 	}
+	p.initialClose()
 	return nil
 }
 func (p *ProxySession) offer(ev event.Event) {
