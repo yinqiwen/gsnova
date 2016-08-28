@@ -149,6 +149,7 @@ func (rc *RemoteChannel) processWrite() {
 		return evs
 	}
 	var sendEvents []event.Event
+	var wbuf bytes.Buffer
 	for rc.running {
 		conn := rc.C
 		//disable write if waiting for close CK
@@ -174,14 +175,13 @@ func (rc *RemoteChannel) processWrite() {
 			time.Sleep(5 * time.Millisecond)
 			continue
 		}
-
-		var buf bytes.Buffer
+		wbuf.Reset()
 		civ := rc.iv
 		if rc.WriteJoinAuth || (rc.connSendedEvents == 0 && rc.OpenJoinAuth) {
 			auth := NewAuthEvent()
 			auth.Index = int64(rc.Index)
 			auth.IV = civ
-			event.EncryptEvent(&buf, auth, 0)
+			event.EncryptEvent(&wbuf, auth, 0)
 			rc.connSendedEvents++
 		}
 
@@ -191,20 +191,20 @@ func (rc *RemoteChannel) processWrite() {
 					log.Printf("####Got %d %d", civ, auth.IV)
 				}
 				auth.IV = civ
-				event.EncryptEvent(&buf, sev, 0)
+				event.EncryptEvent(&wbuf, sev, 0)
 			} else {
-				event.EncryptEvent(&buf, sev, civ)
+				event.EncryptEvent(&wbuf, sev, civ)
 			}
 		}
 		if rc.closeState == stateCloseToSendReq {
 			closeReq := &event.ChannelCloseReqEvent{}
-			event.EncryptEvent(&buf, closeReq, civ)
+			event.EncryptEvent(&wbuf, closeReq, civ)
 		}
 		rc.connSendedEvents += uint32(len(sendEvents))
 
-		if buf.Len() > 0 {
+		if wbuf.Len() > 0 {
 			//start := time.Now()
-			_, err := conn.Write(buf.Bytes())
+			_, err := conn.Write(wbuf.Bytes())
 			if nil != err {
 				conn.Close()
 				log.Printf("Failed to write tcp messgage:%v", err)
@@ -219,6 +219,20 @@ func (rc *RemoteChannel) processWrite() {
 			}
 		}
 	}
+}
+
+type bufferEOFReader struct {
+	r   io.Reader
+	err error
+}
+
+func (r *bufferEOFReader) Read(p []byte) (int, error) {
+	n, err := r.r.Read(p)
+	r.err = err
+	if nil != err {
+		return n, err
+	}
+	return n, io.EOF
 }
 
 func (rc *RemoteChannel) processRead() {
@@ -244,11 +258,16 @@ func (rc *RemoteChannel) processRead() {
 				rc.Write(nil)
 			}
 		}
-		data := make([]byte, 8192)
+		//data := make([]byte, 8192)
 		var buf bytes.Buffer
+		reader := &bufferEOFReader{conn, nil}
 		for {
-			n, cerr := conn.Read(data)
-			buf.Write(data[0:n])
+			//buf.Truncate(buf.Len())
+			buf.Grow(8192)
+			buf.ReadFrom(reader)
+			cerr := reader.err
+			//n, cerr := conn.Read(data)
+			//buf.Write(data[0:n])
 			if rc.ReconnectPeriod > 0 && rc.closeState == 0 {
 				if rc.connectTime.Add(time.Duration(rc.ReconnectPeriod) * time.Second).Before(time.Now()) {
 					rc.closeState = stateCloseToSendReq
