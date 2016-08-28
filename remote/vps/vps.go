@@ -36,12 +36,13 @@ func serveProxyConn(conn net.Conn) {
 	// 	_, err := conn.Write(buf.Bytes())
 	// 	return err
 	// }
-	writeEvents := func(evs []event.Event) error {
+	writeEvents := func(evs []event.Event, buf *bytes.Buffer) error {
+		buf.Reset()
 		if len(evs) > 0 {
-			var buf bytes.Buffer
+			//var buf bytes.Buffer
 			for _, ev := range evs {
 				if nil != ev {
-					event.EncryptEvent(&buf, ev, ctx.IV)
+					event.EncryptEvent(buf, ev, ctx.IV)
 				}
 			}
 			if buf.Len() > 0 {
@@ -59,6 +60,7 @@ func serveProxyConn(conn net.Conn) {
 	var buf bytes.Buffer
 	b := make([]byte, 8192)
 
+	var wbuf bytes.Buffer
 	writeTaskRunning := false
 	connClosed := false
 	for !connClosed {
@@ -80,7 +82,7 @@ func serveProxyConn(conn net.Conn) {
 				return
 			}
 		} else {
-			writeEvents(ress)
+			writeEvents(ress, &wbuf)
 			if !writeTaskRunning && len(ctx.User) > 0 && ctx.ConnIndex >= 0 {
 				writeTaskRunning = true
 				go func() {
@@ -100,7 +102,7 @@ func serveProxyConn(conn net.Conn) {
 							}
 						}
 
-						err = writeEvents(evs)
+						err = writeEvents(evs, &wbuf)
 						if ctx.Closing {
 							break
 						}

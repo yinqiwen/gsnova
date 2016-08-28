@@ -23,12 +23,12 @@ func readRequestBuffer(r *http.Request) *bytes.Buffer {
 // handleWebsocket connection. Update to
 func httpInvoke(w http.ResponseWriter, r *http.Request) {
 	ctx := remote.NewConnContext()
-	writeEvents := func(evs []event.Event) error {
+	writeEvents := func(evs []event.Event, buf *bytes.Buffer) error {
 		if len(evs) > 0 {
-			var buf bytes.Buffer
+			buf.Reset()
 			for _, ev := range evs {
 				if nil != ev {
-					event.EncryptEvent(&buf, ev, ctx.IV)
+					event.EncryptEvent(buf, ev, ctx.IV)
 				}
 			}
 			if buf.Len() > 0 {
@@ -42,7 +42,7 @@ func httpInvoke(w http.ResponseWriter, r *http.Request) {
 		return nil
 	}
 	reqbuf := readRequestBuffer(r)
-
+	var wbuf bytes.Buffer
 	ress, err := remote.HandleRequestBuffer(reqbuf, ctx)
 	if nil != err {
 		log.Printf("[ERROR]connection %s:%d error:%v with path:%s ", ctx.User, ctx.ConnIndex, err, r.URL.Path)
@@ -51,7 +51,7 @@ func httpInvoke(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(200)
 		begin := time.Now()
 		if strings.HasSuffix(r.URL.Path, "pull") {
-			writeEvents(ress)
+			writeEvents(ress, &wbuf)
 			queue := remote.GetEventQueue(ctx.ConnId, true)
 			defer remote.ReleaseEventQueue(queue)
 			for {
@@ -63,7 +63,7 @@ func httpInvoke(w http.ResponseWriter, r *http.Request) {
 				if nil != err {
 					continue
 				}
-				err = writeEvents(evs)
+				err = writeEvents(evs, &wbuf)
 				if nil != err {
 					log.Printf("Websoket write error:%v", err)
 					return
