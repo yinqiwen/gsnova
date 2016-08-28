@@ -12,6 +12,7 @@ import (
 
 	"github.com/yinqiwen/gotoolkit/ots"
 	"github.com/yinqiwen/gsnova/common/event"
+	"github.com/yinqiwen/gsnova/common/helper"
 	"github.com/yinqiwen/gsnova/remote"
 )
 
@@ -57,23 +58,22 @@ func serveProxyConn(conn net.Conn) {
 		}
 	}
 
-	var buf bytes.Buffer
-	b := make([]byte, 8192)
-
+	var rbuf bytes.Buffer
 	var wbuf bytes.Buffer
+	//b := make([]byte, 8192)
+
 	writeTaskRunning := false
 	connClosed := false
+	reader := &helper.BufferChunkReader{bufconn, nil}
 	for !connClosed {
 		conn.SetReadDeadline(time.Now().Add(60 * time.Second))
-		n, cerr := bufconn.Read(b)
-		if n > 0 {
-			buf.Write(b[0:n])
-		}
-		if nil != cerr {
+		rbuf.Grow(8192)
+		rbuf.ReadFrom(reader)
+		if nil != reader.Err {
 			conn.Close()
 			connClosed = true
 		}
-		ress, err := remote.HandleRequestBuffer(&buf, ctx)
+		ress, err := remote.HandleRequestBuffer(&rbuf, ctx)
 		if nil != err {
 			if err != event.EBNR {
 				log.Printf("[ERROR]connection %s:%d error:%v", ctx.User, ctx.ConnIndex, err)

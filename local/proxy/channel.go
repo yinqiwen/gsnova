@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/yinqiwen/gsnova/common/event"
+	"github.com/yinqiwen/gsnova/common/helper"
 )
 
 const (
@@ -221,20 +222,6 @@ func (rc *RemoteChannel) processWrite() {
 	}
 }
 
-type bufferEOFReader struct {
-	r   io.Reader
-	err error
-}
-
-func (r *bufferEOFReader) Read(p []byte) (int, error) {
-	n, err := r.r.Read(p)
-	r.err = err
-	if nil != err {
-		return n, err
-	}
-	return n, io.EOF
-}
-
 func (rc *RemoteChannel) processRead() {
 	for rc.running {
 		conn := rc.C
@@ -260,12 +247,12 @@ func (rc *RemoteChannel) processRead() {
 		}
 		//data := make([]byte, 8192)
 		var buf bytes.Buffer
-		reader := &bufferEOFReader{conn, nil}
+		reader := &helper.BufferChunkReader{conn, nil}
 		for {
 			//buf.Truncate(buf.Len())
 			buf.Grow(8192)
 			buf.ReadFrom(reader)
-			cerr := reader.err
+			cerr := reader.Err
 			//n, cerr := conn.Read(data)
 			//buf.Write(data[0:n])
 			if rc.ReconnectPeriod > 0 && rc.closeState == 0 {
