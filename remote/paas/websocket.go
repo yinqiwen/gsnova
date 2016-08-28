@@ -52,8 +52,6 @@ func websocketInvoke(w http.ResponseWriter, r *http.Request) {
 	buf := bytes.NewBuffer(nil)
 
 	wsClosed := false
-	var queue *remote.ConnEventQueue
-	defer remote.ReleaseEventQueue(queue)
 	for {
 		mt, data, err := ws.ReadMessage()
 		if err != nil {
@@ -77,21 +75,21 @@ func websocketInvoke(w http.ResponseWriter, r *http.Request) {
 				wsClosed = true
 			} else {
 				writeEvents(ress)
-				if nil == queue && len(ctx.User) > 0 && ctx.ConnIndex >= 0 {
-					queue = remote.GetEventQueue(ctx.ConnId, true)
+				if len(ctx.User) > 0 && ctx.ConnIndex >= 0 {
 					go func() {
+						queue := remote.GetEventQueue(ctx.ConnId, true)
 						for !wsClosed {
 							evs, err := queue.PeekMulti(2, 1*time.Millisecond)
 							if ctx.Closing {
 								evs = []event.Event{&event.ChannelCloseACKEvent{}}
 							} else {
 								if nil != err {
-									continue
+									break
 								}
 							}
 							err = writeEvents(evs)
 							if ctx.Closing {
-								return
+								break
 							}
 							if nil != err {
 								log.Printf("Websoket write error:%v", err)

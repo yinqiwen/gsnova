@@ -227,7 +227,7 @@ func (p *ProxySession) readNetwork() error {
 		if nil == conn {
 			return nil
 		}
-		conn.SetReadDeadline(time.Now().Add(10 * time.Second))
+		conn.SetReadDeadline(time.Now().Add(30 * time.Second))
 		b := make([]byte, 8192)
 		n, err := conn.Read(b)
 		if n > 0 {

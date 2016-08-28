@@ -59,9 +59,7 @@ func serveProxyConn(conn net.Conn) {
 	var buf bytes.Buffer
 	b := make([]byte, 8192)
 
-	var queue *remote.ConnEventQueue
 	connClosed := false
-	defer remote.ReleaseEventQueue(queue)
 	for !connClosed {
 		conn.SetReadDeadline(time.Now().Add(60 * time.Second))
 		n, cerr := bufconn.Read(b)
@@ -82,10 +80,10 @@ func serveProxyConn(conn net.Conn) {
 			}
 		} else {
 			writeEvents(ress)
-			if nil == queue && len(ctx.User) > 0 && ctx.ConnIndex >= 0 {
-				queue = remote.GetEventQueue(ctx.ConnId, true)
+			if len(ctx.User) > 0 && ctx.ConnIndex >= 0 {
 				go func() {
 					var lastEventTime time.Time
+					queue := remote.GetEventQueue(ctx.ConnId, true)
 					for !connClosed {
 						evs, err := queue.PeekMulti(10, 1*time.Millisecond)
 						if ctx.Closing {
@@ -102,13 +100,13 @@ func serveProxyConn(conn net.Conn) {
 
 						err = writeEvents(evs)
 						if ctx.Closing {
-							return
+							break
 						}
 						lastEventTime = time.Now()
 						if nil != err {
 							log.Printf("TCP write error:%v", err)
 							conn.Close()
-							return
+							break
 						} else {
 							queue.DiscardPeeks()
 						}
@@ -157,10 +155,15 @@ func dumpServerSession(args []string, c io.Writer) error {
 	remote.DumpAllSession(c)
 	return nil
 }
+func dumpServerQueue(args []string, c io.Writer) error {
+	remote.DumpAllQueue(c)
+	return nil
+}
 
 func main() {
 	ots.RegisterHandler("vstat", dumpServerStat, 0, 0, "VStat                                 Dump server stat")
-	ots.RegisterHandler("vss", dumpServerSession, 0, 0, "VSS                                  Dump server sessions")
+	ots.RegisterHandler("sls", dumpServerSession, 0, 0, "SLS                                  List server sessions")
+	ots.RegisterHandler("qls", dumpServerQueue, 0, 0, "QLS                                  List server event queues")
 	err := ots.StartTroubleShootingServer(remote.ServerConf.AdminListen)
 	if nil != err {
 		log.Printf("Failed to start admin server with reason:%v", err)

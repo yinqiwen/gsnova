@@ -1,6 +1,8 @@
 package remote
 
 import (
+	"fmt"
+	"io"
 	"log"
 	"sync"
 	"time"
@@ -13,6 +15,11 @@ type ConnEventQueue struct {
 	id         ConnId
 	activeTime time.Time
 	acuired    bool
+}
+
+//just for debug
+func (q *ConnEventQueue) dump(wr io.Writer) {
+	fmt.Fprintf(wr, "[%v]active_time=%v,acuired=%v\n", q.id, q.activeTime, q.acuired)
 }
 
 func (q *ConnEventQueue) PeekMulti(n int, timeout time.Duration) ([]event.Event, error) {
@@ -39,6 +46,15 @@ var queueMutex sync.Mutex
 
 var freeQueueTable = make(map[*ConnEventQueue]bool)
 var freeQueueMutex sync.Mutex
+
+func DumpAllQueue(wr io.Writer) {
+	queueMutex.Lock()
+	defer queueMutex.Unlock()
+	fmt.Fprintf(wr, "NOW=%v\n", time.Now())
+	for _, queue := range queueTable {
+		queue.dump(wr)
+	}
+}
 
 func GetEventQueueSize() int {
 	queueMutex.Lock()
