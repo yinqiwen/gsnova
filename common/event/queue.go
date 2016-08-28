@@ -55,14 +55,14 @@ func (q *EventQueue) peek(timeout time.Duration) (Event, error) {
 }
 
 func (q *EventQueue) Peek(timeout time.Duration) (Event, error) {
-	q.mutex.Lock()
-	defer q.mutex.Unlock()
+	// q.mutex.Lock()
+	// defer q.mutex.Unlock()
 	return q.peek(timeout)
 }
 
 func (q *EventQueue) PeekMulti(n int, timeout time.Duration) ([]Event, error) {
-	q.mutex.Lock()
-	defer q.mutex.Unlock()
+	// q.mutex.Lock()
+	// defer q.mutex.Unlock()
 	if len(q.peeks) > 0 {
 		return q.peeks, nil
 	}
@@ -81,14 +81,14 @@ func (q *EventQueue) PeekMulti(n int, timeout time.Duration) ([]Event, error) {
 }
 
 func (q *EventQueue) DiscardPeeks() {
-	q.mutex.Lock()
-	defer q.mutex.Unlock()
+	// q.mutex.Lock()
+	// defer q.mutex.Unlock()
 	q.peeks = nil
 }
 
 func (q *EventQueue) ReadPeek() Event {
-	q.mutex.Lock()
-	defer q.mutex.Unlock()
+	// q.mutex.Lock()
+	// defer q.mutex.Unlock()
 	if len(q.peeks) > 0 {
 		ev := q.peeks[0]
 		q.peeks = q.peeks[1:]
