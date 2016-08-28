@@ -33,16 +33,17 @@ func websocketInvoke(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := remote.NewConnContext()
-	writeEvents := func(evs []event.Event, buf *bytes.Buffer) error {
-		buf.Reset()
+	writeEvents := func(evs []event.Event, wbuf *bytes.Buffer) error {
 		if len(evs) > 0 {
+			//var buf bytes.Buffer
+			wbuf.Reset()
 			for _, ev := range evs {
 				if nil != ev {
-					event.EncryptEvent(buf, ev, ctx.IV)
+					event.EncryptEvent(wbuf, ev, ctx.IV)
 				}
 			}
-			if buf.Len() > 0 {
-				return ws.WriteMessage(websocket.BinaryMessage, buf.Bytes())
+			if wbuf.Len() > 0 {
+				return ws.WriteMessage(websocket.BinaryMessage, wbuf.Bytes())
 			}
 			return nil
 		}
@@ -51,8 +52,8 @@ func websocketInvoke(w http.ResponseWriter, r *http.Request) {
 	//log.Printf("###Recv websocket connection")
 	buf := bytes.NewBuffer(nil)
 	var wbuf bytes.Buffer
-	writeTaskRunning := false
 	wsClosed := false
+	var queue *remote.ConnEventQueue
 	for {
 		mt, data, err := ws.ReadMessage()
 		if err != nil {
@@ -76,26 +77,26 @@ func websocketInvoke(w http.ResponseWriter, r *http.Request) {
 				wsClosed = true
 			} else {
 				writeEvents(ress, &wbuf)
-				if !writeTaskRunning && len(ctx.User) > 0 && ctx.ConnIndex >= 0 {
-					writeTaskRunning = true
+				if nil == queue && len(ctx.User) > 0 && ctx.ConnIndex >= 0 {
+					queue = remote.GetEventQueue(ctx.ConnId, true)
 					go func() {
-						queue := remote.GetEventQueue(ctx.ConnId, true)
+						var wwbuf bytes.Buffer
 						for !wsClosed {
 							evs, err := queue.PeekMulti(2, 1*time.Millisecond, false)
 							if ctx.Closing {
 								evs = []event.Event{&event.ChannelCloseACKEvent{}}
 							} else {
 								if nil != err {
-									break
+									continue
 								}
 							}
-							err = writeEvents(evs, &wbuf)
+							err = writeEvents(evs, &wwbuf)
 							if ctx.Closing {
 								break
 							}
 							if nil != err {
 								log.Printf("Websoket write error:%v", err)
-								return
+								break
 							} else {
 								queue.DiscardPeeks(false)
 							}
