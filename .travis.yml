@@ -1,4 +1,5 @@
 language: go
 
-script:
- - ./build.sh dist gsnova
+go:
+  - 1.7
+  - tip
