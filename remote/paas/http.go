@@ -59,7 +59,7 @@ func httpInvoke(w http.ResponseWriter, r *http.Request) {
 					log.Printf("Stop puller after 10s for conn:%d", ctx.ConnIndex)
 					break
 				}
-				evs, err := queue.PeekMulti(2, 1*time.Millisecond)
+				evs, err := queue.PeekMulti(2, 1*time.Millisecond, false)
 				if nil != err {
 					continue
 				}
@@ -68,7 +68,7 @@ func httpInvoke(w http.ResponseWriter, r *http.Request) {
 					log.Printf("Websoket write error:%v", err)
 					return
 				} else {
-					queue.DiscardPeeks()
+					queue.DiscardPeeks(false)
 				}
 			}
 		}

@@ -22,24 +22,24 @@ func (q *ConnEventQueue) dump(wr io.Writer) {
 	fmt.Fprintf(wr, "[%v]active_time=%v,acuired=%v\n", q.id, q.activeTime, q.acuired)
 }
 
-func (q *ConnEventQueue) PeekMulti(n int, timeout time.Duration) ([]event.Event, error) {
-	evs, err := q.EventQueue.PeekMulti(n, timeout)
-	if nil != err {
-		return evs, err
-	}
-	// for i, ev := range evs {
-	// 	var sid SessionId
-	// 	sid.ConnId = q.id
-	// 	sid.Id = ev.GetId()
-	// 	if isSessionPassiveClosed(sid) {
-	// 		evs[i] = nil
-	// 	}
-	// 	if _, ok := ev.(*event.TCPCloseEvent); ok {
-	// 		updatePassiveCloseSet(sid, false)
-	// 	}
-	// }
-	return evs, nil
-}
+// func (q *ConnEventQueue) PeekMulti(n int, timeout time.Duration) ([]event.Event, error) {
+// 	evs, err := q.EventQueue.PeekMulti(n, timeout)
+// 	if nil != err {
+// 		return evs, err
+// 	}
+// 	// for i, ev := range evs {
+// 	// 	var sid SessionId
+// 	// 	sid.ConnId = q.id
+// 	// 	sid.Id = ev.GetId()
+// 	// 	if isSessionPassiveClosed(sid) {
+// 	// 		evs[i] = nil
+// 	// 	}
+// 	// 	if _, ok := ev.(*event.TCPCloseEvent); ok {
+// 	// 		updatePassiveCloseSet(sid, false)
+// 	// 	}
+// 	// }
+// 	return evs, nil
+// }
 
 var queueTable map[ConnId]*ConnEventQueue = make(map[ConnId]*ConnEventQueue)
 var queueMutex sync.Mutex

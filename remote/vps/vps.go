@@ -59,6 +59,7 @@ func serveProxyConn(conn net.Conn) {
 	var buf bytes.Buffer
 	b := make([]byte, 8192)
 
+	writeTaskRunning := false
 	connClosed := false
 	for !connClosed {
 		conn.SetReadDeadline(time.Now().Add(60 * time.Second))
@@ -80,12 +81,13 @@ func serveProxyConn(conn net.Conn) {
 			}
 		} else {
 			writeEvents(ress)
-			if len(ctx.User) > 0 && ctx.ConnIndex >= 0 {
+			if !writeTaskRunning && len(ctx.User) > 0 && ctx.ConnIndex >= 0 {
+				writeTaskRunning = true
 				go func() {
 					var lastEventTime time.Time
 					queue := remote.GetEventQueue(ctx.ConnId, true)
 					for !connClosed {
-						evs, err := queue.PeekMulti(10, 1*time.Millisecond)
+						evs, err := queue.PeekMulti(10, 1*time.Millisecond, false)
 						if ctx.Closing {
 							evs = []event.Event{&event.ChannelCloseACKEvent{}}
 						} else {
@@ -108,7 +110,7 @@ func serveProxyConn(conn net.Conn) {
 							conn.Close()
 							break
 						} else {
-							queue.DiscardPeeks()
+							queue.DiscardPeeks(false)
 						}
 					}
 					remote.ReleaseEventQueue(queue)
