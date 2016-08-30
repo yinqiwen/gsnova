@@ -91,6 +91,10 @@ type httpChannel struct {
 	server string
 }
 
+func (hc *httpChannel) SetIV(iv uint64) {
+
+}
+
 func (tc *httpChannel) ReadTimeout() time.Duration {
 	readTimeout := proxy.GConf.GAE.ReadTimeout
 	if 0 == readTimeout {
@@ -99,7 +103,7 @@ func (tc *httpChannel) ReadTimeout() time.Duration {
 	return time.Duration(readTimeout) * time.Second
 }
 
-func (h *httpChannel) Open(iv uint64) error {
+func (h *httpChannel) Open() error {
 	return nil
 }
 

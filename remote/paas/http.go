@@ -9,15 +9,47 @@ import (
 	"time"
 
 	"github.com/yinqiwen/gsnova/common/event"
+	"github.com/yinqiwen/gsnova/common/helper"
 	"github.com/yinqiwen/gsnova/remote"
 )
 
-func readRequestBuffer(r *http.Request) *bytes.Buffer {
-	b := make([]byte, r.ContentLength)
-	io.ReadFull(r.Body, b)
-	r.Body.Close()
-	reqbuf := bytes.NewBuffer(b)
-	return reqbuf
+// func readRequestBuffer(r *http.Request) *bytes.Buffer {
+// 	b := make([]byte, r.ContentLength)
+// 	io.ReadFull(r.Body, b)
+// 	r.Body.Close()
+// 	reqbuf := bytes.NewBuffer(b)
+// 	return reqbuf
+// }
+
+func handleRequestBody(r *http.Request, ctx *remote.ConnContext) ([]event.Event, error) {
+	var rbuf bytes.Buffer
+	var evs []event.Event
+	var body io.Reader
+	body = r.Body
+	// if r.ContentLength <= 0 {
+	// 	body = httputil.NewChunkedReader(body)
+	// }
+	reader := &helper.BufferChunkReader{body, nil}
+	defer r.Body.Close()
+	for {
+		rbuf.Grow(8192)
+		rbuf.ReadFrom(reader)
+		ress, err := remote.HandleRequestBuffer(&rbuf, ctx)
+		if nil != err {
+			if err != event.EBNR {
+				log.Printf("[ERROR]connection %s:%d error:%v", ctx.User, ctx.ConnIndex, err)
+				return nil, err
+			}
+		} else {
+			if len(ress) > 0 {
+				evs = append(evs, ress...)
+			}
+		}
+		if nil != reader.Err {
+			break
+		}
+	}
+	return evs, nil
 }
 
 // handleWebsocket connection. Update to
@@ -41,9 +73,9 @@ func httpInvoke(w http.ResponseWriter, r *http.Request) {
 		}
 		return nil
 	}
-	reqbuf := readRequestBuffer(r)
+	//reqbuf := readRequestBuffer(r)
 	var wbuf bytes.Buffer
-	ress, err := remote.HandleRequestBuffer(reqbuf, ctx)
+	ress, err := handleRequestBody(r, ctx)
 	if nil != err {
 		log.Printf("[ERROR]connection %s:%d error:%v with path:%s ", ctx.User, ctx.ConnIndex, err, r.URL.Path)
 		w.WriteHeader(400)
@@ -65,11 +97,10 @@ func httpInvoke(w http.ResponseWriter, r *http.Request) {
 				}
 				err = writeEvents(evs, &wbuf)
 				if nil != err {
-					log.Printf("Websoket write error:%v", err)
+					log.Printf("HTTP write error:%v", err)
 					return
-				} else {
-					queue.DiscardPeeks(false)
 				}
+				queue.DiscardPeeks(false)
 			}
 		}
 	}

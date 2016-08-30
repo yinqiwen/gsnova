@@ -27,6 +27,8 @@ var salsa20Key [32]byte
 
 var defaultEncryptMethod int
 
+var aes256gcm cipher.AEAD
+
 // var rc4Key string
 // var salsa20Key [32]byte
 
@@ -66,6 +68,8 @@ func SetDefaultSecretKey(method string, key string) {
 		defaultEncryptMethod = Salsa20Encypter
 	} else if strings.EqualFold(method, "aes") {
 		defaultEncryptMethod = AES256Encypter
+		block, _ := aes.NewCipher(secretKey)
+		aes256gcm, _ = cipher.NewGCM(block)
 		//defaultEncryptMethod = Chacha20Encypter
 	} else if strings.EqualFold(method, "chacha20") {
 		defaultEncryptMethod = Chacha20Encypter
@@ -493,17 +497,17 @@ func EncryptEvent(buf *bytes.Buffer, ev Event, iv uint64) error {
 		rc4Cipher, _ := rc4.NewCipher(secretKey)
 		rc4Cipher.XORKeyStream(eventContent, eventContent)
 	case AES256Encypter:
-		block, _ := aes.NewCipher(secretKey)
-		aesgcm, _ := cipher.NewGCM(block)
-		aesgcm.Seal(eventContent, nonce, eventContent, nil)
+		//block, _ := aes.NewCipher(secretKey)
+		//aesgcm, _ := cipher.NewGCM(block)
+		aes256gcm.Seal(eventContent, nonce, eventContent, nil)
 		//block.Encrypt(eventContent, eventContent)
 	case Chacha20Encypter:
 		chacha20Cipher, _ := chacha20.New(secretKey, nonce)
 		chacha20Cipher.XORKeyStream(eventContent, eventContent)
 	}
+	//log.Printf("Enc  event(%d):%T with iv:%d with len:%d", ev.GetId(), ev, iv, elen)
 	elen = (elen << 8) + hlen
 	binary.LittleEndian.PutUint32(buf.Bytes()[start:start+4], elen)
-
 	return nil
 }
 
@@ -545,9 +549,9 @@ func DecryptEvent(buf *bytes.Buffer, iv uint64) (err error, ev Event) {
 		rc4Cipher, _ := rc4.NewCipher(secretKey)
 		rc4Cipher.XORKeyStream(body, body)
 	case AES256Encypter:
-		block, _ := aes.NewCipher(secretKey)
-		aesgcm, _ := cipher.NewGCM(block)
-		aesgcm.Open(body, nonce, body, nil)
+		//block, _ := aes.NewCipher(secretKey)
+		//aesgcm, _ := cipher.NewGCM(block)
+		aes256gcm.Open(body, nonce, body, nil)
 		//block.Decrypt(body, body)
 	case Chacha20Encypter:
 		cipher, _ := chacha20.New(secretKey, nonce)
@@ -568,8 +572,9 @@ func DecryptEvent(buf *bytes.Buffer, iv uint64) (err error, ev Event) {
 	ev.SetId(header.Id)
 	err = ev.Decode(ebuf)
 	if nil != err {
-		log.Printf("Failed to decode event:%T", tmp)
+		log.Printf("Failed to decode event:%T with err:%v with len:%d", tmp, err, elen)
 	}
+	//log.Printf("Dec event(%d):%T with iv:%d with len:%d", ev.GetId(), ev, iv, elen)
 	return
 }
 

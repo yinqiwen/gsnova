@@ -27,7 +27,8 @@ type ProxyChannel interface {
 }
 
 type RemoteProxyChannel interface {
-	Open(iv uint64) error
+	Open() error
+	SetIV(iv uint64)
 	Closed() bool
 	Request([]byte) ([]byte, error)
 	ReadTimeout() time.Duration
@@ -40,7 +41,7 @@ type RemoteChannel struct {
 	DirectIO        bool
 	WriteJoinAuth   bool
 	OpenJoinAuth    bool
-	HeartBeat       bool
+	HeartBeatPeriod int
 	ReconnectPeriod int
 	C               RemoteProxyChannel
 
@@ -93,7 +94,7 @@ func (rc *RemoteChannel) Init() error {
 		go rc.processWrite()
 		go rc.processRead()
 	}
-	if rc.HeartBeat {
+	if rc.HeartBeatPeriod > 0 {
 		go rc.heartbeat()
 	}
 
@@ -130,7 +131,7 @@ func (rc *RemoteChannel) Stop() {
 }
 
 func (rc *RemoteChannel) heartbeat() {
-	ticker := time.NewTicker(5 * time.Second)
+	ticker := time.NewTicker(time.Duration(rc.HeartBeatPeriod) * time.Second)
 	for rc.running {
 		select {
 		case <-ticker.C:
@@ -193,8 +194,10 @@ func (rc *RemoteChannel) processWrite() {
 				}
 				auth.IV = civ
 				event.EncryptEvent(&wbuf, sev, 0)
+				//log.Printf("##[%d]Send %T with %d", sev.GetId(), sev, 0)
 			} else {
 				event.EncryptEvent(&wbuf, sev, civ)
+				//log.Printf("##[%d]Send %T with %d", sev.GetId(), sev, civ)
 			}
 		}
 		if rc.closeState == stateCloseToSendReq {
@@ -227,13 +230,14 @@ func (rc *RemoteChannel) processRead() {
 		conn := rc.C
 		if conn.Closed() {
 			rc.closeState = 0
-			if rc.authed() && getProxySessionSize() == 0 {
+			if rc.authed() && getProxySessionSize() == 0 && !GConf.ChannelKeepAlive {
 				time.Sleep(10 * time.Millisecond)
 				continue
 			}
 			rc.generateIV()
 			rc.connSendedEvents = 0
-			err := conn.Open(rc.iv)
+			conn.SetIV(rc.iv)
+			err := conn.Open()
 			if nil != err {
 				log.Printf("Channel[%d] connect %s failed:%v.", rc.Index, rc.Addr, err)
 				time.Sleep(1 * time.Second)

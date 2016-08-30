@@ -23,7 +23,10 @@ func (tc *tcpChannel) ReadTimeout() time.Duration {
 	return time.Duration(readTimeout) * time.Second
 }
 
-func (tc *tcpChannel) Open(iv uint64) error {
+func (tc *tcpChannel) SetIV(iv uint64) {
+}
+
+func (tc *tcpChannel) Open() error {
 	dailTimeout := proxy.GConf.VPS.DialTimeout
 	if 0 == dailTimeout {
 		dailTimeout = 5
@@ -84,7 +87,7 @@ func newTCPChannel(addr string, idx int) (*proxy.RemoteChannel, error) {
 		DirectIO:        false,
 		OpenJoinAuth:    true,
 		WriteJoinAuth:   false,
-		HeartBeat:       true,
+		HeartBeatPeriod: proxy.GConf.VPS.HeartBeatPeriod,
 		ReconnectPeriod: proxy.GConf.VPS.ReconnectPeriod,
 	}
 	tc := new(tcpChannel)

@@ -41,16 +41,18 @@ func matchHostnames(pattern, host string) bool {
 }
 
 type PAASConfig struct {
-	Enable            bool
-	ServerList        []string
-	ConnsPerServer    int
-	SNI               string
-	SNIProxy          string
-	HTTPProxy         string
-	DialTimeout       int
-	HTTPReadTimeout   int
-	WSReadTimeout     int
-	WSReconnectPeriod int
+	Enable              bool
+	ServerList          []string
+	ConnsPerServer      int
+	SNI                 string
+	SNIProxy            string
+	HTTPProxy           string
+	DialTimeout         int
+	HTTPReadTimeout     int
+	WSReadTimeout       int
+	WSReconnectPeriod   int
+	WSHeartBeatPeriod   int
+	HTTPChunkPushPeriod int
 }
 
 type GAEConfig struct {
@@ -72,6 +74,7 @@ type VPSConfig struct {
 	DialTimeout     int
 	ReadTimeout     int
 	ReconnectPeriod int
+	HeartBeatPeriod int
 }
 
 type PACConfig struct {
@@ -246,18 +249,19 @@ type AdminConfig struct {
 }
 
 type LocalConfig struct {
-	Log       []string
-	Encrypt   EncryptConfig
-	UserAgent string
-	Auth      string
-	LocalDNS  LocalDNSConfig
-	UDPGWAddr string
-	Admin     AdminConfig
-	Proxy     []ProxyConfig
-	PAAS      PAASConfig
-	GAE       GAEConfig
-	VPS       VPSConfig
-	Direct    DirectConfig
+	Log              []string
+	Encrypt          EncryptConfig
+	UserAgent        string
+	Auth             string
+	LocalDNS         LocalDNSConfig
+	UDPGWAddr        string
+	ChannelKeepAlive bool
+	Admin            AdminConfig
+	Proxy            []ProxyConfig
+	PAAS             PAASConfig
+	GAE              GAEConfig
+	VPS              VPSConfig
+	Direct           DirectConfig
 }
 
 func (cfg *LocalConfig) init() error {

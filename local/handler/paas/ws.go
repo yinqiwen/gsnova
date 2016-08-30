@@ -31,7 +31,10 @@ func (tc *websocketChannel) Request([]byte) ([]byte, error) {
 	return nil, nil
 }
 
-func (wc *websocketChannel) Open(iv uint64) error {
+func (hc *websocketChannel) SetIV(iv uint64) {
+}
+
+func (wc *websocketChannel) Open() error {
 	u, err := url.Parse(wc.url)
 	if nil != err {
 		return err
@@ -123,6 +126,7 @@ func newWebsocketChannel(addr string, idx int) (*proxy.RemoteChannel, error) {
 		OpenJoinAuth:    true,
 		WriteJoinAuth:   false,
 		ReconnectPeriod: proxy.GConf.PAAS.WSReconnectPeriod,
+		HeartBeatPeriod: proxy.GConf.PAAS.WSHeartBeatPeriod,
 	}
 	tc := new(websocketChannel)
 	tc.url = addr

@@ -71,7 +71,6 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 			handleUDPGatewayConn(conn, proxy)
 			return
 		}
-		//log.Printf("Handle tcp conn for %v", socksConn.Req.Target)
 		conn = socksConn
 		session.Hijacked = true
 
@@ -116,6 +115,7 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 			case *event.NotifyEvent:
 				//donothing now
 			case *event.TCPCloseEvent:
+				connClosed = true
 				conn.Close()
 				return
 			case *event.TCPChunkEvent:
@@ -135,12 +135,14 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 		sniSniffed = false
 	}
 	sniChunk := make([]byte, 0)
-	for {
+	for !connClosed {
 		if session.Hijacked {
 			buffer := make([]byte, 8192)
 			n, err := bufconn.Read(buffer)
 			if nil != err {
-				log.Printf("Session:%d read chunk failed from proxy connection:%v", sid, err)
+				if err != io.EOF && !connClosed {
+					log.Printf("Session:%d read chunk failed from proxy connection:%v", sid, err)
+				}
 				break
 			}
 			chunkContent := buffer[0:n]
@@ -175,15 +177,17 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 		}
 		req, err := http.ReadRequest(bufconn)
 		if nil != err {
-			log.Printf("Session:%d read request failed from proxy connection:%v", sid, err)
+			if err != io.EOF && !connClosed {
+				log.Printf("Session:%d read request failed from proxy connection:%v", sid, err)
+			}
 			break
 		}
 
 		if nil == p {
 			p = proxy.findProxyByRequest("http", socksTargetHost, req)
 			if nil == p {
-				conn.Close()
 				connClosed = true
+				conn.Close()
 				return
 			}
 		}

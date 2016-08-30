@@ -2,11 +2,11 @@ package event
 
 import (
 	"bytes"
-	"fmt"
 	//	"reflect"
 	"net/http"
 	"testing"
 	//"time"
+	"fmt"
 )
 
 func benchamark(n int) {
@@ -16,22 +16,25 @@ func benchamark(n int) {
 	request.Headers.Add("D", "ZZ")
 	request.URL = "hello"
 	request.Method = "GET"
-	request.Content = []byte("hello,world")
+	var buf bytes.Buffer
+	for i := 0; i < 5; i++ {
+		fmt.Fprintf(&buf, "hello, world, ##########11111111%d\n", i)
+	}
+	request.Content = buf.Bytes()
 
 	for i := 0; i < n; i++ {
 		var buf bytes.Buffer
 		EncryptEvent(&buf, &request, 0)
 		DecryptEvent(&buf, 0)
-
 	}
-	var buf bytes.Buffer
-	EncryptEvent(&buf, &request, 0)
+	// var buf bytes.Buffer
+	// EncryptEvent(&buf, &request, 0)
 
-	//var cmp HTTPRequestEvent
-	err, tmp := DecryptEvent(&buf, 0)
-	fmt.Printf("%v\n", err)
-	cmp, _ := tmp.(*HTTPRequestEvent)
-	fmt.Printf("%s %s %s %v\n", cmp.URL, cmp.Method, string(cmp.Content), cmp.Headers)
+	// //var cmp HTTPRequestEvent
+	// err, tmp := DecryptEvent(&buf, 0)
+	// fmt.Printf("%v\n", err)
+	// cmp, _ := tmp.(*HTTPRequestEvent)
+	// fmt.Printf("%s %s %s %v\n", cmp.URL, cmp.Method, string(cmp.Content), cmp.Headers)
 }
 
 func BenchmarkRC4(b *testing.B) {

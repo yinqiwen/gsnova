@@ -15,15 +15,52 @@ import (
 
 var paasHttpClient *http.Client
 
+type chunkChannelReadCloser struct {
+	chunkChannel chan []byte
+	lastread     []byte
+}
+
+func (cr *chunkChannelReadCloser) Read(p []byte) (int, error) {
+	if len(cr.lastread) == 0 {
+		cr.lastread = <-cr.chunkChannel
+		if nil == cr.lastread {
+			return 0, io.EOF
+		}
+	}
+	if len(cr.lastread) <= len(p) {
+		copy(p, cr.lastread)
+		n := len(cr.lastread)
+		cr.lastread = nil
+		return n, nil
+	}
+	copy(p, cr.lastread[0:len(p)])
+	cr.lastread = cr.lastread[len(p):]
+	return len(p), nil
+}
+func (cr *chunkChannelReadCloser) Close() error {
+	return nil
+}
+func (cr *chunkChannelReadCloser) offer(p []byte) {
+	cr.chunkChannel <- p
+}
+
+func (cr *chunkChannelReadCloser) prepend(p []byte) {
+	if len(cr.lastread) > 0 {
+		log.Printf("###########################No empty:%d", len(cr.lastread))
+	}
+	cr.lastread = p
+}
+
 type httpChannel struct {
 	addr    string
 	idx     int
 	pushurl *url.URL
 	pullurl *url.URL
 
-	iv      uint64
-	rbody   io.ReadCloser
-	pulling bool
+	iv        uint64
+	rbody     io.ReadCloser
+	pulling   bool
+	chunkChan *chunkChannelReadCloser
 }
 
 func (hc *httpChannel) ReadTimeout() time.Duration {
@@ -34,9 +71,28 @@ func (hc *httpChannel) ReadTimeout() time.Duration {
 	return time.Duration(readTimeout) * time.Second
 }
 
-func (hc *httpChannel) Open(iv uint64) error {
+func (hc *httpChannel) SetIV(iv uint64) {
+	//log.Printf("Change IV from %d to %d", hc.iv, iv)
 	hc.iv = iv
+	if nil != hc.chunkChan {
+		hc.chunkChan.offer(nil)
+	}
+}
 
+func (hc *httpChannel) Open() error {
+	if nil == hc.pushurl {
+		u, err := url.Parse(hc.addr)
+		if nil != err {
+			return err
+		}
+		u.Path = "/http/push"
+		hc.pushurl = u
+	}
+	if proxy.GConf.PAAS.HTTPChunkPushPeriod > 0 && nil == hc.chunkChan {
+		hc.chunkChan = new(chunkChannelReadCloser)
+		hc.chunkChan.chunkChannel = make(chan []byte, 100)
+		go hc.chunkPush()
+	}
 	return hc.pull()
 }
 
@@ -94,16 +150,15 @@ func (hc *httpChannel) Read(p []byte) (int, error) {
 	return n, err
 }
 
-func (hc *httpChannel) postURL(p []byte, u *url.URL) (n int, err error) {
+func buildHTTPReq(u *url.URL, body io.ReadCloser) *http.Request {
 	req := &http.Request{
-		Method:        "POST",
-		URL:           u,
-		ProtoMajor:    1,
-		ProtoMinor:    1,
-		Host:          u.Host,
-		Header:        make(http.Header),
-		Body:          ioutil.NopCloser(bytes.NewBuffer(p)),
-		ContentLength: int64(len(p)),
+		Method:     "POST",
+		URL:        u,
+		ProtoMajor: 1,
+		ProtoMinor: 1,
+		Host:       u.Host,
+		Header:     make(http.Header),
+		Body:       body,
 	}
 	req.Close = false
 	req.Header.Set("Connection", "keep-alive")
@@ -111,6 +166,56 @@ func (hc *httpChannel) postURL(p []byte, u *url.URL) (n int, err error) {
 	if len(proxy.GConf.UserAgent) > 0 {
 		req.Header.Set("User-Agent", proxy.GConf.UserAgent)
 	}
+	return req
+}
+
+func (hc *httpChannel) chunkPush() {
+	u := hc.pushurl
+	pushConnected := false
+	var ticker *time.Ticker
+	closePush := func() {
+		//ticker := time.NewTicker(10 * time.Second)
+		select {
+		case <-ticker.C:
+			if pushConnected {
+				//force push channel close
+				hc.chunkChan.offer(nil)
+			}
+		}
+	}
+
+	for {
+		if len(hc.chunkChan.chunkChannel) == 0 {
+			time.Sleep(10 * time.Millisecond)
+			continue
+		}
+		pushConnected = true
+		req := buildHTTPReq(u, hc.chunkChan)
+		req.ContentLength = -1
+		wAuth := proxy.NewAuthEvent()
+		wAuth.Index = int64(hc.idx)
+		wAuth.IV = hc.iv
+		var buf bytes.Buffer
+		event.EncryptEvent(&buf, wAuth, 0)
+		hc.chunkChan.prepend(buf.Bytes())
+		ticker = time.NewTicker(time.Duration(proxy.GConf.PAAS.HTTPChunkPushPeriod) * time.Second)
+		go closePush()
+		log.Printf("HTTP[%s:%d] chunk push channel start.", hc.addr, hc.idx)
+		response, err := paasHttpClient.Do(req)
+		if nil != err || response.StatusCode != 200 {
+			log.Printf("Failed to write data to PAAS:%s for reason:%v or res:%v", u.String(), err, response)
+		} else {
+			log.Printf("HTTP[%s:%d] chunk push channel stop.", hc.addr, hc.idx)
+		}
+		ticker.Stop()
+		pushConnected = false
+	}
+
+}
+
+func (hc *httpChannel) postURL(p []byte, u *url.URL) (n int, err error) {
+	req := buildHTTPReq(u, ioutil.NopCloser(bytes.NewBuffer(p)))
+	req.ContentLength = int64(len(p))
 	response, err := paasHttpClient.Do(req)
 	if nil != err || response.StatusCode != 200 { //try once more
 		req.Body = ioutil.NopCloser(bytes.NewBuffer(p))
@@ -119,33 +224,31 @@ func (hc *httpChannel) postURL(p []byte, u *url.URL) (n int, err error) {
 	if nil != err || response.StatusCode != 200 {
 		log.Printf("Failed to write data to PAAS:%s for reason:%v or res:%v", u.String(), err, response)
 		return 0, err
-	} else {
-		if response.ContentLength != 0 && nil != response.Body {
-			hc.rbody = response.Body
-		}
-		return len(p), nil
 	}
+	if response.ContentLength != 0 && nil != response.Body {
+		hc.rbody = response.Body
+	}
+	return len(p), nil
 }
 
 func (hc *httpChannel) Write(p []byte) (n int, err error) {
-	if nil == hc.pushurl {
-		u, err := url.Parse(hc.addr)
-		if nil != err {
-			return 0, err
-		}
-		u.Path = "/http/push"
-		hc.pushurl = u
+	if nil != hc.chunkChan {
+		pp := make([]byte, len(p))
+		copy(pp, p)
+		hc.chunkChan.offer(pp)
+		return len(p), nil
 	}
 	return hc.postURL(p, hc.pushurl)
 }
 
 func newHTTPChannel(addr string, idx int) (*proxy.RemoteChannel, error) {
+
 	rc := &proxy.RemoteChannel{
 		Addr:          addr,
 		Index:         idx,
 		DirectIO:      false,
 		OpenJoinAuth:  false,
-		WriteJoinAuth: true,
+		WriteJoinAuth: proxy.GConf.PAAS.HTTPChunkPushPeriod == 0,
 	}
 
 	tc := new(httpChannel)

@@ -361,13 +361,19 @@ func HandleRequestBuffer(reqbuf *bytes.Buffer, ctx *ConnContext) ([]event.Event,
 	for reqbuf.Len() > 0 {
 		var ev event.Event
 		var err error
+
 		err, ev = event.DecryptEvent(reqbuf, ctx.IV)
 		if nil != err {
 			if err != event.EBNR {
-				log.Printf("Failed to decode event for reason:%v", err)
+				log.Printf("Failed to decode event for reason:%v  %d", err, ctx.IV)
 			}
 			return ress, err
 		}
+		// sid := uint32(1)
+		// if nil != ev {
+		// 	sid = ev.GetId()
+		// }
+		//log.Printf("###[%d]Handle  %d", sid, ctx.IV)
 		res, err := handleEvent(ev, ctx)
 		if nil != res {
 			ress = append(ress, res)

@@ -35,7 +35,10 @@ func (tc *directChannel) ReadTimeout() time.Duration {
 	return time.Duration(readTimeout) * time.Second
 }
 
-func (tc *directChannel) Open(iv uint64) error {
+func (hc *directChannel) SetIV(iv uint64) {
+}
+
+func (tc *directChannel) Open() error {
 	return nil
 }
 
