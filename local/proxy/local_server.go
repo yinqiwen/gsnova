@@ -52,6 +52,7 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 			conn.Close()
 			return
 		}
+		log.Printf("Session:%d select handler:%s", sid, p.Name())
 		if (p.Name() == "Direct") && net.ParseIP(socksTargetHost) != nil {
 			addr = net.JoinHostPort(socksTargetHost, socksTargetPort)
 		}
@@ -190,6 +191,7 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 				conn.Close()
 				return
 			}
+			//log.Printf("Session:%d select handler:%s", sid, p.Name())
 		}
 		reqUrl := req.URL.String()
 		if strings.EqualFold(req.Method, "Connect") {

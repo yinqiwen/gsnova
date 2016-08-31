@@ -5,6 +5,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -12,14 +13,6 @@ import (
 	"github.com/yinqiwen/gsnova/common/helper"
 	"github.com/yinqiwen/gsnova/remote"
 )
-
-// func readRequestBuffer(r *http.Request) *bytes.Buffer {
-// 	b := make([]byte, r.ContentLength)
-// 	io.ReadFull(r.Body, b)
-// 	r.Body.Close()
-// 	reqbuf := bytes.NewBuffer(b)
-// 	return reqbuf
-// }
 
 func handleRequestBody(r *http.Request, ctx *remote.ConnContext) ([]event.Event, error) {
 	var rbuf bytes.Buffer
@@ -81,14 +74,18 @@ func httpInvoke(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(400)
 	} else {
 		w.WriteHeader(200)
-		begin := time.Now()
 		if strings.HasSuffix(r.URL.Path, "pull") {
+			begin := time.Now()
+			period, _ := strconv.Atoi(r.Header.Get("X-PullPeriod"))
+			if period <= 0 {
+				period = 15
+			}
 			writeEvents(ress, &wbuf)
 			queue := remote.GetEventQueue(ctx.ConnId, true)
 			defer remote.ReleaseEventQueue(queue)
 			for {
-				if time.Now().After(begin.Add(10 * time.Second)) {
-					log.Printf("Stop puller after 10s for conn:%d", ctx.ConnIndex)
+				if time.Now().After(begin.Add(time.Duration(period) * time.Second)) {
+					log.Printf("Stop puller after %ds for conn:%d", period, ctx.ConnIndex)
 					break
 				}
 				evs, err := queue.PeekMulti(2, 1*time.Millisecond, false)

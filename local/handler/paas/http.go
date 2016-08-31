@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"strconv"
 	"time"
 
 	"github.com/yinqiwen/gsnova/common/event"
@@ -60,6 +61,7 @@ type httpChannel struct {
 	iv        uint64
 	rbody     io.ReadCloser
 	pulling   bool
+	pushing   bool
 	chunkChan *chunkChannelReadCloser
 }
 
@@ -74,7 +76,7 @@ func (hc *httpChannel) ReadTimeout() time.Duration {
 func (hc *httpChannel) SetIV(iv uint64) {
 	//log.Printf("Change IV from %d to %d", hc.iv, iv)
 	hc.iv = iv
-	if nil != hc.chunkChan {
+	if nil != hc.chunkChan && hc.pushing {
 		hc.chunkChan.offer(nil)
 	}
 }
@@ -88,7 +90,7 @@ func (hc *httpChannel) Open() error {
 		u.Path = "/http/push"
 		hc.pushurl = u
 	}
-	if proxy.GConf.PAAS.HTTPChunkPushPeriod > 0 && nil == hc.chunkChan {
+	if proxy.GConf.PAAS.HTTPChunkPushEnable && nil == hc.chunkChan {
 		hc.chunkChan = new(chunkChannelReadCloser)
 		hc.chunkChan.chunkChannel = make(chan []byte, 100)
 		go hc.chunkPush()
@@ -126,6 +128,7 @@ func (hc *httpChannel) pull() error {
 	var buf bytes.Buffer
 	event.EncryptEvent(&buf, readAuth, 0)
 	hc.pulling = true
+	log.Printf("[%s:%d] pull channel start.", hc.addr, hc.idx)
 	_, err := hc.postURL(buf.Bytes(), hc.pullurl)
 	hc.pulling = false
 	return err
@@ -171,13 +174,12 @@ func buildHTTPReq(u *url.URL, body io.ReadCloser) *http.Request {
 
 func (hc *httpChannel) chunkPush() {
 	u := hc.pushurl
-	pushConnected := false
 	var ticker *time.Ticker
 	closePush := func() {
 		//ticker := time.NewTicker(10 * time.Second)
 		select {
 		case <-ticker.C:
-			if pushConnected {
+			if hc.pushing {
 				//force push channel close
 				hc.chunkChan.offer(nil)
 			}
@@ -189,7 +191,7 @@ func (hc *httpChannel) chunkPush() {
 			time.Sleep(10 * time.Millisecond)
 			continue
 		}
-		pushConnected = true
+		hc.pushing = true
 		req := buildHTTPReq(u, hc.chunkChan)
 		req.ContentLength = -1
 		wAuth := proxy.NewAuthEvent()
@@ -198,17 +200,21 @@ func (hc *httpChannel) chunkPush() {
 		var buf bytes.Buffer
 		event.EncryptEvent(&buf, wAuth, 0)
 		hc.chunkChan.prepend(buf.Bytes())
-		ticker = time.NewTicker(time.Duration(proxy.GConf.PAAS.HTTPChunkPushPeriod) * time.Second)
+		period := proxy.GConf.PAAS.HTTPReconnectPeriod
+		if period == 0 {
+			period = 30
+		}
+		ticker = time.NewTicker(time.Duration(period) * time.Second)
 		go closePush()
-		log.Printf("HTTP[%s:%d] chunk push channel start.", hc.addr, hc.idx)
+		log.Printf("[%s:%d] chunk push channel start.", hc.addr, hc.idx)
 		response, err := paasHttpClient.Do(req)
 		if nil != err || response.StatusCode != 200 {
 			log.Printf("Failed to write data to PAAS:%s for reason:%v or res:%v", u.String(), err, response)
 		} else {
-			log.Printf("HTTP[%s:%d] chunk push channel stop.", hc.addr, hc.idx)
+			log.Printf("[%s:%d] chunk push channel stop.", hc.addr, hc.idx)
 		}
 		ticker.Stop()
-		pushConnected = false
+		hc.pushing = false
 	}
 
 }
@@ -216,6 +222,13 @@ func (hc *httpChannel) chunkPush() {
 func (hc *httpChannel) postURL(p []byte, u *url.URL) (n int, err error) {
 	req := buildHTTPReq(u, ioutil.NopCloser(bytes.NewBuffer(p)))
 	req.ContentLength = int64(len(p))
+	if u == hc.pullurl {
+		period := proxy.GConf.PAAS.HTTPReconnectPeriod
+		if 0 == period {
+			period = 30
+		}
+		req.Header.Set("X-PullPeriod", strconv.Itoa(period))
+	}
 	response, err := paasHttpClient.Do(req)
 	if nil != err || response.StatusCode != 200 { //try once more
 		req.Body = ioutil.NopCloser(bytes.NewBuffer(p))
@@ -248,7 +261,7 @@ func newHTTPChannel(addr string, idx int) (*proxy.RemoteChannel, error) {
 		Index:         idx,
 		DirectIO:      false,
 		OpenJoinAuth:  false,
-		WriteJoinAuth: proxy.GConf.PAAS.HTTPChunkPushPeriod == 0,
+		WriteJoinAuth: !proxy.GConf.PAAS.HTTPChunkPushEnable,
 	}
 
 	tc := new(httpChannel)

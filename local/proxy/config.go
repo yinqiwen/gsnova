@@ -52,7 +52,8 @@ type PAASConfig struct {
 	WSReadTimeout       int
 	WSReconnectPeriod   int
 	WSHeartBeatPeriod   int
-	HTTPChunkPushPeriod int
+	HTTPReconnectPeriod int
+	HTTPChunkPushEnable bool
 }
 
 type GAEConfig struct {

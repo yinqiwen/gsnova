@@ -88,7 +88,8 @@
 		//Unit: second
 		"HTTPReadTimeout":30,
 		//Set this positive value to enable chunk encoding request for faster HTTP push
-		"HTTPChunkPushPeriod": 0,
+		"HTTPChunkPushEnable": true,
+		"HTTPReconnectPeriod": 30,
 		//Unit: second
 		"WSReadTimeout":15,
 		//Reconnect after 60s

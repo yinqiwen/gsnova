@@ -25,8 +25,6 @@ type ProtectedConn struct {
 	port     int
 }
 
-
-
 // Resolve resolves the given address using a DNS lookup on a UDP socket
 // protected by the currnet Protector.
 func Resolve(network string, addr string) (*net.TCPAddr, error) {
@@ -83,7 +81,7 @@ func Resolve(network string, addr string) (*net.TCPAddr, error) {
 
 	setQueryTimeouts(fileConn)
 
-	log.Printf("performing dns lookup...!!")
+	//log.Printf("performing dns lookup...!!")
 	result, err := dnsLookup(host, fileConn)
 	if err != nil {
 		log.Printf("Error doing DNS resolution: %v", err)
@@ -144,7 +142,7 @@ func Dial(network, addr string, timeout time.Duration) (net.Conn, error) {
 
 	err = conn.connectSocket()
 	if err != nil {
-		log.Printf("Could not connect to socket: %v", err)
+		log.Printf("Could not connect to %s socket: %v", addr, err)
 		return nil, err
 	}
 
