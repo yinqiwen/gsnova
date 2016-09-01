@@ -9,12 +9,14 @@ import (
 	"net"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/yinqiwen/gsnova/common/event"
 )
 
 var proxySessionMap map[SessionId]*ProxySession = make(map[SessionId]*ProxySession)
+var sessionSize int32
 var sessionMutex sync.Mutex
 
 type ConnId struct {
@@ -28,13 +30,10 @@ type ConnContext struct {
 	IV            uint64
 	EncryptMethod int
 	Closing       bool
-
-	cacheSMap map[SessionId]*ProxySession
 }
 
 func NewConnContext() *ConnContext {
 	ctx := new(ConnContext)
-	ctx.cacheSMap = make(map[SessionId]*ProxySession)
 	return ctx
 }
 
@@ -56,9 +55,9 @@ type ProxySession struct {
 }
 
 func GetSessionTableSize() int {
-	sessionMutex.Lock()
-	defer sessionMutex.Unlock()
-	return len(proxySessionMap)
+	// sessionMutex.Lock()
+	// defer sessionMutex.Unlock()
+	return int(sessionSize)
 }
 func DumpAllSession(wr io.Writer) {
 	sessionMutex.Lock()
@@ -71,18 +70,6 @@ func DumpAllSession(wr io.Writer) {
 func getProxySessionByEvent(ctx *ConnContext, ev event.Event) *ProxySession {
 	cid := ctx.ConnId
 	sid := SessionId{cid, ev.GetId()}
-	if len(ctx.cacheSMap) >= 100 {
-		//clear too large cahce
-		ctx.cacheSMap = make(map[SessionId]*ProxySession)
-	} else {
-		if cacheSession, exist := ctx.cacheSMap[sid]; exist {
-			if cacheSession.closed {
-				delete(ctx.cacheSMap, sid)
-			} else {
-				return cacheSession
-			}
-		}
-	}
 
 	sessionMutex.Lock()
 	defer sessionMutex.Unlock()
@@ -107,7 +94,7 @@ func getProxySessionByEvent(ctx *ConnContext, ev event.Event) *ProxySession {
 	p.ch = make(chan event.Event, 100)
 	go p.processEvents()
 	proxySessionMap[sid] = p
-	ctx.cacheSMap[sid] = p
+	atomic.AddInt32(&sessionSize, 1)
 	return p
 }
 
@@ -116,6 +103,7 @@ func destroyProxySession(s *ProxySession) {
 	s.ch <- nil
 	close(s.ch)
 	s.closed = true
+	atomic.AddInt32(&sessionSize, -1)
 }
 
 func removeProxySession(s *ProxySession) {
@@ -372,8 +360,6 @@ func handleEvent(ev event.Event, ctx *ConnContext) (event.Event, error) {
 				log.Printf("No session:%d found for event %T", ev.GetId(), ev)
 			}
 		} else {
-			sid := SessionId{ctx.ConnId, ev.GetId()}
-			delete(ctx.cacheSMap, sid)
 			if nil != session {
 				session.closeByClient = true
 			}
