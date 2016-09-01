@@ -18,16 +18,18 @@ type EventQueue struct {
 }
 
 func (q *EventQueue) Publish(ev Event, timeout time.Duration) error {
-	start := time.Now()
+	//start := time.Now()
 	for {
 		select {
 		case q.queue <- ev:
 			return nil
-		default:
-			if time.Now().After(start.Add(timeout)) {
-				return EventWriteTimeout
-			}
-			time.Sleep(1 * time.Millisecond)
+		case <-time.After(timeout):
+			return EventWriteTimeout
+			// default:
+			// 	if time.Now().After(start.Add(timeout)) {
+			// 		return EventWriteTimeout
+			// 	}
+			// 	time.Sleep(1 * time.Millisecond)
 		}
 	}
 }

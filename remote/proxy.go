@@ -28,10 +28,13 @@ type ConnContext struct {
 	IV            uint64
 	EncryptMethod int
 	Closing       bool
+
+	cacheSMap map[SessionId]*ProxySession
 }
 
 func NewConnContext() *ConnContext {
 	ctx := new(ConnContext)
+	ctx.cacheSMap = make(map[SessionId]*ProxySession)
 	return ctx
 }
 
@@ -48,6 +51,8 @@ type ProxySession struct {
 	network       string
 	ch            chan event.Event
 	closeByClient bool
+
+	closed bool
 }
 
 func GetSessionTableSize() int {
@@ -63,8 +68,22 @@ func DumpAllSession(wr io.Writer) {
 	}
 }
 
-func getProxySessionByEvent(cid ConnId, ev event.Event) *ProxySession {
+func getProxySessionByEvent(ctx *ConnContext, ev event.Event) *ProxySession {
+	cid := ctx.ConnId
 	sid := SessionId{cid, ev.GetId()}
+	if len(ctx.cacheSMap) >= 100 {
+		//clear too large cahce
+		ctx.cacheSMap = make(map[SessionId]*ProxySession)
+	} else {
+		if cacheSession, exist := ctx.cacheSMap[sid]; exist {
+			if cacheSession.closed {
+				delete(ctx.cacheSMap, sid)
+			} else {
+				return cacheSession
+			}
+		}
+	}
+
 	sessionMutex.Lock()
 	defer sessionMutex.Unlock()
 	if p, exist := proxySessionMap[sid]; exist {
@@ -88,6 +107,7 @@ func getProxySessionByEvent(cid ConnId, ev event.Event) *ProxySession {
 	p.ch = make(chan event.Event, 100)
 	go p.processEvents()
 	proxySessionMap[sid] = p
+	ctx.cacheSMap[sid] = p
 	return p
 }
 
@@ -95,6 +115,7 @@ func destroyProxySession(s *ProxySession) {
 	delete(proxySessionMap, s.Id)
 	s.ch <- nil
 	close(s.ch)
+	s.closed = true
 }
 
 func removeProxySession(s *ProxySession) {
@@ -106,12 +127,13 @@ func removeProxySession(s *ProxySession) {
 		//log.Printf("Remove sesion:%d, %d left", s.Id.Id, len(proxySessionMap))
 	}
 }
-func sessionExist(sid SessionId) bool {
-	sessionMutex.Lock()
-	defer sessionMutex.Unlock()
-	_, exist := proxySessionMap[sid]
-	return exist
-}
+
+// func sessionExist(sid SessionId) bool {
+// 	sessionMutex.Lock()
+// 	defer sessionMutex.Unlock()
+// 	_, exist := proxySessionMap[sid]
+// 	return exist
+// }
 
 func removeUserSessions(user string, runid int64) {
 	sessionMutex.Lock()
@@ -228,20 +250,22 @@ func (p *ProxySession) write(b []byte) (int, error) {
 }
 
 func (p *ProxySession) readNetwork() error {
+	b := make([]byte, 8192)
 	for {
 		conn := p.conn
 		if nil == conn {
 			return nil
 		}
 		conn.SetReadDeadline(time.Now().Add(30 * time.Second))
-		b := make([]byte, 8192)
 		n, err := conn.Read(b)
 		if n > 0 {
+			content := make([]byte, n)
+			copy(content, b[0:n])
 			var ev event.Event
 			if p.network == "tcp" {
-				ev = &event.TCPChunkEvent{Content: b[0:n]}
+				ev = &event.TCPChunkEvent{Content: content}
 			} else {
-				ev = &event.UDPEvent{Content: b[0:n]}
+				ev = &event.UDPEvent{Content: content}
 			}
 			p.publish(ev)
 		}
@@ -339,7 +363,7 @@ func handleEvent(ev event.Event, ctx *ConnContext) (event.Event, error) {
 			queue.Publish(nil, 1*time.Minute)
 		}
 	default:
-		session := getProxySessionByEvent(ctx.ConnId, ev)
+		session := getProxySessionByEvent(ctx, ev)
 		if nil != session {
 			session.offer(ev)
 		}
@@ -348,6 +372,8 @@ func handleEvent(ev event.Event, ctx *ConnContext) (event.Event, error) {
 				log.Printf("No session:%d found for event %T", ev.GetId(), ev)
 			}
 		} else {
+			sid := SessionId{ctx.ConnId, ev.GetId()}
+			delete(ctx.cacheSMap, sid)
 			if nil != session {
 				session.closeByClient = true
 			}
