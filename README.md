@@ -1,6 +1,6 @@
 [![Join the chat at https://gitter.im/gsnova/Lobby](https://badges.gitter.im/gsnova/Lobby.svg)](https://gitter.im/gsnova/Lobby?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 
-Develop branch used by myself. 
+Develop branch used by myselfa. 
 
 remote:   
 1. gae  
