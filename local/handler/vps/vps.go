@@ -33,6 +33,9 @@ func (p *VPSProxy) Init() error {
 			p.cs.Add(channel)
 		} else {
 			log.Printf("Failed to init proxy channel for %s:%d with reason:%v", server, i, err)
+			if i == 0 {
+				return fmt.Errorf("Failed to auth %s", server)
+			}
 		}
 	}
 	return nil

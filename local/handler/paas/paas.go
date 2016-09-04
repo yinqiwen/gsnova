@@ -100,6 +100,9 @@ func (p *PaasProxy) Init() error {
 			channel, err := newRemoteChannel(server, i)
 			if nil != err {
 				log.Printf("[ERROR]Failed to connect [%d]%s for reason:%v", i, server, err)
+				if i == 0 {
+					return fmt.Errorf("Failed to auth %s", server)
+				}
 				continue
 			}
 			if nil != channel {

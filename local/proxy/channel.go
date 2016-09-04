@@ -83,9 +83,9 @@ func (rc *RemoteChannel) generateIV() uint64 {
 	return tmp
 }
 
-func (rc *RemoteChannel) Init() error {
+func (rc *RemoteChannel) Init(authRequired bool) error {
 	rc.running = true
-	rc.authResult = 0
+
 	//rc.activeSids = make(map[uint32]bool)
 
 	//authSession := newRandomSession()
@@ -97,7 +97,11 @@ func (rc *RemoteChannel) Init() error {
 	if rc.HeartBeatPeriod > 0 {
 		go rc.heartbeat()
 	}
-
+	if !authRequired {
+		rc.authResult = event.SuccessAuthed
+		return nil
+	}
+	rc.authResult = 0
 	start := time.Now()
 	authTimeout := rc.C.ReadTimeout()
 	for rc.authResult == 0 {
@@ -230,6 +234,7 @@ func (rc *RemoteChannel) processRead() {
 		conn := rc.C
 		if conn.Closed() {
 			rc.closeState = 0
+
 			if rc.authed() && getProxySessionSize() == 0 && !GConf.ChannelKeepAlive {
 				time.Sleep(10 * time.Millisecond)
 				continue
@@ -282,6 +287,10 @@ func (rc *RemoteChannel) processRead() {
 					if !rc.authed() {
 						auth := ev.(*event.NotifyEvent)
 						rc.authResult = int(auth.Code)
+						if rc.authResult != event.SuccessAuthed {
+							rc.Stop()
+							return
+						}
 						continue
 					}
 				case *event.ChannelCloseACKEvent:

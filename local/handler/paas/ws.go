@@ -132,7 +132,7 @@ func newWebsocketChannel(addr string, idx int) (*proxy.RemoteChannel, error) {
 	tc.url = addr
 	rc.C = tc
 
-	err := rc.Init()
+	err := rc.Init(idx == 0)
 	if nil != err {
 		return nil, err
 	}

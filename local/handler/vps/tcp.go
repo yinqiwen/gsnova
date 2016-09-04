@@ -94,7 +94,7 @@ func newTCPChannel(addr string, idx int) (*proxy.RemoteChannel, error) {
 	tc.addr = addr
 	rc.C = tc
 
-	err := rc.Init()
+	err := rc.Init(idx == 0)
 	if nil != err {
 		return nil, err
 	}

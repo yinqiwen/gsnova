@@ -270,7 +270,7 @@ func newHTTPChannel(addr string, idx int) (*proxy.RemoteChannel, error) {
 	tc.idx = idx
 	rc.C = tc
 
-	err := rc.Init()
+	err := rc.Init(idx == 0)
 	if nil != err {
 		return nil, err
 	}
