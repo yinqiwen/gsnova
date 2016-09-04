@@ -34,8 +34,10 @@ func NewAuthEvent() *event.AuthEvent {
 	auth := &event.AuthEvent{}
 	auth.User = GConf.Auth
 	auth.Mac = getDeviceId()
+
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	auth.SetId(uint32(r.Int31()))
+	auth.Rand = []byte(helper.RandAsciiString(int(r.Int31n(128))))
 	return auth
 }
 

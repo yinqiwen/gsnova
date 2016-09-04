@@ -15,6 +15,7 @@ type AuthEvent struct {
 	RunId int64
 	Index int64
 	IV    uint64
+	Rand  []byte
 }
 
 func (ev *AuthEvent) Encode(buffer *bytes.Buffer) {
@@ -24,6 +25,7 @@ func (ev *AuthEvent) Encode(buffer *bytes.Buffer) {
 	EncodeInt64Value(buffer, ev.RunId)
 	EncodeInt64Value(buffer, ev.Index)
 	EncodeUInt64Value(buffer, ev.IV)
+	EncodeBytesValue(buffer, ev.Rand)
 }
 func (ev *AuthEvent) Decode(buffer *bytes.Buffer) (err error) {
 	ev.User, err = DecodeStringValue(buffer)
@@ -43,6 +45,7 @@ func (ev *AuthEvent) Decode(buffer *bytes.Buffer) (err error) {
 		return err
 	}
 	ev.IV, err = DecodeUInt64Value(buffer)
+	//no need to decode Rand, since it's useless
 	return err
 }
 
