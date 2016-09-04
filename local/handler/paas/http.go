@@ -49,7 +49,8 @@ func (cr *chunkChannelReadCloser) prepend(p []byte) {
 	if len(cr.lastread) > 0 {
 		log.Printf("###########################No empty:%d", len(cr.lastread))
 	}
-	cr.lastread = p
+	cr.lastread = append(p, cr.lastread...)
+	//cr.lastread = p
 }
 
 type httpChannel struct {
