@@ -6,7 +6,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
-	_ "net/http/pprof"
+	//_ "net/http/pprof"
 	"os"
 	"time"
 
@@ -42,9 +42,9 @@ func startAdminServer() {
 	if len(GConf.Admin.Listen) == 0 {
 		return
 	}
-	go func() {
-		log.Println(http.ListenAndServe("localhost:6060", nil))
-	}()
+	// go func() {
+	// 	log.Println(http.ListenAndServe("localhost:6060", nil))
+	// }()
 	if len(GConf.Admin.ConfigDir) == 0 {
 		log.Printf("[WARN]The ConfigDir's Dir is empty, use current dir instead")
 		GConf.Admin.ConfigDir = "./"
