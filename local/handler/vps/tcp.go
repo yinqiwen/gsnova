@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/getlantern/netx"
+	"github.com/yinqiwen/gsnova/common/event"
 	"github.com/yinqiwen/gsnova/common/helper"
 	"github.com/yinqiwen/gsnova/local/proxy"
 )
@@ -23,7 +24,7 @@ func (tc *tcpChannel) ReadTimeout() time.Duration {
 	return time.Duration(readTimeout) * time.Second
 }
 
-func (tc *tcpChannel) SetIV(iv uint64) {
+func (tc *tcpChannel) SetCryptoCtx(ctx *event.CryptoContext) {
 }
 
 func (tc *tcpChannel) Open() error {

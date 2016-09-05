@@ -205,7 +205,7 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 				}
 			}
 		}
-		log.Printf("[%s]Session:%d request:%s %v", p.Name(), sid, req.Method, reqUrl)
+		//log.Printf("[%s]Session:%d request:%s %v", p.Name(), sid, req.Method, reqUrl)
 
 		req.Header.Del("Proxy-Connection")
 		ev := event.NewHTTPRequestEvent(req)

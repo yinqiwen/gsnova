@@ -59,7 +59,7 @@ type httpChannel struct {
 	pushurl *url.URL
 	pullurl *url.URL
 
-	iv        uint64
+	cryptoCtx event.CryptoContext
 	rbody     io.ReadCloser
 	pulling   bool
 	pushing   bool
@@ -74,9 +74,9 @@ func (hc *httpChannel) ReadTimeout() time.Duration {
 	return time.Duration(readTimeout) * time.Second
 }
 
-func (hc *httpChannel) SetIV(iv uint64) {
+func (hc *httpChannel) SetCryptoCtx(ctx *event.CryptoContext) {
 	//log.Printf("Change IV from %d to %d", hc.iv, iv)
-	hc.iv = iv
+	hc.cryptoCtx = *ctx
 	if nil != hc.chunkChan && hc.pushing {
 		hc.chunkChan.offer(nil)
 	}
@@ -125,9 +125,9 @@ func (hc *httpChannel) pull() error {
 	}
 	readAuth := proxy.NewAuthEvent()
 	readAuth.Index = int64(hc.idx)
-	readAuth.IV = hc.iv
+	readAuth.IV = hc.cryptoCtx.EncryptIV
 	var buf bytes.Buffer
-	event.EncryptEvent(&buf, readAuth, 0)
+	event.EncryptEvent(&buf, readAuth, &hc.cryptoCtx)
 	hc.pulling = true
 	log.Printf("[%s:%d] pull channel start.", hc.addr, hc.idx)
 	_, err := hc.postURL(buf.Bytes(), hc.pullurl)
@@ -197,9 +197,9 @@ func (hc *httpChannel) chunkPush() {
 		req.ContentLength = -1
 		wAuth := proxy.NewAuthEvent()
 		wAuth.Index = int64(hc.idx)
-		wAuth.IV = hc.iv
+		wAuth.IV = hc.cryptoCtx.EncryptIV
 		var buf bytes.Buffer
-		event.EncryptEvent(&buf, wAuth, 0)
+		event.EncryptEvent(&buf, wAuth, &hc.cryptoCtx)
 		hc.chunkChan.prepend(buf.Bytes())
 		period := proxy.GConf.PAAS.HTTPReconnectPeriod
 		if period == 0 {

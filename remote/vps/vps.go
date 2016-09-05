@@ -29,33 +29,24 @@ func serveProxyConn(conn net.Conn) {
 	defer deferFunc()
 
 	ctx := remote.NewConnContext()
-
-	// writeEvent := func(ev event.Event) error {
-	// 	var buf bytes.Buffer
-	// 	event.EncryptEvent(&buf, ev, ctx.IV)
-	// 	conn.SetWriteDeadline(time.Now().Add(15 * time.Second))
-	// 	_, err := conn.Write(buf.Bytes())
-	// 	return err
-	// }
 	writeEvents := func(evs []event.Event, buf *bytes.Buffer) error {
-		buf.Reset()
 		if len(evs) > 0 {
+			buf.Reset()
 			//var buf bytes.Buffer
 			for _, ev := range evs {
 				if nil != ev {
-					event.EncryptEvent(buf, ev, ctx.IV)
+					event.EncryptEvent(buf, ev, &ctx.CryptoContext)
 				}
 			}
 			if buf.Len() > 0 {
 				conn.SetWriteDeadline(time.Now().Add(15 * time.Second))
-				_, err := conn.Write(buf.Bytes())
+				b := buf.Bytes()
+				_, err := conn.Write(b)
+
 				return err
 			}
-			return nil
-
-		} else {
-			return nil
 		}
+		return nil
 	}
 
 	var rbuf bytes.Buffer
@@ -82,6 +73,9 @@ func serveProxyConn(conn net.Conn) {
 				return
 			}
 		} else {
+			// if len(ress) > 0 {
+			// 	log.Printf("#########%d %T", len(ress), ress[0])
+			// }
 			writeEvents(ress, &wbuf)
 			if !writeTaskRunning && len(ctx.User) > 0 && ctx.ConnIndex >= 0 {
 				writeTaskRunning = true
@@ -104,6 +98,11 @@ func serveProxyConn(conn net.Conn) {
 						}
 
 						err = writeEvents(evs, &wbuf)
+						if nil != err {
+							log.Printf("TCP write error####:%v %d", err, len(evs))
+						} else {
+							queue.DiscardPeeks(false)
+						}
 						if ctx.Closing {
 							break
 						}
@@ -113,7 +112,7 @@ func serveProxyConn(conn net.Conn) {
 							conn.Close()
 							break
 						} else {
-							queue.DiscardPeeks(false)
+							//queue.DiscardPeeks(false)
 						}
 					}
 					remote.ReleaseEventQueue(queue)

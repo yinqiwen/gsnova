@@ -68,23 +68,26 @@ func httpInvoke(w http.ResponseWriter, r *http.Request) {
 	buf := bytes.NewBuffer(b)
 	ctx := appengine.NewContext(r)
 
-	err, ev := event.DecryptEvent(buf, 0)
+	var cryptoContext event.CryptoContext
+	err, ev := event.DecryptEvent(buf, &cryptoContext)
 	if nil != err {
 		ctx.Errorf("Decode auth event failed:%v", err)
 		return
 	}
-	var iv uint64
+	//var iv uint64
 	if auth, ok := ev.(*event.AuthEvent); ok {
 		if !remote.ServerConf.VerifyUser(auth.User) {
 			return
 		}
-		iv = auth.IV
+		cryptoContext.DecryptIV = auth.IV
+		cryptoContext.EncryptIV = auth.IV
+		cryptoContext.Method = auth.EncryptMethod
 	} else {
 		ctx.Errorf("Expected auth event, but got %T", ev)
 		return
 	}
 
-	err, ev = event.DecryptEvent(buf, iv)
+	err, ev = event.DecryptEvent(buf, &cryptoContext)
 	if nil != err {
 		ctx.Errorf("Decode http request event failed:%v", err)
 		return
@@ -92,7 +95,7 @@ func httpInvoke(w http.ResponseWriter, r *http.Request) {
 	if req, ok := ev.(*event.HTTPRequestEvent); ok {
 		res := fetch(ctx, req)
 		var resbuf bytes.Buffer
-		event.EncryptEvent(&resbuf, res, iv)
+		event.EncryptEvent(&resbuf, res, &cryptoContext)
 		headers := w.Header()
 		headers.Add("Content-Type", "application/octet-stream")
 		headers.Add("Content-Length", strconv.Itoa(resbuf.Len()))

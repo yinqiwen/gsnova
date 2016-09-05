@@ -26,8 +26,9 @@ type ConnId struct {
 }
 
 type ConnContext struct {
+	event.CryptoContext
 	ConnId
-	IV            uint64
+	//IV            uint64
 	EncryptMethod int
 	Closing       bool
 }
@@ -226,7 +227,7 @@ func (p *ProxySession) open(network, to string) error {
 
 func (p *ProxySession) write(b []byte) (int, error) {
 	if p.conn == nil {
-		log.Printf("Session[%s:%d] have no established connection to %s.", p.Id.User, p.Id.Id, p.addr)
+		//log.Printf("Session[%s:%d] have no established connection to %s.", p.Id.User, p.Id.Id, p.addr)
 		p.initialClose()
 		return 0, nil
 	}
@@ -316,11 +317,14 @@ func authConnection(auth *event.AuthEvent, ctx *ConnContext) error {
 			return fmt.Errorf("Auth failed with user:%s", auth.User)
 		}
 		authedUser := auth.User
-		authedUser = authedUser + "@" + auth.Mac
+		//authedUser = authedUser + "@" + auth.Mac
 		ctx.User = authedUser
 		ctx.ConnIndex = int(auth.Index)
-		ctx.IV = auth.IV
+		//ctx.IV = auth.IV
 		ctx.RunId = auth.RunId
+		ctx.CryptoContext.DecryptIV = auth.IV
+		ctx.CryptoContext.EncryptIV = auth.IV
+		ctx.CryptoContext.Method = auth.EncryptMethod
 		GetEventQueue(ctx.ConnId, true)
 		//log.Printf("###Recv IV = %d", ctx.IV)
 		return nil
@@ -374,18 +378,13 @@ func HandleRequestBuffer(reqbuf *bytes.Buffer, ctx *ConnContext) ([]event.Event,
 		var ev event.Event
 		var err error
 
-		err, ev = event.DecryptEvent(reqbuf, ctx.IV)
+		err, ev = event.DecryptEvent(reqbuf, &ctx.CryptoContext)
 		if nil != err {
 			if err != event.EBNR {
-				log.Printf("Failed to decode event for reason:%v  %d", err, ctx.IV)
+				log.Printf("Failed to decode event for reason:%v  %d", err, ctx.CryptoContext.DecryptIV)
 			}
 			return ress, err
 		}
-		// sid := uint32(1)
-		// if nil != ev {
-		// 	sid = ev.GetId()
-		// }
-		//log.Printf("###[%d]Handle  %d", sid, ctx.IV)
 		res, err := handleEvent(ev, ctx)
 		if nil != res {
 			ress = append(ress, res)

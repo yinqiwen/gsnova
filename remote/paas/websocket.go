@@ -39,7 +39,7 @@ func websocketInvoke(w http.ResponseWriter, r *http.Request) {
 			wbuf.Reset()
 			for _, ev := range evs {
 				if nil != ev {
-					event.EncryptEvent(wbuf, ev, ctx.IV)
+					event.EncryptEvent(wbuf, ev, &ctx.CryptoContext)
 				}
 			}
 			if wbuf.Len() > 0 {

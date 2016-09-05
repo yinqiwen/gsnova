@@ -13,13 +13,13 @@ const (
 	EventChannelCloseReq = 10010
 	EventChannelCloseACK = 10011
 
-	NoneCompressor   = 0
-	SnappyCompressor = 1
-	NoneEncypter     = 0
-	RC4Encypter      = 1
-	Salsa20Encypter  = 2
-	AES256Encypter   = 3
-	Chacha20Encypter = 4
+	NoneCompressor    = 0
+	SnappyCompressor  = 1
+	NoneEncrypter     = 0
+	RC4Encrypter      = 1
+	Salsa20Encrypter  = 2
+	AES256Encrypter   = 3
+	Chacha20Encrypter = 4
 	//Chacha20Encypter = 3
 )
 

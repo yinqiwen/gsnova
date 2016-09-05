@@ -53,7 +53,7 @@ func httpInvoke(w http.ResponseWriter, r *http.Request) {
 			buf.Reset()
 			for _, ev := range evs {
 				if nil != ev {
-					event.EncryptEvent(buf, ev, ctx.IV)
+					event.EncryptEvent(buf, ev, &ctx.CryptoContext)
 				}
 			}
 			if buf.Len() > 0 {

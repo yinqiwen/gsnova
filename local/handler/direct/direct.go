@@ -35,7 +35,7 @@ func (tc *directChannel) ReadTimeout() time.Duration {
 	return time.Duration(readTimeout) * time.Second
 }
 
-func (hc *directChannel) SetIV(iv uint64) {
+func (hc *directChannel) SetCryptoCtx(ctx *event.CryptoContext) {
 }
 
 func (tc *directChannel) Open() error {

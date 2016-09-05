@@ -28,7 +28,7 @@ type ProxyChannel interface {
 
 type RemoteProxyChannel interface {
 	Open() error
-	SetIV(iv uint64)
+	SetCryptoCtx(ctx *event.CryptoContext)
 	Closed() bool
 	Request([]byte) ([]byte, error)
 	ReadTimeout() time.Duration
@@ -47,9 +47,10 @@ type RemoteChannel struct {
 
 	connSendedEvents uint32
 	authResult       int
-	iv               uint64
-	wch              chan event.Event
-	running          bool
+	cryptoCtx        event.CryptoContext
+	//iv               uint64
+	wch     chan event.Event
+	running bool
 
 	connectTime time.Time
 	closeState  int
@@ -57,38 +58,26 @@ type RemoteChannel struct {
 	// activeSidMutex sync.Mutex
 }
 
-// func (rc *RemoteChannel) updateActiveSid(id uint32, insertOrRemove bool) {
-// 	rc.activeSidMutex.Lock()
-// 	if insertOrRemove {
-// 		rc.activeSids[id] = true
-// 	} else {
-// 		delete(rc.activeSids, id)
-// 	}
-// 	rc.activeSidMutex.Unlock()
-// }
-// func (rc *RemoteChannel) activeSidSize() int {
-// 	rc.activeSidMutex.Lock()
-// 	s := len(rc.activeSids)
-// 	rc.activeSidMutex.Unlock()
-// 	return s
-// }
-
 func (rc *RemoteChannel) authed() bool {
 	return rc.authResult != 0
 }
-func (rc *RemoteChannel) generateIV() uint64 {
+
+func randCryptoCtx() event.CryptoContext {
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	tmp := uint64(r.Int63())
-	rc.iv = tmp
-	return tmp
+	var ctx event.CryptoContext
+	ctx.EncryptIV = tmp
+	ctx.DecryptIV = tmp
+	ctx.Method = event.GetDefaultCryptoMethod()
+	return ctx
+}
+func (rc *RemoteChannel) resetCryptoCtx() {
+	rc.cryptoCtx = randCryptoCtx()
+	//log.Printf("Channel[%d] reset IV:%d.", rc.Index, rc.cryptoCtx.EncryptIV)
 }
 
 func (rc *RemoteChannel) Init(authRequired bool) error {
 	rc.running = true
-
-	//rc.activeSids = make(map[uint32]bool)
-
-	//authSession := newRandomSession()
 	if !rc.DirectIO {
 		rc.wch = make(chan event.Event, 5)
 		go rc.processWrite()
@@ -182,32 +171,30 @@ func (rc *RemoteChannel) processWrite() {
 			continue
 		}
 		wbuf.Reset()
-		civ := rc.iv
+		//cryptoCtx := rc.cryptoCtx
 		if rc.WriteJoinAuth || (rc.connSendedEvents == 0 && rc.OpenJoinAuth) {
 			auth := NewAuthEvent()
 			auth.Index = int64(rc.Index)
-			auth.IV = civ
-			event.EncryptEvent(&wbuf, auth, 0)
+			auth.IV = rc.cryptoCtx.EncryptIV
+			event.EncryptEvent(&wbuf, auth, &rc.cryptoCtx)
 			rc.connSendedEvents++
 		}
 
 		for _, sev := range sendEvents {
 			if auth, ok := sev.(*event.AuthEvent); ok {
-				if auth.IV != civ {
-					log.Printf("####Got %d %d", civ, auth.IV)
+				if auth.IV != rc.cryptoCtx.EncryptIV {
+					log.Printf("####Got %d %d", rc.cryptoCtx.EncryptIV, auth.IV)
 				}
-				auth.IV = civ
-				event.EncryptEvent(&wbuf, sev, 0)
+				auth.IV = rc.cryptoCtx.EncryptIV
 				//log.Printf("##[%d]Send %T with %d", sev.GetId(), sev, 0)
-			} else {
-				event.EncryptEvent(&wbuf, sev, civ)
-				//log.Printf("##[%d]Send %T with %d", sev.GetId(), sev, civ)
 			}
+			event.EncryptEvent(&wbuf, sev, &rc.cryptoCtx)
 		}
 		if rc.closeState == stateCloseToSendReq {
 			closeReq := &event.ChannelCloseReqEvent{}
-			event.EncryptEvent(&wbuf, closeReq, civ)
+			event.EncryptEvent(&wbuf, closeReq, &rc.cryptoCtx)
 		}
+		//rc.cryptoCtx.EncryptIV =
 		rc.connSendedEvents += uint32(len(sendEvents))
 
 		if wbuf.Len() > 0 {
@@ -230,19 +217,28 @@ func (rc *RemoteChannel) processWrite() {
 }
 
 func (rc *RemoteChannel) processRead() {
+	var buf bytes.Buffer
+	reconnectCount := 0
 	for rc.running {
 		conn := rc.C
 		if conn.Closed() {
 			rc.closeState = 0
-
 			if rc.authed() && getProxySessionSize() == 0 && !GConf.ChannelKeepAlive {
 				time.Sleep(10 * time.Millisecond)
 				continue
 			}
-			rc.generateIV()
+			if !rc.authed() && reconnectCount > 0 {
+				rc.Stop()
+				rc.authResult = event.ErrAuthFailed
+				log.Printf("Channel[%d] auth failed since remote server disconnect.", rc.Index)
+				return
+			}
+			rc.resetCryptoCtx()
+			buf.Reset()
 			rc.connSendedEvents = 0
-			conn.SetIV(rc.iv)
+			conn.SetCryptoCtx(&rc.cryptoCtx)
 			err := conn.Open()
+			reconnectCount++
 			if nil != err {
 				log.Printf("Channel[%d] connect %s failed:%v.", rc.Index, rc.Addr, err)
 				time.Sleep(1 * time.Second)
@@ -255,7 +251,7 @@ func (rc *RemoteChannel) processRead() {
 			}
 		}
 		//data := make([]byte, 8192)
-		var buf bytes.Buffer
+
 		reader := &helper.BufferChunkReader{conn, nil}
 		for {
 			//buf.Truncate(buf.Len())
@@ -272,12 +268,12 @@ func (rc *RemoteChannel) processRead() {
 				}
 			}
 			for buf.Len() > 0 {
-				err, ev := event.DecryptEvent(&buf, rc.iv)
+				err, ev := event.DecryptEvent(&buf, &rc.cryptoCtx)
 				if nil != err {
 					if err == event.EBNR {
 						err = nil
 					} else {
-						log.Printf("Failed to decode event for reason:%v", err)
+						log.Printf("Channel[%d]Failed to decode event for reason:%v with iv:%d", rc.Index, err, rc.cryptoCtx.DecryptIV)
 						conn.Close()
 					}
 					break
@@ -320,9 +316,10 @@ func (rc *RemoteChannel) Request(ev event.Event) (event.Event, error) {
 	var buf bytes.Buffer
 	auth := NewAuthEvent()
 	auth.Index = int64(rc.Index)
-	auth.IV = rc.generateIV()
-	event.EncryptEvent(&buf, auth, 0)
-	event.EncryptEvent(&buf, ev, auth.IV)
+	ctx := randCryptoCtx()
+	auth.IV = ctx.EncryptIV
+	event.EncryptEvent(&buf, auth, &ctx)
+	event.EncryptEvent(&buf, ev, &ctx)
 	//event.EncodeEvent(&buf, ev)
 	res, err := rc.C.Request(buf.Bytes())
 	if nil != err {
@@ -330,7 +327,7 @@ func (rc *RemoteChannel) Request(ev event.Event) (event.Event, error) {
 	}
 	rbuf := bytes.NewBuffer(res)
 	var rev event.Event
-	err, rev = event.DecryptEvent(rbuf, auth.IV)
+	err, rev = event.DecryptEvent(rbuf, &ctx)
 	if nil != err {
 		return nil, err
 	}

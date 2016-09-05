@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/yinqiwen/gsnova/common/event"
 	"github.com/yinqiwen/gsnova/local/proxy"
 )
 
@@ -31,7 +32,7 @@ func (tc *websocketChannel) Request([]byte) ([]byte, error) {
 	return nil, nil
 }
 
-func (hc *websocketChannel) SetIV(iv uint64) {
+func (hc *websocketChannel) SetCryptoCtx(ctx *event.CryptoContext) {
 }
 
 func (wc *websocketChannel) Open() error {

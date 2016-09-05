@@ -8,6 +8,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"log"
+	"math/rand"
 	"reflect"
 	"strings"
 
@@ -61,21 +62,25 @@ func SetDefaultSecretKey(method string, key string) {
 		copy(tmp[0:len(secretKey)], secretKey)
 	}
 	copy(salsa20Key[:], secretKey[:32])
-	defaultEncryptMethod = Salsa20Encypter
+	defaultEncryptMethod = Salsa20Encrypter
 	if strings.EqualFold(method, "rc4") {
-		defaultEncryptMethod = RC4Encypter
+		defaultEncryptMethod = RC4Encrypter
 	} else if strings.EqualFold(method, "salsa20") {
-		defaultEncryptMethod = Salsa20Encypter
+		defaultEncryptMethod = Salsa20Encrypter
 	} else if strings.EqualFold(method, "aes") {
-		defaultEncryptMethod = AES256Encypter
+		defaultEncryptMethod = AES256Encrypter
 		block, _ := aes.NewCipher(secretKey)
 		aes256gcm, _ = cipher.NewGCM(block)
 		//defaultEncryptMethod = Chacha20Encypter
 	} else if strings.EqualFold(method, "chacha20") {
-		defaultEncryptMethod = Chacha20Encypter
+		defaultEncryptMethod = Chacha20Encrypter
 	} else if strings.EqualFold(method, "none") {
 		defaultEncryptMethod = 0
 	}
+}
+
+func GetDefaultCryptoMethod() uint8 {
+	return uint8(defaultEncryptMethod)
 }
 
 func EncodeInt64Value(buf *bytes.Buffer, v int64) {
@@ -451,16 +456,22 @@ func DecodeValue(buf *bytes.Buffer) (err error, ev interface{}) {
 	return
 }
 
-func EncryptEvent(buf *bytes.Buffer, ev Event, iv uint64) error {
+type CryptoContext struct {
+	Method    uint8
+	DecryptIV uint64
+	EncryptIV uint64
+}
+
+func EncryptEvent(buf *bytes.Buffer, ev Event, ctx *CryptoContext) error {
 	start := buf.Len()
 	buf.Write(make([]byte, 4))
 	var header EventHeader
 	header.Type = GetRegistType(ev)
 	header.Id = ev.GetId()
 	header.Flags = 0
-	header.Flags.EnableEncrypt(defaultEncryptMethod)
+	//header.Flags.EnableEncrypt(defaultEncryptMethod)
 	header.Encode(buf)
-	hlen := uint32(buf.Len() - start)
+	//hlen := uint32(buf.Len() - start)
 
 	//var eventBuffer bytes.Buffer
 	ev.Encode(buf)
@@ -468,57 +479,76 @@ func EncryptEvent(buf *bytes.Buffer, ev Event, iv uint64) error {
 	eventContent := buf.Bytes()[start+4:]
 
 	var nonce []byte
-	switch header.Flags.GetEncrytFlag() {
-	case Salsa20Encypter:
+	method := ctx.Method
+	encryptIV := ctx.EncryptIV
+	if header.Type == EventAuth {
+		method = uint8(Salsa20Encrypter)
+		encryptIV = 0
+		if elen > 256 {
+			log.Fatalf("Too large auth event with length:%d", elen)
+		}
+	}
+	switch method {
+	case Salsa20Encrypter:
 		fallthrough
-	case Chacha20Encypter:
+	case Chacha20Encrypter:
 		nonce = make([]byte, 8)
-	case AES256Encypter:
+	case AES256Encrypter:
 		nonce = make([]byte, 12)
 		//block.Encrypt(eventContent, eventContent)
 	}
 	if len(nonce) > 0 {
-		iv = iv ^ uint64(hlen) ^ uint64(elen)
+		iv := encryptIV ^ uint64(elen)
 		binary.LittleEndian.PutUint64(nonce, iv)
+		//encryptIV = iv
 	}
-	// if eventBuffer.Len() >= 128 {
-	// 	header.Flags.EnableSnappy()
-	// }
-	//header.Encode(buf)
-	// if header.Flags.IsSnappyEnable() {
-	// 	evbuf := make([]byte, 0)
-	// 	newbuf := snappy.Encode(evbuf, eventContent)
-	// 	eventContent = newbuf
-	// }
-	switch header.Flags.GetEncrytFlag() {
-	case Salsa20Encypter:
+
+	switch method {
+	case Salsa20Encrypter:
 		salsa20.XORKeyStream(eventContent, eventContent, nonce, &salsa20Key)
-	case RC4Encypter:
+	case RC4Encrypter:
 		rc4Cipher, _ := rc4.NewCipher(secretKey)
 		rc4Cipher.XORKeyStream(eventContent, eventContent)
-	case AES256Encypter:
+	case AES256Encrypter:
 		//block, _ := aes.NewCipher(secretKey)
 		//aesgcm, _ := cipher.NewGCM(block)
 		aes256gcm.Seal(eventContent, nonce, eventContent, nil)
 		//block.Encrypt(eventContent, eventContent)
-	case Chacha20Encypter:
+	case Chacha20Encrypter:
 		chacha20Cipher, _ := chacha20.New(secretKey, nonce)
 		chacha20Cipher.XORKeyStream(eventContent, eventContent)
 	}
-	//log.Printf("Enc  event(%d):%T with iv:%d with len:%d", ev.GetId(), ev, iv, elen)
-	elen = (elen << 8) + hlen
+	//log.Printf("Enc event(%d):%T with iv:%d with len:%d_%d %d", ev.GetId(), ev, encryptIV, elen, len(eventContent), method)
+	//elen = (elen << 8) + hlen
+	if header.Type == EventAuth {
+		base := rand.Int31n(0xFFFFFF)
+		elen = (uint32(base) << 8) + elen
+	} else {
+		elen = elen ^ uint32(encryptIV)
+	}
 	binary.LittleEndian.PutUint32(buf.Bytes()[start:start+4], elen)
+	if header.Type != EventAuth {
+		ctx.EncryptIV++
+	}
 	return nil
 }
 
-func DecryptEvent(buf *bytes.Buffer, iv uint64) (err error, ev Event) {
+func DecryptEvent(buf *bytes.Buffer, ctx *CryptoContext) (err error, ev Event) {
 	if buf.Len() < 4 {
 		return EBNR, nil
 	}
+
 	//buflen := buf.Len()
 	elen := binary.LittleEndian.Uint32(buf.Bytes()[0:4])
-	hlen := elen & 0xFF
-	elen = elen >> 8
+	method := ctx.Method
+	if method == 0 && ctx.DecryptIV == 0 {
+		method = Salsa20Encrypter
+		elen = elen & uint32(0xFF)
+	} else {
+		elen = elen ^ uint32(ctx.DecryptIV)
+	}
+	//hlen := elen & 0xFF
+	//elen = elen >> 8
 	if elen > uint32(buf.Len()) {
 		return EBNR, nil
 	}
@@ -529,43 +559,45 @@ func DecryptEvent(buf *bytes.Buffer, iv uint64) (err error, ev Event) {
 	body := buf.Next(int(elen - 4))
 
 	var nonce []byte
-	switch defaultEncryptMethod {
-	case Salsa20Encypter:
+	switch method {
+	case Salsa20Encrypter:
 		fallthrough
-	case Chacha20Encypter:
+	case Chacha20Encrypter:
 		nonce = make([]byte, 8)
-	case AES256Encypter:
+	case AES256Encrypter:
 		nonce = make([]byte, 12)
 		//block.Encrypt(eventContent, eventContent)
 	}
 	if len(nonce) > 0 {
-		iv = iv ^ uint64(hlen) ^ uint64(elen)
+		iv := ctx.DecryptIV ^ uint64(elen)
 		binary.LittleEndian.PutUint64(nonce, iv)
 	}
-	switch defaultEncryptMethod {
-	case Salsa20Encypter:
+
+	switch method {
+	case Salsa20Encrypter:
 		salsa20.XORKeyStream(body, body, nonce, &salsa20Key)
-	case RC4Encypter:
+	case RC4Encrypter:
 		rc4Cipher, _ := rc4.NewCipher(secretKey)
 		rc4Cipher.XORKeyStream(body, body)
-	case AES256Encypter:
+	case AES256Encrypter:
 		//block, _ := aes.NewCipher(secretKey)
 		//aesgcm, _ := cipher.NewGCM(block)
 		aes256gcm.Open(body, nonce, body, nil)
 		//block.Decrypt(body, body)
-	case Chacha20Encypter:
+	case Chacha20Encrypter:
 		cipher, _ := chacha20.New(secretKey, nonce)
 		cipher.XORKeyStream(body, body)
 	}
 	ebuf := bytes.NewBuffer(body)
 	var header EventHeader
-
 	if err = header.Decode(ebuf); nil != err {
 		log.Printf("Failed to decode event header")
 		return
 	}
+	//log.Printf("Dec event(%d) with iv:%d with len:%d_%d  %d  %d", header.Id, ctx.DecryptIV, elen, len(body), method, header.Type)
 	var tmp interface{}
 	if err, tmp = NewEventInstance(header.Type); nil != err {
+		log.Printf("Failed to decode event with err:%v with len:%d", err, elen)
 		return
 	}
 	ev = tmp.(Event)
@@ -574,79 +606,8 @@ func DecryptEvent(buf *bytes.Buffer, iv uint64) (err error, ev Event) {
 	if nil != err {
 		log.Printf("Failed to decode event:%T with err:%v with len:%d", tmp, err, elen)
 	}
-	//log.Printf("Dec event(%d):%T with iv:%d with len:%d", ev.GetId(), ev, iv, elen)
+	if header.Type != EventAuth {
+		ctx.DecryptIV++
+	}
 	return
 }
-
-// func EncodeEvent(buf *bytes.Buffer, ev Event) error {
-// 	buf.Write(make([]byte, 4))
-// 	var header EventHeader
-// 	header.Type = GetRegistType(ev)
-// 	header.Id = ev.GetId()
-// 	header.Flags = 0
-// 	if len(secretKey) > 0 {
-// 		header.Flags.EnableEncrypt(RC4Encypter)
-// 	}
-// 	var eventBuffer bytes.Buffer
-// 	ev.Encode(&eventBuffer)
-// 	eventContent := eventBuffer.Bytes()
-// 	if eventBuffer.Len() >= 1024 {
-// 		header.Flags.EnableSnappy()
-// 	}
-// 	header.Encode(buf)
-// 	if header.Flags.IsSnappyEnable() {
-// 		evbuf := make([]byte, 0)
-// 		newbuf := snappy.Encode(evbuf, eventContent)
-// 		eventContent = newbuf
-// 	}
-// 	if header.Flags.GetEncrytFlag() == RC4Encypter {
-// 		rc4Cipher, _ := rc4.NewCipher(secretKey)
-// 		rc4Cipher.XORKeyStream(eventContent, eventContent)
-// 	}
-// 	EncodeUInt64Value(buf, uint64(len(eventContent)))
-// 	buf.Write(eventContent)
-// 	elen := uint32(buf.Len())
-// 	binary.LittleEndian.PutUint32(buf.Bytes()[0:4], elen)
-// 	return nil
-// }
-
-// func DecodeEvent(buf *bytes.Buffer) (err error, ev Event) {
-// 	if buf.Len() < 4 {
-// 		return EBNR, nil
-// 	}
-// 	elen := binary.LittleEndian.Uint32(buf.Bytes()[0:4])
-// 	if elen > uint32(buf.Len()) {
-// 		return EBNR, nil
-// 	}
-// 	buf.Next(4)
-// 	var header EventHeader
-// 	if err = header.Decode(buf); nil != err {
-// 		return
-// 	}
-// 	var length uint32
-// 	length, err = DecodeUInt32Value(buf)
-// 	if err != nil {
-// 		return
-// 	}
-// 	body := buf.Next(int(length))
-// 	if header.Flags.GetEncrytFlag() == RC4Encypter {
-// 		rc4Cipher, _ := rc4.NewCipher(secretKey)
-// 		rc4Cipher.XORKeyStream(body, body)
-// 	}
-// 	if header.Flags.IsSnappyEnable() {
-// 		b := make([]byte, 0, 0)
-// 		b, err = snappy.Decode(b, body)
-// 		if err != nil {
-// 			return
-// 		}
-// 		body = b
-// 	}
-// 	var tmp interface{}
-// 	if err, tmp = NewEventInstance(header.Type); nil != err {
-// 		return
-// 	}
-// 	ev = tmp.(Event)
-// 	ev.SetId(header.Id)
-// 	err = ev.Decode(bytes.NewBuffer(body))
-// 	return
-// }

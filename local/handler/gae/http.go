@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/getlantern/netx"
+	"github.com/yinqiwen/gsnova/common/event"
 	"github.com/yinqiwen/gsnova/common/helper"
 	"github.com/yinqiwen/gsnova/local/hosts"
 	"github.com/yinqiwen/gsnova/local/proxy"
@@ -91,7 +92,7 @@ type httpChannel struct {
 	server string
 }
 
-func (hc *httpChannel) SetIV(iv uint64) {
+func (hc *httpChannel) SetCryptoCtx(ctx *event.CryptoContext) {
 
 }
 
