@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"math/rand"
+	"strings"
 	"time"
 
 	"github.com/yinqiwen/gsnova/common/event"
@@ -28,15 +29,18 @@ import (
 // 	return currentDeviceId
 // }
 
-func NewAuthEvent() *event.AuthEvent {
+func NewAuthEvent(secureTransport bool) *event.AuthEvent {
 	auth := &event.AuthEvent{}
 	auth.User = GConf.Auth
 	//auth.Mac = getDeviceId()
-
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	auth.SetId(uint32(r.Int31()))
 	auth.Rand = []byte(helper.RandAsciiString(int(r.Int31n(128))))
-	auth.EncryptMethod = event.GetDefaultCryptoMethod()
+	if secureTransport && strings.EqualFold(GConf.Encrypt.Method, "auto") {
+		auth.EncryptMethod = uint8(event.NoneEncrypter)
+	} else {
+		auth.EncryptMethod = event.GetDefaultCryptoMethod()
+	}
 	return auth
 }
 

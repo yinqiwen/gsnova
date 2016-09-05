@@ -172,11 +172,12 @@ func (h *httpChannel) Write(p []byte) (n int, err error) {
 
 func newHTTPChannel(server string) (*proxy.RemoteChannel, error) {
 	rc := &proxy.RemoteChannel{
-		Addr:          server,
-		Index:         0,
-		DirectIO:      true,
-		OpenJoinAuth:  false,
-		WriteJoinAuth: true,
+		Addr:            server,
+		Index:           0,
+		DirectIO:        true,
+		OpenJoinAuth:    false,
+		WriteJoinAuth:   true,
+		SecureTransport: true,
 	}
 	tc := new(httpChannel)
 	tc.server = server

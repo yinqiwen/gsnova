@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/yinqiwen/gsnova/common/event"
@@ -123,7 +124,7 @@ func (hc *httpChannel) pull() error {
 	if hc.pulling {
 		return nil
 	}
-	readAuth := proxy.NewAuthEvent()
+	readAuth := proxy.NewAuthEvent(hc.pullurl.Scheme == "https")
 	readAuth.Index = int64(hc.idx)
 	readAuth.IV = hc.cryptoCtx.EncryptIV
 	var buf bytes.Buffer
@@ -195,7 +196,7 @@ func (hc *httpChannel) chunkPush() {
 		hc.pushing = true
 		req := buildHTTPReq(u, hc.chunkChan)
 		req.ContentLength = -1
-		wAuth := proxy.NewAuthEvent()
+		wAuth := proxy.NewAuthEvent(u.Scheme == "https")
 		wAuth.Index = int64(hc.idx)
 		wAuth.IV = hc.cryptoCtx.EncryptIV
 		var buf bytes.Buffer
@@ -258,11 +259,12 @@ func (hc *httpChannel) Write(p []byte) (n int, err error) {
 func newHTTPChannel(addr string, idx int) (*proxy.RemoteChannel, error) {
 
 	rc := &proxy.RemoteChannel{
-		Addr:          addr,
-		Index:         idx,
-		DirectIO:      false,
-		OpenJoinAuth:  false,
-		WriteJoinAuth: !proxy.GConf.PAAS.HTTPChunkPushEnable,
+		Addr:            addr,
+		Index:           idx,
+		DirectIO:        false,
+		OpenJoinAuth:    false,
+		WriteJoinAuth:   !proxy.GConf.PAAS.HTTPChunkPushEnable,
+		SecureTransport: strings.HasPrefix(addr, "https://"),
 	}
 
 	tc := new(httpChannel)

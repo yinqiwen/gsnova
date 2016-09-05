@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -128,6 +129,7 @@ func newWebsocketChannel(addr string, idx int) (*proxy.RemoteChannel, error) {
 		WriteJoinAuth:   false,
 		ReconnectPeriod: proxy.GConf.PAAS.WSReconnectPeriod,
 		HeartBeatPeriod: proxy.GConf.PAAS.WSHeartBeatPeriod,
+		SecureTransport: strings.HasPrefix(addr, "wss://"),
 	}
 	tc := new(websocketChannel)
 	tc.url = addr

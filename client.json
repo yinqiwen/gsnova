@@ -3,7 +3,9 @@
 
 	"Log": ["stdout", "gsnova.log"],
 	"UserAgent":"Mozilla/5.0 (Windows NT 6.1; WOW64; rv:15.0) Gecko/20100101 Firefox/15.0.1",
-	"Encrypt":{"Method":"salsa20", "Key":"809240d3a021449f6e67aa73221d42df942a308a"},
+	//encrypt method can choose from aes/salsa20/chacha20/rc4/none/auto
+	//'auto' method would choose fastest encrypt method for current env
+	"Encrypt":{"Method":"auto", "Key":"809240d3a021449f6e67aa73221d42df942a308a"},
    
     //user name auth
     "Auth": "gsnova",

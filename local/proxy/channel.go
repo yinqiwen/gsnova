@@ -41,6 +41,7 @@ type RemoteChannel struct {
 	DirectIO        bool
 	WriteJoinAuth   bool
 	OpenJoinAuth    bool
+	SecureTransport bool
 	HeartBeatPeriod int
 	ReconnectPeriod int
 	C               RemoteProxyChannel
@@ -173,7 +174,7 @@ func (rc *RemoteChannel) processWrite() {
 		wbuf.Reset()
 		//cryptoCtx := rc.cryptoCtx
 		if rc.WriteJoinAuth || (rc.connSendedEvents == 0 && rc.OpenJoinAuth) {
-			auth := NewAuthEvent()
+			auth := NewAuthEvent(rc.SecureTransport)
 			auth.Index = int64(rc.Index)
 			auth.IV = rc.cryptoCtx.EncryptIV
 			event.EncryptEvent(&wbuf, auth, &rc.cryptoCtx)
@@ -314,7 +315,7 @@ func (rc *RemoteChannel) processRead() {
 
 func (rc *RemoteChannel) Request(ev event.Event) (event.Event, error) {
 	var buf bytes.Buffer
-	auth := NewAuthEvent()
+	auth := NewAuthEvent(rc.SecureTransport)
 	auth.Index = int64(rc.Index)
 	ctx := randCryptoCtx()
 	auth.IV = ctx.EncryptIV

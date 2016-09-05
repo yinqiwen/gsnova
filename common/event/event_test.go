@@ -21,11 +21,19 @@ func benchamark(n int) {
 		fmt.Fprintf(&buf, "hello, world, ##########11111111%d\n", i)
 	}
 	request.Content = buf.Bytes()
-
+	ctx := CryptoContext{}
+	ctx.Method = GetDefaultCryptoMethod()
+	iv := uint64(101)
+	ctx.EncryptIV = iv
+	ctx.DecryptIV = iv
 	for i := 0; i < n; i++ {
 		var buf bytes.Buffer
-		EncryptEvent(&buf, &request, 0)
-		DecryptEvent(&buf, 0)
+		EncryptEvent(&buf, &request, &ctx)
+		err, _ := DecryptEvent(&buf, &ctx)
+		if nil != err {
+			fmt.Printf("###%v", err)
+			return
+		}
 	}
 	// var buf bytes.Buffer
 	// EncryptEvent(&buf, &request, 0)

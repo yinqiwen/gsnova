@@ -10,6 +10,7 @@ import (
 	"log"
 	"math/rand"
 	"reflect"
+	"runtime"
 	"strings"
 
 	"github.com/codahale/chacha20"
@@ -62,6 +63,8 @@ func SetDefaultSecretKey(method string, key string) {
 		copy(tmp[0:len(secretKey)], secretKey)
 	}
 	copy(salsa20Key[:], secretKey[:32])
+	aesblock, _ := aes.NewCipher(secretKey)
+	aes256gcm, _ = cipher.NewGCM(aesblock)
 	defaultEncryptMethod = Salsa20Encrypter
 	if strings.EqualFold(method, "rc4") {
 		defaultEncryptMethod = RC4Encrypter
@@ -69,13 +72,19 @@ func SetDefaultSecretKey(method string, key string) {
 		defaultEncryptMethod = Salsa20Encrypter
 	} else if strings.EqualFold(method, "aes") {
 		defaultEncryptMethod = AES256Encrypter
-		block, _ := aes.NewCipher(secretKey)
-		aes256gcm, _ = cipher.NewGCM(block)
-		//defaultEncryptMethod = Chacha20Encypter
 	} else if strings.EqualFold(method, "chacha20") {
 		defaultEncryptMethod = Chacha20Encrypter
 	} else if strings.EqualFold(method, "none") {
 		defaultEncryptMethod = 0
+	} else if strings.EqualFold(method, "auto") {
+		if strings.Contains(runtime.GOARCH, "386") || strings.Contains(runtime.GOARCH, "amd64") {
+			defaultEncryptMethod = AES256Encrypter
+		} else if strings.Contains(runtime.GOARCH, "arm") {
+			defaultEncryptMethod = Chacha20Encrypter
+		} else {
+			defaultEncryptMethod = Salsa20Encrypter
+		}
+		//log.Printf("Auto select fastest encrypt method:%d", defaultEncryptMethod)
 	}
 }
 

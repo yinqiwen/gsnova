@@ -8,11 +8,11 @@ import (
 
 type HeartBeatEvent struct {
 	EventHeader
-	//Rand []byte
+	Rand []byte
 }
 
 func (ev *HeartBeatEvent) Encode(buffer *bytes.Buffer) {
-	//EncodeBytesValue(buffer, ev.Rand)
+	EncodeBytesValue(buffer, ev.Rand)
 }
 func (ev *HeartBeatEvent) Decode(buffer *bytes.Buffer) (err error) {
 	return nil
