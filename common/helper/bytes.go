@@ -2,41 +2,33 @@ package helper
 
 import (
 	"bytes"
-	"fmt"
+	"crypto/aes"
 )
 
-// Appends padding.
-func PKCS7Pad(data []byte, blocklen int) ([]byte, error) {
-	if blocklen <= 0 {
-		return nil, fmt.Errorf("invalid blocklen %d", blocklen)
+func PKCS7Pad(buf *bytes.Buffer, blen int) {
+	padding := 16 - (blen % 16)
+	for i := 0; i < padding; i++ {
+		buf.WriteByte(byte(padding))
 	}
-	padlen := 1
-	for ((len(data) + padlen) % blocklen) != 0 {
-		padlen = padlen + 1
-	}
-
-	pad := bytes.Repeat([]byte{byte(padlen)}, padlen)
-	return append(data, pad...), nil
 }
 
 // Returns slice of the original data without padding.
-func PKCS7Unpad(data []byte, blocklen int) ([]byte, error) {
-	if blocklen <= 0 {
-		return nil, fmt.Errorf("invalid blocklen %d", blocklen)
+func PKCS7Unpad(in []byte) []byte {
+	if len(in) == 0 {
+		return nil
 	}
-	if len(data)%blocklen != 0 || len(data) == 0 {
-		return nil, fmt.Errorf("invalid data len %d", len(data))
+
+	padding := in[len(in)-1]
+	if int(padding) > len(in) || padding > aes.BlockSize {
+		return nil
+	} else if padding == 0 {
+		return nil
 	}
-	padlen := int(data[len(data)-1])
-	if padlen > blocklen || padlen == 0 {
-		return nil, fmt.Errorf("invalid padding")
-	}
-	// check padding
-	pad := data[len(data)-padlen:]
-	for i := 0; i < padlen; i++ {
-		if pad[i] != byte(padlen) {
-			return nil, fmt.Errorf("invalid padding")
+
+	for i := len(in) - 1; i > len(in)-int(padding)-1; i-- {
+		if in[i] != padding {
+			return nil
 		}
 	}
-	return data[:len(data)-padlen], nil
+	return in[:len(in)-int(padding)]
 }

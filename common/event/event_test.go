@@ -47,15 +47,15 @@ func benchamark(n int) {
 
 func BenchmarkRC4(b *testing.B) {
 	SetDefaultSecretKey("rc4", "AAAAAAasdadasfafasasdasfasasgagaga")
-	benchamark(b.N)
+	//benchamark(b.N)
 }
 func BenchmarkChacha20(b *testing.B) {
 	SetDefaultSecretKey("chacha20", "AAAAAAasdadasfafasasdasfasasgagaga")
-	benchamark(b.N)
+	//benchamark(b.N)
 }
 func BenchmarkSalsa20(b *testing.B) {
 	SetDefaultSecretKey("salsa20", "AAAAAAasdadasfafasasdasfasasgagaga")
-	benchamark(b.N)
+	//benchamark(b.N)
 }
 
 func BenchmarkAES(b *testing.B) {

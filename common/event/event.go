@@ -481,14 +481,14 @@ func EncryptEvent(buf *bytes.Buffer, ev Event, ctx *CryptoContext) error {
 	//header.Flags.EnableEncrypt(defaultEncryptMethod)
 	header.Encode(buf)
 	//hlen := uint32(buf.Len() - start)
-
+	method := ctx.Method
 	//var eventBuffer bytes.Buffer
 	ev.Encode(buf)
 	elen := uint32(buf.Len() - start)
 	eventContent := buf.Bytes()[start+4:]
 
 	var nonce []byte
-	method := ctx.Method
+
 	encryptIV := ctx.EncryptIV
 	if header.Type == EventAuth {
 		method = uint8(Salsa20Encrypter)
@@ -504,6 +504,7 @@ func EncryptEvent(buf *bytes.Buffer, ev Event, ctx *CryptoContext) error {
 		nonce = make([]byte, 8)
 	case AES256Encrypter:
 		nonce = make([]byte, 12)
+		elen += uint32(aes256gcm.Overhead())
 		//block.Encrypt(eventContent, eventContent)
 	}
 	if len(nonce) > 0 {
@@ -519,10 +520,19 @@ func EncryptEvent(buf *bytes.Buffer, ev Event, ctx *CryptoContext) error {
 		rc4Cipher, _ := rc4.NewCipher(secretKey)
 		rc4Cipher.XORKeyStream(eventContent, eventContent)
 	case AES256Encrypter:
-		//block, _ := aes.NewCipher(secretKey)
-		//aesgcm, _ := cipher.NewGCM(block)
-		aes256gcm.Seal(eventContent, nonce, eventContent, nil)
+		block, _ := aes.NewCipher(secretKey)
+		aesgcm, _ := cipher.NewGCM(block)
+		bb := aesgcm.Seal(eventContent[:0], nonce, eventContent, nil)
+		if len(bb)-len(eventContent) != aes256gcm.Overhead() {
+			log.Printf("Expected aes bytes %d  after encrypt %d bytes", len(bb), len(eventContent))
+		}
+		if len(bb) > len(eventContent) {
+			//elen += uint32(len(bb) - len(eventContent))
+			buf.Write(bb[len(eventContent):])
+		}
+		copy(eventContent, bb)
 		//block.Encrypt(eventContent, eventContent)
+		//log.Printf("#####enc %x %x %d %d", nonce, bb, len(bb), len(eventContent))
 	case Chacha20Encrypter:
 		chacha20Cipher, _ := chacha20.New(secretKey, nonce)
 		chacha20Cipher.XORKeyStream(eventContent, eventContent)
@@ -591,7 +601,11 @@ func DecryptEvent(buf *bytes.Buffer, ctx *CryptoContext) (err error, ev Event) {
 	case AES256Encrypter:
 		//block, _ := aes.NewCipher(secretKey)
 		//aesgcm, _ := cipher.NewGCM(block)
-		aes256gcm.Open(body, nonce, body, nil)
+		bb, err := aes256gcm.Open(body[:0], nonce, body, nil)
+		if nil != err {
+			return err, nil
+		}
+		body = bb
 		//block.Decrypt(body, body)
 	case Chacha20Encrypter:
 		cipher, _ := chacha20.New(secretKey, nonce)
