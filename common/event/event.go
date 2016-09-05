@@ -522,15 +522,16 @@ func EncryptEvent(buf *bytes.Buffer, ev Event, ctx *CryptoContext) error {
 	case AES256Encrypter:
 		block, _ := aes.NewCipher(secretKey)
 		aesgcm, _ := cipher.NewGCM(block)
-		bb := aesgcm.Seal(eventContent[:0], nonce, eventContent, nil)
+		bb := aesgcm.Seal(nil, nonce, eventContent, nil)
 		if len(bb)-len(eventContent) != aes256gcm.Overhead() {
 			log.Printf("Expected aes bytes %d  after encrypt %d bytes", len(bb), len(eventContent))
 		}
+		copy(eventContent, bb[0:len(eventContent)])
 		if len(bb) > len(eventContent) {
 			//elen += uint32(len(bb) - len(eventContent))
 			buf.Write(bb[len(eventContent):])
 		}
-		copy(eventContent, bb)
+		//copy(eventContent, bb)
 		//block.Encrypt(eventContent, eventContent)
 		//log.Printf("#####enc %x %x %d %d", nonce, bb, len(bb), len(eventContent))
 	case Chacha20Encrypter:
