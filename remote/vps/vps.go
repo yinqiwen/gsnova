@@ -95,8 +95,8 @@ func serveProxyConn(conn net.Conn) {
 							evs = []event.Event{&event.ChannelCloseACKEvent{}}
 						} else {
 							if nil != err {
-								if remote.GetSessionTableSize() > 0 && lastEventTime.Add(5*time.Second).Before(now) {
-									evs = []event.Event{&event.HeartBeatEvent{}}
+								if remote.GetSessionTableSize() > 0 && lastEventTime.Add(10*time.Second).Before(now) {
+									evs = []event.Event{event.NewHeartBeatEvent()}
 								} else {
 									continue
 								}

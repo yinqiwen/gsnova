@@ -140,7 +140,7 @@ func (rc *RemoteChannel) heartbeat() {
 		select {
 		case <-ticker.C:
 			if !rc.C.Closed() && (GConf.ChannelKeepAlive || getProxySessionSize() > 0) {
-				rc.Write(&event.HeartBeatEvent{})
+				rc.Write(event.NewHeartBeatEvent())
 			}
 		}
 	}
