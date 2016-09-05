@@ -78,7 +78,8 @@ func SetDefaultSecretKey(method string, key string) {
 		defaultEncryptMethod = 0
 	} else if strings.EqualFold(method, "auto") {
 		if strings.Contains(runtime.GOARCH, "386") || strings.Contains(runtime.GOARCH, "amd64") {
-			defaultEncryptMethod = AES256Encrypter
+			//defaultEncryptMethod = AES256Encrypter
+			defaultEncryptMethod = Salsa20Encrypter
 		} else if strings.Contains(runtime.GOARCH, "arm") {
 			defaultEncryptMethod = Chacha20Encrypter
 		} else {
@@ -520,13 +521,13 @@ func EncryptEvent(buf *bytes.Buffer, ev Event, ctx *CryptoContext) error {
 		rc4Cipher, _ := rc4.NewCipher(secretKey)
 		rc4Cipher.XORKeyStream(eventContent, eventContent)
 	case AES256Encrypter:
-		block, _ := aes.NewCipher(secretKey)
-		aesgcm, _ := cipher.NewGCM(block)
-		bb := aesgcm.Seal(eventContent[:0], nonce, eventContent, nil)
+		//block, _ := aes.NewCipher(secretKey)
+		//aesgcm, _ := cipher.NewGCM(block)
+		bb := aes256gcm.Seal(eventContent[:0], nonce, eventContent, nil)
 		if len(bb)-len(eventContent) != aes256gcm.Overhead() {
 			log.Printf("Expected aes bytes %d  after encrypt %d bytes", len(bb), len(eventContent))
 		}
-		//copy(eventContent, bb[0:len(eventContent)])
+		copy(eventContent, bb[0:len(eventContent)])
 		if len(bb) > len(eventContent) {
 			//elen += uint32(len(bb) - len(eventContent))
 			buf.Write(bb[len(eventContent):])
