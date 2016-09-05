@@ -78,8 +78,8 @@ func SetDefaultSecretKey(method string, key string) {
 		defaultEncryptMethod = 0
 	} else if strings.EqualFold(method, "auto") {
 		if strings.Contains(runtime.GOARCH, "386") || strings.Contains(runtime.GOARCH, "amd64") {
-			//defaultEncryptMethod = AES256Encrypter
-			defaultEncryptMethod = Salsa20Encrypter
+			defaultEncryptMethod = AES256Encrypter
+			//defaultEncryptMethod = Salsa20Encrypter
 		} else if strings.Contains(runtime.GOARCH, "arm") {
 			defaultEncryptMethod = Chacha20Encrypter
 		} else {
