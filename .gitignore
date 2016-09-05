@@ -1,3 +1,5 @@
 gsnova.log*
 my.json
 .DS_Store
+Godeps
+vendor
