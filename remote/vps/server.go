@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"fmt"
 	"log"
 	"net"
 	"sync"
@@ -41,14 +42,21 @@ func retiredDynamicServerSize() int {
 
 func selectDynamicVPServer() *vpsServer {
 	var vs *vpsServer
+	if len(remote.ServerConf.CandidateDynamicPort) > 0 && len(remote.ServerConf.CandidateDynamicPort) < remote.ServerConf.MaxDynamicPort {
+		remote.ServerConf.MaxDynamicPort = len(remote.ServerConf.CandidateDynamicPort)
+	}
 	dynamicServerMutex.Lock()
 	if len(activeDynamicServers) >= remote.ServerConf.MaxDynamicPort {
 		now := time.Now()
+		lifeCycle := remote.ServerConf.DynamicPortLifeCycle
+		if lifeCycle == 0 {
+			lifeCycle = 1800
+		}
 		for vss := range activeDynamicServers {
-			if vss.createTime.Add(30 * time.Minute).Before(now) {
+			if len(remote.ServerConf.CandidateDynamicPort) == 0 && vss.createTime.Add(time.Duration(lifeCycle)*time.Second).Before(now) {
 				vss.retireTime = now
-				delete(activeDynamicServers, vss)
 				retiredDynamicServers[vss] = true
+				delete(activeDynamicServers, vss)
 			} else {
 				if nil == vs || vss.aliveConns < vs.aliveConns {
 					vs = vss
@@ -58,8 +66,25 @@ func selectDynamicVPServer() *vpsServer {
 	}
 	if nil == vs {
 		vs = new(vpsServer)
-		startDynamicServer(":0", vs)
-		activeDynamicServers[vs] = true
+		var err error
+		dynAddr := ":0"
+		if len(remote.ServerConf.CandidateDynamicPort) > 0 {
+			for _, port := range remote.ServerConf.CandidateDynamicPort {
+				dynAddr = fmt.Sprintf(":%d", port)
+				err = startDynamicServer(dynAddr, vs)
+				if nil == err {
+					break
+				}
+			}
+		} else {
+			err = startDynamicServer(dynAddr, vs)
+
+		}
+		if nil == err {
+			activeDynamicServers[vs] = true
+		} else {
+			vs = nil
+		}
 	}
 	clearExpiredDynamicVPServer()
 	dynamicServerMutex.Unlock()
@@ -69,7 +94,8 @@ func selectDynamicVPServer() *vpsServer {
 func clearExpiredDynamicVPServer() {
 	now := time.Now()
 	for vs := range retiredDynamicServers {
-		if vs.aliveConns == 0 && vs.retireTime.Add(5*time.Minute).Before(now) {
+		if vs.aliveConns == 0 && vs.retireTime.Add(10*time.Second).Before(now) {
+			log.Printf("Close dynamic listen server :%d", vs.port)
 			vs.lp.Close()
 			delete(retiredDynamicServers, vs)
 		}
@@ -148,7 +174,9 @@ func serveProxyConn(conn net.Conn, vs *vpsServer) {
 							evs = []event.Event{&event.ChannelCloseACKEvent{}}
 							if remote.ServerConf.MaxDynamicPort > 0 {
 								nvs := selectDynamicVPServer()
-								evs = append(evs, &event.PortUnicastEvent{Port: nvs.port})
+								if nil != nvs {
+									evs = append(evs, &event.PortUnicastEvent{Port: nvs.port})
+								}
 							}
 						} else {
 							if nil != err {
@@ -192,8 +220,8 @@ func listenTCPServer(addr string, vs *vpsServer) (net.Listener, error) {
 	//var lp *net.TCPListener
 	lp, err := net.Listen("tcp", addr)
 	if nil != err {
-		log.Fatalf("Can NOT listen on address:%s", addr)
-		return nil, nil
+		log.Printf("Can NOT listen on address:%s", addr)
+		return nil, err
 	}
 	tcpaddr := lp.Addr().(*net.TCPAddr)
 	log.Printf("Listen on address %v", tcpaddr)

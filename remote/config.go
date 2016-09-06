@@ -5,6 +5,7 @@ import (
 	"flag"
 	"log"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/yinqiwen/gsnova/common/event"
@@ -18,12 +19,14 @@ type EncryptConfig struct {
 }
 
 type ServerConfig struct {
-	Listen         string
-	AdminListen    string
-	MaxDynamicPort int
-	Auth           []string
-	Encrypt        EncryptConfig
-	Log            []string
+	Listen               string
+	AdminListen          string
+	MaxDynamicPort       int
+	DynamicPortLifeCycle int
+	CandidateDynamicPort []int
+	Auth                 []string
+	Encrypt              EncryptConfig
+	Log                  []string
 }
 
 func (conf *ServerConfig) VerifyUser(user string) bool {
@@ -47,6 +50,8 @@ func init() {
 	listen := flag.String("listen", "", "Server listen address")
 	logging := flag.String("log", "stdout", "Server log setting, , split by ','")
 	auth := flag.String("auth", "*", "Auth user setting, split by ','")
+	dps := flag.String("dps", "", "Candidate dynamic ports")
+	ndp := flag.Uint("ndp", 0, "Max dynamic ports")
 	flag.Parse()
 
 	file := "server.json"
@@ -55,10 +60,18 @@ func init() {
 			flag.PrintDefaults()
 			return
 		}
+		dpstrs := strings.Split(*dps, ",")
+		for _, s := range dpstrs {
+			i, err := strconv.Atoi(s)
+			if nil == err && i > 1024 && i < 65535 {
+				ServerConf.CandidateDynamicPort = append(ServerConf.CandidateDynamicPort, i)
+			}
+		}
 		ServerConf.Log = strings.Split(*logging, ",")
 		ServerConf.Auth = strings.Split(*auth, ",")
 		ServerConf.Listen = *listen
 		ServerConf.Encrypt.Key = *key
+		ServerConf.MaxDynamicPort = int(*ndp)
 	} else {
 		data, err := helper.ReadWithoutComment(file, "//")
 		//data, err := ioutil.ReadFile(file)
