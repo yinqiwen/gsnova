@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/yinqiwen/gsnova/common/event"
+	"github.com/yinqiwen/gsnova/common/helper"
 	"github.com/yinqiwen/gsnova/local/proxy"
 )
 
@@ -174,6 +175,18 @@ func buildHTTPReq(u *url.URL, body io.ReadCloser) *http.Request {
 	return req
 }
 
+func getHTTPReconnectPeriod() int {
+	period := proxy.GConf.PAAS.HTTPReconnectPeriod
+	if period == 0 {
+		period = 30
+	}
+	if proxy.GConf.PAAS.HTTPRCPRandomAdjustment > 0 && period > proxy.GConf.PAAS.HTTPRCPRandomAdjustment {
+		adjust := proxy.GConf.PAAS.HTTPRCPRandomAdjustment
+		period = helper.RandBetween(period-adjust, period+adjust)
+	}
+	return period
+}
+
 func (hc *httpChannel) chunkPush() {
 	u := hc.pushurl
 	var ticker *time.Ticker
@@ -202,10 +215,7 @@ func (hc *httpChannel) chunkPush() {
 		var buf bytes.Buffer
 		event.EncryptEvent(&buf, wAuth, &hc.cryptoCtx)
 		hc.chunkChan.prepend(buf.Bytes())
-		period := proxy.GConf.PAAS.HTTPReconnectPeriod
-		if period == 0 {
-			period = 30
-		}
+		period := getHTTPReconnectPeriod()
 		ticker = time.NewTicker(time.Duration(period) * time.Second)
 		go closePush()
 		log.Printf("[%s:%d] chunk push channel start.", hc.addr, hc.idx)
@@ -225,10 +235,7 @@ func (hc *httpChannel) postURL(p []byte, u *url.URL) (n int, err error) {
 	req := buildHTTPReq(u, ioutil.NopCloser(bytes.NewBuffer(p)))
 	req.ContentLength = int64(len(p))
 	if u == hc.pullurl {
-		period := proxy.GConf.PAAS.HTTPReconnectPeriod
-		if 0 == period {
-			period = 30
-		}
+		period := getHTTPReconnectPeriod()
 		req.Header.Set("X-PullPeriod", strconv.Itoa(period))
 	}
 	response, err := paasHttpClient.Do(req)

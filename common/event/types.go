@@ -20,6 +20,7 @@ const (
 	Salsa20Encrypter  = 2
 	AES256Encrypter   = 3
 	Chacha20Encrypter = 4
+	BlowfishEncrypter = 5
 	//Chacha20Encypter = 3
 )
 

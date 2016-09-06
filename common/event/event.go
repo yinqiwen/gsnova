@@ -28,11 +28,7 @@ var secretKey []byte
 var salsa20Key [32]byte
 
 var defaultEncryptMethod int
-
 var aes256gcm cipher.AEAD
-
-// var rc4Key string
-// var salsa20Key [32]byte
 
 type EventFlags uint64
 
@@ -49,10 +45,6 @@ func (f *EventFlags) EnableSnappy() {
 func (f *EventFlags) EnableEncrypt(v int) {
 	(*f) = EventFlags(uint64(*f) | uint64(v<<4))
 }
-
-// func SetDefaultRC4Key(key string) {
-// 	rc4Key = key
-// }
 
 func SetDefaultSecretKey(method string, key string) {
 	secretKey = []byte(key)
@@ -79,11 +71,8 @@ func SetDefaultSecretKey(method string, key string) {
 	} else if strings.EqualFold(method, "auto") {
 		if strings.Contains(runtime.GOARCH, "386") || strings.Contains(runtime.GOARCH, "amd64") {
 			defaultEncryptMethod = AES256Encrypter
-			//defaultEncryptMethod = Salsa20Encrypter
 		} else if strings.Contains(runtime.GOARCH, "arm") {
 			defaultEncryptMethod = Chacha20Encrypter
-		} else {
-			defaultEncryptMethod = Salsa20Encrypter
 		}
 		//log.Printf("Auto select fastest encrypt method:%d", defaultEncryptMethod)
 	}
@@ -479,17 +468,14 @@ func EncryptEvent(buf *bytes.Buffer, ev Event, ctx *CryptoContext) error {
 	header.Type = GetRegistType(ev)
 	header.Id = ev.GetId()
 	header.Flags = 0
-	//header.Flags.EnableEncrypt(defaultEncryptMethod)
 	header.Encode(buf)
-	//hlen := uint32(buf.Len() - start)
 	method := ctx.Method
-	//var eventBuffer bytes.Buffer
 	ev.Encode(buf)
+
 	elen := uint32(buf.Len() - start)
 	eventContent := buf.Bytes()[start+4:]
 
 	var nonce []byte
-
 	encryptIV := ctx.EncryptIV
 	if header.Type == EventAuth {
 		method = uint8(Salsa20Encrypter)
@@ -506,12 +492,10 @@ func EncryptEvent(buf *bytes.Buffer, ev Event, ctx *CryptoContext) error {
 	case AES256Encrypter:
 		nonce = make([]byte, 12)
 		elen += uint32(aes256gcm.Overhead())
-		//block.Encrypt(eventContent, eventContent)
 	}
 	if len(nonce) > 0 {
 		iv := encryptIV ^ uint64(elen)
 		binary.LittleEndian.PutUint64(nonce, iv)
-		//encryptIV = iv
 	}
 
 	switch method {
@@ -521,26 +505,20 @@ func EncryptEvent(buf *bytes.Buffer, ev Event, ctx *CryptoContext) error {
 		rc4Cipher, _ := rc4.NewCipher(secretKey)
 		rc4Cipher.XORKeyStream(eventContent, eventContent)
 	case AES256Encrypter:
-		//block, _ := aes.NewCipher(secretKey)
-		//aesgcm, _ := cipher.NewGCM(block)
 		bb := aes256gcm.Seal(eventContent[:0], nonce, eventContent, nil)
 		if len(bb)-len(eventContent) != aes256gcm.Overhead() {
 			log.Printf("Expected aes bytes %d  after encrypt %d bytes", len(bb), len(eventContent))
 		}
 		copy(eventContent, bb[0:len(eventContent)])
 		if len(bb) > len(eventContent) {
-			//elen += uint32(len(bb) - len(eventContent))
 			buf.Write(bb[len(eventContent):])
 		}
-		//copy(eventContent, bb)
-		//block.Encrypt(eventContent, eventContent)
-		//log.Printf("#####enc %x %x %d %d", nonce, bb, len(bb), len(eventContent))
 	case Chacha20Encrypter:
 		chacha20Cipher, _ := chacha20.New(secretKey, nonce)
 		chacha20Cipher.XORKeyStream(eventContent, eventContent)
 	}
+
 	//log.Printf("Enc event(%d):%T with iv:%d with len:%d_%d %d", ev.GetId(), ev, encryptIV, elen, len(eventContent), method)
-	//elen = (elen << 8) + hlen
 	if header.Type == EventAuth {
 		base := rand.Int31n(0xFFFFFF)
 		elen = (uint32(base) << 8) + elen
@@ -558,8 +536,6 @@ func DecryptEvent(buf *bytes.Buffer, ctx *CryptoContext) (err error, ev Event) {
 	if buf.Len() < 4 {
 		return EBNR, nil
 	}
-
-	//buflen := buf.Len()
 	elen := binary.LittleEndian.Uint32(buf.Bytes()[0:4])
 	method := ctx.Method
 	if method == 0 && ctx.DecryptIV == 0 {
@@ -568,8 +544,6 @@ func DecryptEvent(buf *bytes.Buffer, ctx *CryptoContext) (err error, ev Event) {
 	} else {
 		elen = elen ^ uint32(ctx.DecryptIV)
 	}
-	//hlen := elen & 0xFF
-	//elen = elen >> 8
 	if elen > uint32(buf.Len()) {
 		return EBNR, nil
 	}
@@ -587,7 +561,6 @@ func DecryptEvent(buf *bytes.Buffer, ctx *CryptoContext) (err error, ev Event) {
 		nonce = make([]byte, 8)
 	case AES256Encrypter:
 		nonce = make([]byte, 12)
-		//block.Encrypt(eventContent, eventContent)
 	}
 	if len(nonce) > 0 {
 		iv := ctx.DecryptIV ^ uint64(elen)
@@ -601,14 +574,11 @@ func DecryptEvent(buf *bytes.Buffer, ctx *CryptoContext) (err error, ev Event) {
 		rc4Cipher, _ := rc4.NewCipher(secretKey)
 		rc4Cipher.XORKeyStream(body, body)
 	case AES256Encrypter:
-		//block, _ := aes.NewCipher(secretKey)
-		//aesgcm, _ := cipher.NewGCM(block)
 		bb, err := aes256gcm.Open(body[:0], nonce, body, nil)
 		if nil != err {
 			return err, nil
 		}
 		body = bb
-		//block.Decrypt(body, body)
 	case Chacha20Encrypter:
 		cipher, _ := chacha20.New(secretKey, nonce)
 		cipher.XORKeyStream(body, body)

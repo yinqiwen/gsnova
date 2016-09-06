@@ -92,10 +92,14 @@
 		//Set this positive value to enable chunk encoding request for faster HTTP push
 		"HTTPChunkPushEnable": true,
 		"HTTPReconnectPeriod": 30,
+		//ReconnectPeriod rand adjustment, the real reconnect period is random value between [P - adjust, P + adjust] 
+		"HTTPRCPRandomAdjustment" : 5,
 		//Unit: second
 		"WSReadTimeout":15,
 		//Reconnect after 60s
 		"WSReconnectPeriod": 60,
+		//ReconnectPeriod rand adjustment, the real reconnect period is random value between [P - adjust, P + adjust] 
+		"WSRCPRandomAdjustment" : 15,
 		"WSHeartBeatPeriod": 0
 	},
 	"GAE":{
@@ -123,7 +127,9 @@
 		//Unit: second
 		"ReadTimeout":15,
 		//Reconnect after 60s
-		"ReconnectPeriod": 60,
+		"ReconnectPeriod": 120,
+		//ReconnectPeriod rand adjustment, the real reconnect period is random value between [P - adjust, P + adjust] 
+		"RCPRandomAdjustment" : 60,
 		//Send heartbeat msg to keep alive 
 		"HeartBeatPeriod": 10
 	}

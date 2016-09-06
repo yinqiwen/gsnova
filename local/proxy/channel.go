@@ -36,15 +36,16 @@ type RemoteProxyChannel interface {
 }
 
 type RemoteChannel struct {
-	Addr            string
-	Index           int
-	DirectIO        bool
-	WriteJoinAuth   bool
-	OpenJoinAuth    bool
-	SecureTransport bool
-	HeartBeatPeriod int
-	ReconnectPeriod int
-	C               RemoteProxyChannel
+	Addr                string
+	Index               int
+	DirectIO            bool
+	WriteJoinAuth       bool
+	OpenJoinAuth        bool
+	SecureTransport     bool
+	HeartBeatPeriod     int
+	ReconnectPeriod     int
+	RCPRandomAdjustment int
+	C                   RemoteProxyChannel
 
 	connSendedEvents uint32
 	authResult       int
@@ -53,10 +54,9 @@ type RemoteChannel struct {
 	wch     chan event.Event
 	running bool
 
-	connectTime time.Time
-	closeState  int
-	// activeSids     map[uint32]bool
-	// activeSidMutex sync.Mutex
+	connectTime       time.Time
+	nextReconnectTime time.Time
+	closeState        int
 }
 
 func (rc *RemoteChannel) authed() bool {
@@ -195,7 +195,6 @@ func (rc *RemoteChannel) processWrite() {
 			closeReq := &event.ChannelCloseReqEvent{}
 			event.EncryptEvent(&wbuf, closeReq, &rc.cryptoCtx)
 		}
-		//rc.cryptoCtx.EncryptIV =
 		rc.connSendedEvents += uint32(len(sendEvents))
 
 		if wbuf.Len() > 0 {
@@ -246,13 +245,18 @@ func (rc *RemoteChannel) processRead() {
 				continue
 			}
 			rc.connectTime = time.Now()
+			if rc.ReconnectPeriod > 0 {
+				period := rc.ReconnectPeriod
+				if rc.RCPRandomAdjustment > 0 && rc.RCPRandomAdjustment < period {
+					period = helper.RandBetween(period-rc.RCPRandomAdjustment, period+rc.RCPRandomAdjustment)
+				}
+				rc.nextReconnectTime = rc.connectTime.Add(time.Duration(period) * time.Second)
+			}
 			log.Printf("Channel[%d] connect %s success.", rc.Index, rc.Addr)
 			if rc.OpenJoinAuth {
 				rc.Write(nil)
 			}
 		}
-		//data := make([]byte, 8192)
-
 		reader := &helper.BufferChunkReader{conn, nil}
 		for {
 			//buf.Truncate(buf.Len())
@@ -261,8 +265,8 @@ func (rc *RemoteChannel) processRead() {
 			cerr := reader.Err
 			//n, cerr := conn.Read(data)
 			//buf.Write(data[0:n])
-			if rc.ReconnectPeriod > 0 && rc.closeState == 0 {
-				if rc.connectTime.Add(time.Duration(rc.ReconnectPeriod) * time.Second).Before(time.Now()) {
+			if rc.ReconnectPeriod > 0 && rc.closeState == 0 && nil == cerr {
+				if rc.nextReconnectTime.Before(time.Now()) {
 					rc.closeState = stateCloseToSendReq
 					rc.Write(nil) //trigger to write ChannelCloseReqEvent
 					log.Printf("Channel[%d] prepare to close %s to reconnect.", rc.Index, rc.Addr)

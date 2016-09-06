@@ -41,19 +41,21 @@ func matchHostnames(pattern, host string) bool {
 }
 
 type PAASConfig struct {
-	Enable              bool
-	ServerList          []string
-	ConnsPerServer      int
-	SNI                 string
-	SNIProxy            string
-	HTTPProxy           string
-	DialTimeout         int
-	HTTPReadTimeout     int
-	WSReadTimeout       int
-	WSReconnectPeriod   int
-	WSHeartBeatPeriod   int
-	HTTPReconnectPeriod int
-	HTTPChunkPushEnable bool
+	Enable                  bool
+	ServerList              []string
+	ConnsPerServer          int
+	SNI                     string
+	SNIProxy                string
+	HTTPProxy               string
+	DialTimeout             int
+	HTTPReadTimeout         int
+	WSReadTimeout           int
+	WSReconnectPeriod       int
+	WSHeartBeatPeriod       int
+	WSRCPRandomAdjustment   int
+	HTTPRCPRandomAdjustment int
+	HTTPReconnectPeriod     int
+	HTTPChunkPushEnable     bool
 }
 
 type GAEConfig struct {
@@ -68,14 +70,15 @@ type GAEConfig struct {
 }
 
 type VPSConfig struct {
-	Enable          bool
-	Server          string
-	ConnsPerServer  int
-	HTTPProxy       string
-	DialTimeout     int
-	ReadTimeout     int
-	ReconnectPeriod int
-	HeartBeatPeriod int
+	Enable              bool
+	Server              string
+	ConnsPerServer      int
+	HTTPProxy           string
+	DialTimeout         int
+	ReadTimeout         int
+	ReconnectPeriod     int
+	HeartBeatPeriod     int
+	RCPRandomAdjustment int
 }
 
 type PACConfig struct {
