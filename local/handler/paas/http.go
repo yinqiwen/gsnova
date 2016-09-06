@@ -84,6 +84,10 @@ func (hc *httpChannel) SetCryptoCtx(ctx *event.CryptoContext) {
 	}
 }
 
+func (hc *httpChannel) HandleCtrlEvent(ev event.Event) {
+
+}
+
 func (hc *httpChannel) Open() error {
 	if nil == hc.pushurl {
 		u, err := url.Parse(hc.addr)

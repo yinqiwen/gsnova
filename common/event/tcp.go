@@ -39,3 +39,16 @@ func (ev *TCPCloseEvent) Encode(buffer *bytes.Buffer) {
 func (ev *TCPCloseEvent) Decode(buffer *bytes.Buffer) (err error) {
 	return nil
 }
+
+type PortUnicastEvent struct {
+	EventHeader
+	Port uint32
+}
+
+func (ev *PortUnicastEvent) Encode(buffer *bytes.Buffer) {
+	EncodeUInt32Value(buffer, ev.Port)
+}
+func (ev *PortUnicastEvent) Decode(buffer *bytes.Buffer) (err error) {
+	ev.Port, err = DecodeUInt32Value(buffer)
+	return
+}

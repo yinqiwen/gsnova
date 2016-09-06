@@ -35,6 +35,9 @@ func (tc *websocketChannel) Request([]byte) ([]byte, error) {
 
 func (hc *websocketChannel) SetCryptoCtx(ctx *event.CryptoContext) {
 }
+func (hc *websocketChannel) HandleCtrlEvent(ev event.Event) {
+
+}
 
 func (wc *websocketChannel) Open() error {
 	u, err := url.Parse(wc.url)

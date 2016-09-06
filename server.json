@@ -1,6 +1,8 @@
 {
 	 //this is just a example
 	"Listen":":8080",
+	//Set this positive value to enable dynamic server port support 
+	"MaxDynamicPort": 0,
 	"AdminListen": "127.0.0.1:60000",
 	//user name auth
 	"Auth":["*", "gsnova"],

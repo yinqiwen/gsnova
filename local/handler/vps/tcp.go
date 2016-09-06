@@ -2,7 +2,9 @@ package vps
 
 import (
 	"io"
+	"log"
 	"net"
+	"strconv"
 	"time"
 
 	"github.com/getlantern/netx"
@@ -12,8 +14,9 @@ import (
 )
 
 type tcpChannel struct {
-	addr string
-	conn net.Conn
+	addr         string
+	conn         net.Conn
+	proxyChannel *proxy.RemoteChannel
 }
 
 func (tc *tcpChannel) ReadTimeout() time.Duration {
@@ -25,6 +28,16 @@ func (tc *tcpChannel) ReadTimeout() time.Duration {
 }
 
 func (tc *tcpChannel) SetCryptoCtx(ctx *event.CryptoContext) {
+}
+func (tc *tcpChannel) HandleCtrlEvent(ev event.Event) {
+	switch ev.(type) {
+	case *event.PortUnicastEvent:
+		host, _, _ := net.SplitHostPort(tc.addr)
+		port := ev.(*event.PortUnicastEvent).Port
+		tc.addr = net.JoinHostPort(host, strconv.Itoa(int(port)))
+		tc.proxyChannel.Addr = tc.addr
+		log.Printf("VPS channel updated remote address to %s", tc.addr)
+	}
 }
 
 func (tc *tcpChannel) Open() error {
@@ -41,6 +54,10 @@ func (tc *tcpChannel) Open() error {
 		c, err = netx.DialTimeout("tcp", tc.addr, timeout)
 	}
 	if err != nil {
+		if tc.addr != proxy.GConf.VPS.Server {
+			tc.addr = proxy.GConf.VPS.Server
+			tc.proxyChannel.Addr = tc.addr
+		}
 		return err
 	}
 	tc.conn = c
@@ -94,6 +111,7 @@ func newTCPChannel(addr string, idx int) (*proxy.RemoteChannel, error) {
 	}
 	tc := new(tcpChannel)
 	tc.addr = addr
+	tc.proxyChannel = rc
 	rc.C = tc
 
 	err := rc.Init(idx == 0)

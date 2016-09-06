@@ -95,6 +95,9 @@ type httpChannel struct {
 func (hc *httpChannel) SetCryptoCtx(ctx *event.CryptoContext) {
 
 }
+func (hc *httpChannel) HandleCtrlEvent(ev event.Event) {
+
+}
 
 func (tc *httpChannel) ReadTimeout() time.Duration {
 	readTimeout := proxy.GConf.GAE.ReadTimeout

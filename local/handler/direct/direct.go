@@ -35,6 +35,10 @@ func (tc *directChannel) ReadTimeout() time.Duration {
 	return time.Duration(readTimeout) * time.Second
 }
 
+func (hc *directChannel) HandleCtrlEvent(ev event.Event) {
+
+}
+
 func (hc *directChannel) SetCryptoCtx(ctx *event.CryptoContext) {
 }
 

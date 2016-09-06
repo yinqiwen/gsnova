@@ -12,6 +12,7 @@ const (
 	EventHeartBeat       = 10009
 	EventChannelCloseReq = 10010
 	EventChannelCloseACK = 10011
+	EventPortUnicast     = 10012
 
 	NoneCompressor    = 0
 	SnappyCompressor  = 1
@@ -36,4 +37,5 @@ func init() {
 	RegistObject(EventHeartBeat, &HeartBeatEvent{})
 	RegistObject(EventChannelCloseReq, &ChannelCloseReqEvent{})
 	RegistObject(EventChannelCloseACK, &ChannelCloseACKEvent{})
+	RegistObject(EventPortUnicast, &PortUnicastEvent{})
 }

@@ -32,6 +32,7 @@ type RemoteProxyChannel interface {
 	Closed() bool
 	Request([]byte) ([]byte, error)
 	ReadTimeout() time.Duration
+	HandleCtrlEvent(ev event.Event)
 	io.ReadWriteCloser
 }
 
@@ -297,6 +298,10 @@ func (rc *RemoteChannel) processRead() {
 				case *event.ChannelCloseACKEvent:
 					conn.Close()
 					log.Printf("Channel[%d] close %s after recved close ACK.", rc.Index, rc.Addr)
+					continue
+				case *event.PortUnicastEvent:
+					//log.Printf("Channel[%d] recv %v.", rc.Index, ev)
+					rc.C.HandleCtrlEvent(ev)
 					continue
 				}
 				if !rc.authed() {
