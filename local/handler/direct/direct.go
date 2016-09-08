@@ -222,6 +222,9 @@ type DirectProxy struct {
 	useTLS bool
 }
 
+func (p *DirectProxy) PrintStat(w io.Writer) {
+}
+
 func (p *DirectProxy) Name() string {
 	if p.useTLS {
 		return "TLSDirect"

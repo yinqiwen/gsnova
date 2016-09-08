@@ -3,6 +3,7 @@ package proxy
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 
 	"github.com/yinqiwen/gsnova/common/event"
@@ -24,6 +25,7 @@ type Proxy interface {
 	Name() string
 	Destory() error
 	Features() Feature
+	PrintStat(w io.Writer)
 	Serve(session *ProxySession, ev event.Event) error
 }
 

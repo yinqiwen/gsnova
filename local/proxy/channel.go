@@ -8,6 +8,7 @@ import (
 	"log"
 	"math/rand"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/yinqiwen/gsnova/common/event"
@@ -58,6 +59,15 @@ type RemoteChannel struct {
 	connectTime       time.Time
 	nextReconnectTime time.Time
 	closeState        int
+
+	activeSessionNum int32
+}
+
+func (rc *RemoteChannel) updateActiveSessionNum(delta int32) {
+	atomic.AddInt32(&rc.activeSessionNum, delta)
+}
+func (rc *RemoteChannel) GetActiveSessionNum() int32 {
+	return rc.activeSessionNum
 }
 
 func (rc *RemoteChannel) authed() bool {
@@ -357,9 +367,15 @@ func (rc *RemoteChannel) WriteRaw(p []byte) (int, error) {
 }
 
 type RemoteChannelTable struct {
-	cs     []*RemoteChannel
-	cursor int
-	mutex  sync.Mutex
+	cs []*RemoteChannel
+	//cursor int
+	mutex sync.Mutex
+}
+
+func (p *RemoteChannelTable) PrintStat(w io.Writer) {
+	for _, c := range p.cs {
+		fmt.Fprintf(w, "Channel[%s:%d]:SessionNum=%d\n", c.Addr, c.Index, c.GetActiveSessionNum())
+	}
 }
 
 func (p *RemoteChannelTable) Add(c *RemoteChannel) {
@@ -381,24 +397,30 @@ func (p *RemoteChannelTable) Select() *RemoteChannel {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 
-	if len(p.cs) == 0 {
-		return nil
-	}
-	startCursor := p.cursor
-	for {
-		if p.cursor >= len(p.cs) {
-			p.cursor = 0
-		}
-		c := p.cs[p.cursor]
-		p.cursor++
-		if nil != c {
-			return c
-		}
-		if p.cursor == startCursor {
-			break
+	// if len(p.cs) == 0 {
+	// 	return nil
+	// }
+	var selected *RemoteChannel
+	for _, r := range p.cs {
+		if nil == selected || r.activeSessionNum < selected.activeSessionNum {
+			selected = r
 		}
 	}
-	return nil
+	// startCursor := p.cursor
+	// for {
+	// 	if p.cursor >= len(p.cs) {
+	// 		p.cursor = 0
+	// 	}
+	// 	c := p.cs[p.cursor]
+	// 	p.cursor++
+	// 	if nil != c {
+	// 		return c
+	// 	}
+	// 	if p.cursor == startCursor {
+	// 		break
+	// 	}
+	// }
+	return selected
 }
 
 func NewRemoteChannelTable() *RemoteChannelTable {

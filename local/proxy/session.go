@@ -23,6 +23,13 @@ type ProxySession struct {
 	SSLHijacked bool
 }
 
+func (s *ProxySession) SetRemoteChannel(r *RemoteChannel) {
+	if nil == s.Remote {
+		r.updateActiveSessionNum(1)
+	}
+	s.Remote = r
+}
+
 func (s *ProxySession) handle(ev event.Event) error {
 	if nil != s.queue {
 		s.queue.Publish(ev, 5*time.Second)
@@ -54,7 +61,6 @@ func newProxySession(sid uint32, queue *event.EventQueue) *ProxySession {
 	s.id = sid
 	s.queue = queue
 	sessions[s.id] = s
-	//log.Printf("Create proxy session:%d", sid)
 	return s
 }
 
@@ -66,24 +72,22 @@ func newRandomSession() *ProxySession {
 func closeProxySession(sid uint32) {
 	sessionMutex.Lock()
 	defer sessionMutex.Unlock()
-	// s, exist := sessions[sid]
-	// if exist {
-	// 	if nil != s && nil != s.Remote {
-	// 		s.Remote.updateActiveSid(sid, false)
-	// 	}
-	// 	delete(sessions, sid)
-	// }
-	delete(sessions, sid)
-	//log.Printf("Close proxy session:%d, %d left", sid, len(sessions))
+	s, exist := sessions[sid]
+	if exist {
+		if nil != s && nil != s.Remote {
+			s.Remote.updateActiveSessionNum(-1)
+		}
+		delete(sessions, sid)
+	}
 }
 
 func closeAllProxySession() {
 	sessionMutex.Lock()
 	defer sessionMutex.Unlock()
-	for id, _ := range sessions {
-		// if nil != s && nil != s.Remote {
-		// 	s.Remote.updateActiveSid(id, false)
-		// }
+	for id, s := range sessions {
+		if nil != s && nil != s.Remote {
+			s.Remote.updateActiveSessionNum(-1)
+		}
 		delete(sessions, id)
 	}
 }

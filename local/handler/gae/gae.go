@@ -2,6 +2,7 @@ package gae
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"regexp"
 	"strings"
@@ -17,6 +18,10 @@ type GAEProxy struct {
 
 func (p *GAEProxy) Name() string {
 	return "GAE"
+}
+
+func (p *GAEProxy) PrintStat(w io.Writer) {
+
 }
 
 func (p *GAEProxy) Init() error {
@@ -52,7 +57,8 @@ func (p *GAEProxy) Features() proxy.Feature {
 
 func (p *GAEProxy) Serve(session *proxy.ProxySession, ev event.Event) error {
 	if nil == session.Remote {
-		session.Remote = p.cs.Select()
+		session.SetRemoteChannel(p.cs.Select())
+		//session.Remote = p.cs.Select()
 		if session.Remote == nil {
 			return fmt.Errorf("No proxy channel in PaasProxy")
 		}
@@ -149,7 +155,6 @@ func (p *GAEProxy) Serve(session *proxy.ProxySession, ev event.Event) error {
 var mygae GAEProxy
 
 func init() {
-
 	mygae.cs = proxy.NewRemoteChannelTable()
 	mygae.Init()
 	proxy.RegisterProxy(&mygae)

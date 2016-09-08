@@ -32,6 +32,9 @@ func statCallback(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(200)
 	fmt.Fprintf(w, "NumSession: %d\n", getProxySessionSize())
 	ots.Handle("stat", w)
+	for _, p := range proxyTable {
+		p.PrintStat(w)
+	}
 }
 func stackdumpCallback(w http.ResponseWriter, req *http.Request) {
 	w.WriteHeader(200)

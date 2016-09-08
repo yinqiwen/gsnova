@@ -3,6 +3,7 @@ package paas
 import (
 	"crypto/tls"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -43,6 +44,11 @@ func paasDial(network, addr string) (net.Conn, error) {
 
 type PaasProxy struct {
 	cs *proxy.RemoteChannelTable
+}
+
+func (p *PaasProxy) PrintStat(w io.Writer) {
+	fmt.Fprintf(w, "PAAS Stat:\n")
+	p.cs.PrintStat(w)
 }
 
 func (p *PaasProxy) Name() string {
@@ -121,7 +127,8 @@ func (p *PaasProxy) Features() proxy.Feature {
 
 func (p *PaasProxy) Serve(session *proxy.ProxySession, ev event.Event) error {
 	if nil == session.Remote {
-		session.Remote = p.cs.Select()
+		session.SetRemoteChannel(p.cs.Select())
+		//session.Remote = p.cs.Select()
 		if session.Remote == nil {
 			return fmt.Errorf("No proxy channel in PaasProxy")
 		}

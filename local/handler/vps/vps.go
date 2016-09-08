@@ -2,6 +2,7 @@ package vps
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"strings"
 
@@ -11,6 +12,11 @@ import (
 
 type VPSProxy struct {
 	cs *proxy.RemoteChannelTable
+}
+
+func (p *VPSProxy) PrintStat(w io.Writer) {
+	fmt.Fprintf(w, "VPS Stat:\n")
+	p.cs.PrintStat(w)
 }
 
 func (p *VPSProxy) Name() string {
@@ -49,7 +55,8 @@ func (p *VPSProxy) Features() proxy.Feature {
 
 func (p *VPSProxy) Serve(session *proxy.ProxySession, ev event.Event) error {
 	if nil == session.Remote {
-		session.Remote = p.cs.Select()
+		session.SetRemoteChannel(p.cs.Select())
+		//session.Remote = p.cs.Select()
 		if session.Remote == nil {
 			return fmt.Errorf("No proxy channel in PaasProxy")
 		}
