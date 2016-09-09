@@ -34,6 +34,7 @@ branches:
 
 deploy:
   provider: releases
+  skip_cleanup: true
   api_key:
     secure: YngDT2JlydCG+qb8Ww9wBFyWiLRQJczybNLeoFKluBXKoh1Vu+TZeReMK+rRUjOqOmYV8sNtOnEVSg4+ICeYDNp9fRRwcNKTkp0H+8pH0OynxdH2faCjx1H5U0WQuWqMLQoMSHZ90I0tL40kEJOChLY6WGvwY47YBqi/dsvmTfg=
   file: 
@@ -49,3 +50,4 @@ deploy:
     - "gsnova_paas_linux_386.tar.bz2"
   on:
     repo: yinqiwen/gsnova
+    tags: true
