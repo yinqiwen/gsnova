@@ -28,9 +28,6 @@ script:
 - tar cjf gsnova_paas_linux_amd64.tar.bz2 server.json gsnova_paas_linux_amd64
 - tar cjf gsnova_paas_linux_386.tar.bz2 server.json gsnova_paas_linux_386
 
-branches:
-  only:
-  - master
 
 deploy:
   provider: releases
