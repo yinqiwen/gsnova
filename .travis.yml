@@ -1,8 +1,38 @@
 language: go
 
 go:
+  - 1.7.1
   - tip
 
 before_install:
   - rm -r ./remote/gae/*.go
+
+install:
+  - go install github.com/mitchellh/gox
+
+script:
+  - gox -output="gsnova_{{.OS}}_{{.Arch}}" -osarch="windows/386" github.com/yinqiwen/gsnova/local/main
+  - gox -output="gsnova_{{.OS}}_{{.Arch}}" -osarch="windows/amd64" github.com/yinqiwen/gsnova/local/main
+  - gox -output="gsnova_{{.OS}}_{{.Arch}}" -osarch="linux/386" github.com/yinqiwen/gsnova/local/main
+  - gox -output="gsnova_{{.OS}}_{{.Arch}}" -osarch="linux/amd64" github.com/yinqiwen/gsnova/local/main
+  - gox -output="gsnova_{{.OS}}_{{.Arch}}" -osarch="linux/arm" github.com/yinqiwen/gsnova/local/main
+  - gox -output="gsnova_{{.OS}}_{{.Arch}}" -osarch="darwin/amd64" github.com/yinqiwen/gsnova/local/main
+  - gox -output="gsnova_vps_{{.OS}}_{{.Arch}}" -osarch="linux/386" github.com/yinqiwen/gsnova/remote/vps
+  - gox -output="gsnova_vps_{{.OS}}_{{.Arch}}" -osarch="linux/amd64" github.com/yinqiwen/gsnova/remote/vps
+  - gox -output="gsnova_paas_{{.OS}}_{{.Arch}}" -osarch="linux/386" github.com/yinqiwen/gsnova/remote/paas
+  - gox -output="gsnova_paas_{{.OS}}_{{.Arch}}" -osarch="linux/amd64" github.com/yinqiwen/gsnova/remote/paas
+
+branches:
+  only:
+    - master
+
+deploy:
+  provider: releases
+  api_key: "GITHUB OAUTH TOKEN"
+  file:
+    - "FILE 1"
+    - "FILE 2"
+  skip_cleanup: true
+  on:
+    tags: true
 
