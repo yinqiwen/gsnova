@@ -1,5 +1,8 @@
 language: go
 
 go:
-  - 1.7
   - tip
+
+before_install:
+  - rm -r ./remote/gae/*.go
+
