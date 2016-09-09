@@ -4,6 +4,7 @@ go:
 before_install:
 - rm -r ./remote/gae/*.go
 install:
+- go get -t ./...
 - go get github.com/mitchellh/gox
 script:
 - gox -output="gsnova_{{.OS}}_{{.Arch}}" -osarch="windows/386" github.com/yinqiwen/gsnova/local/main
