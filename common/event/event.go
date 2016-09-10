@@ -13,7 +13,7 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/codahale/chacha20"
+	//"github.com/codahale/chacha20"
 	"golang.org/x/crypto/salsa20"
 )
 
@@ -514,8 +514,9 @@ func EncryptEvent(buf *bytes.Buffer, ev Event, ctx *CryptoContext) error {
 			buf.Write(bb[len(eventContent):])
 		}
 	case Chacha20Encrypter:
-		chacha20Cipher, _ := chacha20.New(secretKey, nonce)
-		chacha20Cipher.XORKeyStream(eventContent, eventContent)
+		chacha20XOR(nonce, eventContent, eventContent)
+		//chacha20Cipher, _ := chacha20.New(secretKey, nonce)
+		//chacha20Cipher.XORKeyStream(eventContent, eventContent)
 	}
 
 	//log.Printf("Enc event(%d):%T with iv:%d with len:%d_%d %d", ev.GetId(), ev, encryptIV, elen, len(eventContent), method)
@@ -580,8 +581,9 @@ func DecryptEvent(buf *bytes.Buffer, ctx *CryptoContext) (err error, ev Event) {
 		}
 		body = bb
 	case Chacha20Encrypter:
-		cipher, _ := chacha20.New(secretKey, nonce)
-		cipher.XORKeyStream(body, body)
+		chacha20XOR(nonce, body, body)
+		//cipher, _ := chacha20.New(secretKey, nonce)
+		//cipher.XORKeyStream(body, body)
 	}
 	ebuf := bytes.NewBuffer(body)
 	var header EventHeader

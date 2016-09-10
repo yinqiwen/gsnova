@@ -336,7 +336,11 @@ func (rc *RemoteChannel) Request(ev event.Event) (event.Event, error) {
 	var buf bytes.Buffer
 	auth := NewAuthEvent(rc.SecureTransport)
 	auth.Index = int64(rc.Index)
+	if auth.EncryptMethod == event.Chacha20Encrypter {
+		auth.EncryptMethod = event.Salsa20Encrypter
+	}
 	ctx := randCryptoCtx()
+	ctx.Method = auth.EncryptMethod
 	auth.IV = ctx.EncryptIV
 	event.EncryptEvent(&buf, auth, &ctx)
 	event.EncryptEvent(&buf, ev, &ctx)

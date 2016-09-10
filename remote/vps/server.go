@@ -42,7 +42,7 @@ func retiredDynamicServerSize() int {
 
 func selectDynamicVPServer() *vpsServer {
 	var vs *vpsServer
-	if len(remote.ServerConf.CandidateDynamicPort) > 0 && len(remote.ServerConf.CandidateDynamicPort) < remote.ServerConf.MaxDynamicPort {
+	if len(remote.ServerConf.CandidateDynamicPort) > 0 && remote.ServerConf.MaxDynamicPort > 0 {
 		remote.ServerConf.MaxDynamicPort = len(remote.ServerConf.CandidateDynamicPort)
 	}
 	dynamicServerMutex.Lock()
