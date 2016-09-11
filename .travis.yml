@@ -8,7 +8,7 @@ install:
 - go get github.com/mitchellh/gox
 - go get github.com/tools/godep
 script:
-- godep save github.com/yinqiwen/gsnova/remote/paas && cd remote/paas && tar cf ../../gsnova-paas-deploy-with-dependencies.tar * && cd ../.. && tar uf gsnova-paas-deploy-with-dependencies.tar vendor Gpdeps && bzip2 gsnova-paas-deploy-with-dependencies.tar
+- godep save github.com/yinqiwen/gsnova/remote/paas && cd remote/paas && tar cf ../../gsnova-paas-deploy-with-dependencies.tar * && cd ../.. && tar uf gsnova-paas-deploy-with-dependencies.tar vendor Godeps && bzip2 gsnova-paas-deploy-with-dependencies.tar
 - gox -output="gsnova_{{.OS}}_{{.Arch}}" -osarch="windows/386" github.com/yinqiwen/gsnova/local/main
 - gox -output="gsnova_{{.OS}}_{{.Arch}}" -osarch="windows/amd64" github.com/yinqiwen/gsnova/local/main
 - gox -output="gsnova_{{.OS}}_{{.Arch}}" -osarch="linux/386" github.com/yinqiwen/gsnova/local/main
