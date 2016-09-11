@@ -80,7 +80,7 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 			log.Printf("Invalid socks target addresss:%s with reason %v", socksConn.Req.Target, err)
 			return
 		}
-		if socksTargetHost != "127.0.0.1" && net.ParseIP(socksTargetHost) != nil && !proxy.SNISniff {
+		if socksTargetHost != "127.0.0.1" && net.ParseIP(socksTargetHost) != nil && proxy.SNISniff {
 			//this is a ip from local dns query
 			tryRemoteResolve = true
 			if socksTargetPort == "80" {
@@ -132,6 +132,7 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 	}()
 
 	sniSniffed := true
+
 	if tryRemoteResolve && session.Hijacked {
 		sniSniffed = false
 	}
@@ -163,7 +164,7 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 				} else {
 					sniSniffed = true
 					chunkContent = sniChunk
-					//log.Printf("####SNI = %v:%s   %s", sni, socksTargetPort, net.JoinHostPort(sni, socksTargetPort))
+					log.Printf("Sniffed SNI:%s:%s for IP:%s:%s", sni, socksTargetPort, socksTargetHost, socksTargetPort)
 					socksInitProxy(net.JoinHostPort(sni, socksTargetPort))
 				}
 			}
@@ -179,7 +180,11 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 		req, err := http.ReadRequest(bufconn)
 		if nil != err {
 			if err != io.EOF && !connClosed {
-				log.Printf("Session:%d read request failed from proxy connection:%v", sid, err)
+				if len(socksTargetHost) > 0 {
+					log.Printf("Session:%d read request failed from proxy connection to %s:%s for reason:%v", sid, socksTargetHost, socksTargetPort, err)
+				} else {
+					log.Printf("Session:%d read request failed from proxy connection for reason:%v", sid, err)
+				}
 			}
 			break
 		}

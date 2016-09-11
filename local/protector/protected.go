@@ -112,7 +112,7 @@ func Dial(network, addr string, timeout time.Duration) (net.Conn, error) {
 	// do DNS query
 	IPAddr := net.ParseIP(host)
 	if IPAddr == nil {
-		log.Printf("Couldn't parse IP address %v", host)
+		log.Printf("Couldn't parse IP address %v while port:%d", host, port)
 		return nil, err
 	}
 

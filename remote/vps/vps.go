@@ -10,6 +10,7 @@ import (
 )
 
 func dumpServerStat(args []string, c io.Writer) error {
+	fmt.Fprintf(c, "Version:    %s\n", remote.Version)
 	fmt.Fprintf(c, "NumSession:    %d\n", remote.GetSessionTableSize())
 	fmt.Fprintf(c, "NumEventQueue: %d\n", remote.GetEventQueueSize())
 	fmt.Fprintf(c, "NumActiveDynamicServer: %d\n", activeDynamicServerSize())

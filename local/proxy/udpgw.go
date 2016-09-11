@@ -90,7 +90,7 @@ func (u *udpgwPacket) read(r *bufio.Reader) error {
 	//log.Printf("###First %d  %d %d %p", u.length, binary.BigEndian.Uint16(bs), len(bs), r)
 	_, err = r.Peek(int(u.length))
 	if nil != err {
-		log.Printf("### %v", err)
+		//log.Printf("### %v", err)
 		return err
 	}
 	bodylen := u.length
@@ -132,7 +132,7 @@ func closeAllUDPSession() {
 func removeUdpSession(id *udpSessionId) {
 	s, exist := udpSessionTable[id.id]
 	if exist {
-		log.Printf("###Delete %d(%d) udpsession", id.id, s.session.id)
+		log.Printf("Delete %d(%d) udpsession", id.id, s.session.id)
 		delete(cidTable, s.session.id)
 		delete(udpSessionTable, s.id)
 		closeProxySession(s.session.id)
@@ -233,13 +233,13 @@ func handleUDPGatewayConn(conn net.Conn, proxy ProxyConfig) {
 							connClosed = true
 							conn.Close()
 						} else {
-							log.Printf("###UDP Recv for %d(%d)", usession.session.id, usession.id)
+							//log.Printf("###UDP Recv for %d(%d)", usession.session.id, usession.id)
 							updateUdpSession(usession)
 						}
 						continue
 					}
 				}
-				log.Printf("#####No udp session found for %d", ev.GetId())
+				log.Printf("No udp session found for %d", ev.GetId())
 			default:
 				log.Printf("Invalid event type:%T to process", ev)
 			}
@@ -305,7 +305,7 @@ func handleUDPGatewayConn(conn net.Conn, proxy ProxyConfig) {
 		usession.targetAddr = ev.Addr
 
 		if nil != p {
-			log.Printf("Session:%d(%d) request udp:%s", usession.session.id, usession.id, ev.Addr)
+			//log.Printf("Session:%d(%d) request udp:%s", usession.session.id, usession.id, ev.Addr)
 			p.Serve(usession.session, ev)
 		}
 	}

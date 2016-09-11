@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/yinqiwen/gotoolkit/ots"
 	"github.com/yinqiwen/gsnova/remote"
@@ -13,11 +14,12 @@ import (
 
 // hello world, the web server
 func indexCallback(w http.ResponseWriter, req *http.Request) {
-	io.WriteString(w, html)
+	io.WriteString(w, strings.Replace(html, "${Version}", remote.Version, -1))
 }
 
 func statCallback(w http.ResponseWriter, req *http.Request) {
 	w.WriteHeader(200)
+	fmt.Fprintf(w, "Version:    %s\n", remote.Version)
 	fmt.Fprintf(w, "NumSession: %d\n", remote.GetSessionTableSize())
 	ots.Handle("stat", w)
 }
@@ -72,7 +74,7 @@ const html = `
       <span class="small">by <a href="http://twitter.com/yinqiwen">@yinqiwen</a></span></h1>
 
     <div class="description">
-      Welcome to use GSnova PAAS Server(V1.0)!
+      Welcome to use GSnova PAAS Server ${Version}!
     </div>
 
 	<h2>Code</h2>

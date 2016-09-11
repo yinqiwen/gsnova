@@ -24,7 +24,7 @@ type ProxySession struct {
 }
 
 func (s *ProxySession) SetRemoteChannel(r *RemoteChannel) {
-	if nil == s.Remote {
+	if nil == s.Remote && nil != r {
 		r.updateActiveSessionNum(1)
 	}
 	s.Remote = r

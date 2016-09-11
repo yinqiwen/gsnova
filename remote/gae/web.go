@@ -62,6 +62,11 @@ func fetch(context appengine.Context, ev *event.HTTPRequestEvent) event.Event {
 
 }
 
+func statCallback(w http.ResponseWriter, req *http.Request) {
+	w.WriteHeader(200)
+	fmt.Fprintf(c, "Version:    %s\n", remote.Version)
+}
+
 func httpInvoke(w http.ResponseWriter, r *http.Request) {
 	b := make([]byte, r.ContentLength)
 	r.Body.Read(b)
@@ -108,11 +113,12 @@ func httpInvoke(w http.ResponseWriter, r *http.Request) {
 }
 
 func index(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprint(w, html)
+	fmt.Fprint(w, strings.Replace(html, "${Version}", remote.Version, -1))
 }
 
 func init() {
 	http.HandleFunc("/invoke", httpInvoke)
+	http.HandleFunc("/stat", statCallback)
 	http.HandleFunc("/", index)
 }
 
@@ -133,7 +139,7 @@ const html = `
       <span class="small">by <a href="http://twitter.com/yinqiwen">@yinqiwen</a></span></h1>
 
     <div class="description">
-      Welcome to use GSnova GAE Server(V1.0)!
+      Welcome to use GSnova GAE Server ${Version}!
     </div>
 
 	<h2>Code</h2>

@@ -147,12 +147,15 @@ func newDirectChannel(ev event.Event, useTLS bool) (*directChannel, error) {
 	default:
 		return nil, fmt.Errorf("Can NOT create direct channel by event:%T", ev)
 	}
+	//log.Printf("Session:%d enter direct with host %s & event:%T", ev.GetId(), host, ev)
 	if len(host) == 0 {
 		return nil, fmt.Errorf("Empty remote addr in event")
 	}
 	if strings.Contains(host, ":") {
 		host, port, _ = net.SplitHostPort(host)
 	}
+
+	isIP := net.ParseIP(host) != nil
 	// toReplaceSNI := ""
 	// if port == "443" {
 	// 	for pattern, sni := range proxy.GConf.Direct.SNIMapping {
@@ -163,7 +166,7 @@ func newDirectChannel(ev event.Event, useTLS bool) (*directChannel, error) {
 	// 	}
 	// }
 
-	if !hosts.InHosts(host) && hosts.InHosts(hosts.SNIProxy) && port == "443" && network == "tcp" {
+	if !isIP && !hosts.InHosts(host) && hosts.InHosts(hosts.SNIProxy) && port == "443" && network == "tcp" {
 		host = hosts.SNIProxy
 	}
 
@@ -172,18 +175,22 @@ func newDirectChannel(ev event.Event, useTLS bool) (*directChannel, error) {
 	} else {
 		useTLS = false
 	}
-	host = hosts.GetHost(host)
-	addr := host
+	if !isIP {
+		host = hosts.GetHost(host)
+	}
+
+	//log.Printf("Session:%d get host:%s", ev.GetId(), host)
+	addr := ""
 	if useTLS {
 		addr = addr + ":443"
 	} else {
 		if len(port) > 0 {
-			addr = addr + ":" + port
+			addr = host + ":" + port
 		} else {
 			if fromHttpsConnect {
-				addr = addr + ":443"
+				addr = host + ":443"
 			} else {
-				addr = addr + ":80"
+				addr = host + ":80"
 			}
 		}
 	}
@@ -191,8 +198,8 @@ func newDirectChannel(ev event.Event, useTLS bool) (*directChannel, error) {
 	if 0 == dailTimeout {
 		dailTimeout = 5
 	}
-	c, err := netx.DialTimeout(network, addr, time.Duration(dailTimeout)*time.Second)
 	log.Printf("Session:%d connect %s:%s for %s %T", ev.GetId(), network, addr, host, ev)
+	c, err := netx.DialTimeout(network, addr, time.Duration(dailTimeout)*time.Second)
 	if nil != err {
 		log.Printf("Failed to connect %s for %s with error:%v", addr, host, err)
 		return nil, err

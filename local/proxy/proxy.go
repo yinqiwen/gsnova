@@ -9,6 +9,7 @@ import (
 	"github.com/yinqiwen/gsnova/common/event"
 	"github.com/yinqiwen/gsnova/common/helper"
 	"github.com/yinqiwen/gsnova/common/logger"
+	"github.com/yinqiwen/gsnova/local"
 	"github.com/yinqiwen/gsnova/local/hosts"
 )
 
@@ -74,6 +75,9 @@ func Start(home string) error {
 	}
 	proxyHome = home
 	logger.InitLogger(GConf.Log)
+
+	log.Printf("Starting GSnova %s.", local.Version)
+
 	err = hosts.Init(hostsConf)
 	if nil != err {
 		return err

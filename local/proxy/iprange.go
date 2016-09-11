@@ -69,12 +69,12 @@ func (h *IPRangeHolder) FindCountry(ip string) (string, error) {
 	}
 	if index > 0 {
 		if h.ranges[index].Start == uint64(v) && h.ranges[index].End >= uint64(v) {
-			log.Printf("1####%d  %s %s", v, helper.Long2IPv4(h.ranges[index].Start), helper.Long2IPv4(h.ranges[index].End))
+			log.Printf("%s match ip range %s-%s", ip, helper.Long2IPv4(h.ranges[index].Start), helper.Long2IPv4(h.ranges[index].End))
 			return h.ranges[index].Country, nil
 		}
 		if index > 0 {
 			if h.ranges[index-1].Start <= uint64(v) && h.ranges[index-1].End >= uint64(v) {
-				log.Printf("2####%d  %s %s", v, helper.Long2IPv4(h.ranges[index-1].Start), helper.Long2IPv4(h.ranges[index-1].End))
+				log.Printf("%s match ip range %s-%s", ip, helper.Long2IPv4(h.ranges[index-1].Start), helper.Long2IPv4(h.ranges[index-1].End))
 				return h.ranges[index-1].Country, nil
 			}
 		}
