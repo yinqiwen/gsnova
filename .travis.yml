@@ -6,6 +6,7 @@ before_install:
 install:
 - go get -t ./...
 - go get github.com/mitchellh/gox
+- go get github.com/tools/godep
 script:
 - gox -output="gsnova_{{.OS}}_{{.Arch}}" -osarch="windows/386" github.com/yinqiwen/gsnova/local/main
 - gox -output="gsnova_{{.OS}}_{{.Arch}}" -osarch="windows/amd64" github.com/yinqiwen/gsnova/local/main
