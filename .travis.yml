@@ -4,7 +4,8 @@ go:
 before_install:
 install:
 - go get github.com/tools/godep
-- go get -t ./...
+- go get -t github.com/yinqiwen/gsnova/remote/paas
+- go get -t github.com/yinqiwen/gsnova/remote/vps
 - cd remote/paas && godep save && cd ../../
 - go get github.com/mitchellh/gox
 script:
