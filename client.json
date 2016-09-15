@@ -38,6 +38,7 @@
 			//sniff sni for non 80 port(http) traffic instead of real target address, default is false
 			"SNISniff": true,
 			"PAC":[
+				//// 'Direct/TLSDirect' MUST  proxy channel names confgiured below 
 				{"Protocol":["dns", "udp"],"Remote":"Direct"},
 				{"Rule":["IsCNIP"],"Remote":"Direct"},
 				{"Rule":["InHosts"],"Remote":"TLSDirect"},
@@ -47,6 +48,7 @@
 		{
 			"Local": ":48101",
 			"PAC":[
+				// 'mygae' MUST a proxy channel name confgiured below 
 				{"Remote":"mygae"}
 			]
 		},
@@ -64,6 +66,7 @@
 		}
 	],
 
+    //there is 4 channel types: direct/gae/paas/vps
 	"Channel":[
 		{
 			"Enable":true,
@@ -79,14 +82,14 @@
 		},
 		{
 			"Enable":false,
-			"Type":"GAE",
+			"Type":"gae",
 			"Name":"mygae",
             "ServerList":["myappid"],
 			"SNI":["www.google.com.hk", "www.google.co.jp"],
-		     //Unit: second
-		     "DialTimeout":5,
-		     //Unit: second
-		     "ReadTimeout":15
+		    //Unit: second
+		    "DialTimeout":5,
+		    //Unit: second
+		    "ReadTimeout":15
 		},
 		{
 			"Enable":false,
