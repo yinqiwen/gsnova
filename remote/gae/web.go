@@ -1,3 +1,4 @@
+// +build appengine
 package gae
 
 import (
