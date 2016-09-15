@@ -9,8 +9,16 @@ import (
 	"github.com/yinqiwen/gsnova/local/proxy"
 )
 
-func StartLocalProxy(dir string) error {
-	return proxy.Start(dir)
+type EventMonitor interface {
+	OnEvent(code int, desc string) error
+}
+
+func StartLocalProxy(dir string, monitor EventMonitor) error {
+	if nil != monitor {
+		return proxy.Start(dir, monitor.OnEvent)
+	} else {
+		return proxy.Start(dir, nil)
+	}
 
 }
 

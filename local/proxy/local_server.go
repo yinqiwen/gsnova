@@ -52,8 +52,8 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 			conn.Close()
 			return
 		}
-		log.Printf("Session:%d select handler:%s", sid, p.Name())
-		if (p.Name() == "Direct") && net.ParseIP(socksTargetHost) != nil {
+		log.Printf("Session:%d select channel:%s", sid, p.Config().Name)
+		if p.Config().IsDirect() && net.ParseIP(socksTargetHost) != nil {
 			addr = net.JoinHostPort(socksTargetHost, socksTargetPort)
 		}
 		tcpOpen := &event.TCPOpenEvent{}
@@ -232,7 +232,7 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 			}
 		}
 
-		if tryRemoteResolve && p.Name() == "Direct" && net.ParseIP(socksTargetHost) != nil && session.Remote == nil {
+		if tryRemoteResolve && p.Config().IsDirect() && net.ParseIP(socksTargetHost) != nil && session.Remote == nil {
 			tcpOpen := &event.TCPOpenEvent{}
 			tcpOpen.SetId(sid)
 			tcpOpen.Addr = net.JoinHostPort(socksTargetHost, socksTargetPort)

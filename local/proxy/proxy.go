@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"reflect"
+	"strings"
 
 	"github.com/yinqiwen/gsnova/common/event"
 	"github.com/yinqiwen/gsnova/common/helper"
@@ -17,13 +19,16 @@ var proxyHome string
 
 var cnIPRange *IPRangeHolder
 
+type InternalEventMonitor func(code int, desc string) error
+
 type Feature struct {
 	MaxRequestBody int
 }
 
 type Proxy interface {
-	Init() error
-	Name() string
+	Init(conf ProxyChannelConfig) error
+	//Type() string
+	Config() *ProxyChannelConfig
 	Destory() error
 	Features() Feature
 	PrintStat(w io.Writer)
@@ -35,9 +40,15 @@ func init() {
 }
 
 var proxyTable = make(map[string]Proxy)
+var proxyTypeTable map[string]reflect.Type = make(map[string]reflect.Type)
 
-func RegisterProxy(p Proxy) error {
-	proxyTable[p.Name()] = p
+func RegisterProxyType(str string, p Proxy) error {
+	rt := reflect.TypeOf(p)
+	if rt.Kind() == reflect.Ptr {
+		rt = rt.Elem()
+	}
+	proxyTypeTable[str] = rt
+	//proxyTable[p.Name()] = p
 	return nil
 }
 
@@ -49,7 +60,7 @@ func getProxyByName(name string) Proxy {
 	return nil
 }
 
-func Start(home string) error {
+func Start(home string, monitor InternalEventMonitor) error {
 	clientConf := home + "/client.json"
 	hostsConf := home + "/hosts.json"
 	confdata, err := helper.ReadWithoutComment(clientConf, "//")
@@ -68,33 +79,44 @@ func Start(home string) error {
 		fmt.Printf("Failed to parse iprange file:%s for reason:%v", iprangeFile, err)
 		return err
 	}
-
-	err = GConf.init()
+	err = hosts.Init(hostsConf)
 	if nil != err {
-		return err
+		log.Printf("Failed to init local hosts with reason:%v.", err)
 	}
+	event.SetDefaultSecretKey(GConf.Encrypt.Method, GConf.Encrypt.Key)
+	for _, conf := range GConf.Channel {
+		conf.Type = strings.ToUpper(conf.Type)
+		if t, ok := proxyTypeTable[conf.Type]; !ok {
+			log.Printf("[ERROR]No registe proxy channel type for %s", conf.Type)
+			continue
+		} else {
+			v := reflect.New(t)
+			p := v.Interface().(Proxy)
+			if !conf.Enable {
+				continue
+			}
+			if 0 == conf.ConnsPerServer {
+				conf.ConnsPerServer = 1
+			}
+			err = p.Init(conf)
+			if nil != err {
+				log.Printf("Proxy channel(%s):%s init failed with reason:%v", conf.Type, conf.Name, err)
+			} else {
+				log.Printf("Proxy channel(%s):%s init success", conf.Type, conf.Name)
+				proxyTable[conf.Name] = p
+			}
+		}
+	}
+
 	proxyHome = home
 	logger.InitLogger(GConf.Log)
 
 	log.Printf("Starting GSnova %s.", local.Version)
 
-	err = hosts.Init(hostsConf)
-	if nil != err {
-		return err
-	}
 	if len(GConf.LocalDNS.Listen) > 0 {
 		go startLocalDNS(GConf.LocalDNS.Listen)
 	}
 
-	event.SetDefaultSecretKey(GConf.Encrypt.Method, GConf.Encrypt.Key)
-	for name, p := range proxyTable {
-		err := p.Init()
-		if nil != err {
-			log.Printf("Failed to init proxy:%s with error:%v", name, err)
-		} else {
-			log.Printf("Proxy:%s init success.", name)
-		}
-	}
 	go startAdminServer()
 	startLocalServers()
 	return nil
@@ -102,7 +124,6 @@ func Start(home string) error {
 
 func Stop() error {
 	stopLocalServers()
-
 	for name, p := range proxyTable {
 		err := p.Destory()
 		if nil != err {

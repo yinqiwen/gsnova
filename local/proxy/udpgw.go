@@ -275,7 +275,7 @@ func handleUDPGatewayConn(conn net.Conn, proxy ProxyConfig) {
 		var p Proxy
 		if packet.addr.port == 53 {
 			p = proxy.findProxyByRequest("dns", packet.addr.ip.String(), nil)
-			if p.Name() == "Direct" {
+			if p.Config().IsDirect() {
 				go func() {
 					res, err := dnsQueryRaw(packet.content)
 					if nil == err {

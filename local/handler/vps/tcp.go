@@ -14,13 +14,15 @@ import (
 )
 
 type tcpChannel struct {
+	conf         proxy.ProxyChannelConfig
 	addr         string
+	originAddr   string
 	conn         net.Conn
 	proxyChannel *proxy.RemoteChannel
 }
 
 func (tc *tcpChannel) ReadTimeout() time.Duration {
-	readTimeout := proxy.GConf.VPS.ReadTimeout
+	readTimeout := tc.conf.ReadTimeout
 	if 0 == readTimeout {
 		readTimeout = 15
 	}
@@ -41,21 +43,21 @@ func (tc *tcpChannel) HandleCtrlEvent(ev event.Event) {
 }
 
 func (tc *tcpChannel) Open() error {
-	dailTimeout := proxy.GConf.VPS.DialTimeout
+	dailTimeout := tc.conf.DialTimeout
 	if 0 == dailTimeout {
 		dailTimeout = 5
 	}
 	timeout := time.Duration(dailTimeout) * time.Second
 	var c net.Conn
 	var err error
-	if len(proxy.GConf.VPS.HTTPProxy) > 0 {
-		c, err = helper.HTTPProxyConn(proxy.GConf.VPS.HTTPProxy, tc.addr, timeout)
+	if len(tc.conf.HTTPProxy) > 0 {
+		c, err = helper.HTTPProxyConn(tc.conf.HTTPProxy, tc.addr, timeout)
 	} else {
 		c, err = netx.DialTimeout("tcp", tc.addr, timeout)
 	}
 	if err != nil {
-		if tc.addr != proxy.GConf.VPS.Server {
-			tc.addr = proxy.GConf.VPS.Server
+		if tc.addr != tc.originAddr {
+			tc.addr = tc.originAddr
 			tc.proxyChannel.Addr = tc.addr
 		}
 		return err
@@ -98,19 +100,21 @@ func (tc *tcpChannel) Write(p []byte) (n int, err error) {
 	return conn.Write(p)
 }
 
-func newTCPChannel(addr string, idx int) (*proxy.RemoteChannel, error) {
+func newTCPChannel(addr string, idx int, conf proxy.ProxyChannelConfig) (*proxy.RemoteChannel, error) {
 	rc := &proxy.RemoteChannel{
 		Addr:                addr,
 		Index:               idx,
 		DirectIO:            false,
 		OpenJoinAuth:        true,
 		WriteJoinAuth:       false,
-		HeartBeatPeriod:     proxy.GConf.VPS.HeartBeatPeriod,
-		ReconnectPeriod:     proxy.GConf.VPS.ReconnectPeriod,
-		RCPRandomAdjustment: proxy.GConf.VPS.RCPRandomAdjustment,
+		HeartBeatPeriod:     conf.HeartBeatPeriod,
+		ReconnectPeriod:     conf.ReconnectPeriod,
+		RCPRandomAdjustment: conf.RCPRandomAdjustment,
 	}
 	tc := new(tcpChannel)
 	tc.addr = addr
+	tc.originAddr = addr
+	tc.conf = conf
 	tc.proxyChannel = rc
 	rc.C = tc
 

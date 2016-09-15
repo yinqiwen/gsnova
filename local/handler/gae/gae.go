@@ -14,26 +14,22 @@ import (
 type GAEProxy struct {
 	cs               *proxy.RemoteChannelTable
 	injectRangeRegex []*regexp.Regexp
+	conf             proxy.ProxyChannelConfig
 }
 
-func (p *GAEProxy) Name() string {
-	return "GAE"
+func (p *GAEProxy) Config() *proxy.ProxyChannelConfig {
+	return &p.conf
 }
 
 func (p *GAEProxy) PrintStat(w io.Writer) {
-
 }
 
-func (p *GAEProxy) Init() error {
-	if !proxy.GConf.GAE.Enable {
-		return nil
-	}
-	err := initGAEClient()
-	if nil != err {
-		return err
-	}
-	for _, server := range proxy.GConf.GAE.ServerList {
-		channel, err := newHTTPChannel(server)
+func (p *GAEProxy) Init(conf proxy.ProxyChannelConfig) error {
+	p.conf = conf
+	p.cs = proxy.NewRemoteChannelTable()
+	hc := initGAEClient(conf)
+	for _, server := range conf.ServerList {
+		channel, err := newHTTPChannel(server, hc, conf)
 		if nil != err {
 			log.Printf("[ERROR]Failed to connect %s for reason:%v", server, err)
 			continue
@@ -42,7 +38,7 @@ func (p *GAEProxy) Init() error {
 			p.cs.Add(channel)
 		}
 	}
-	p.injectRangeRegex, _ = proxy.NewRegex(proxy.GConf.GAE.InjectRange)
+	//p.injectRangeRegex, _ = proxy.NewRegex(conf.InjectRange)
 	return nil
 }
 
@@ -155,7 +151,7 @@ func (p *GAEProxy) Serve(session *proxy.ProxySession, ev event.Event) error {
 var mygae GAEProxy
 
 func init() {
-	mygae.cs = proxy.NewRemoteChannelTable()
-	mygae.Init()
-	proxy.RegisterProxy(&mygae)
+	// mygae.cs = proxy.NewRemoteChannelTable()
+	// mygae.Init()
+	proxy.RegisterProxyType("GAE", &GAEProxy{})
 }

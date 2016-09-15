@@ -21,14 +21,10 @@ import (
 	"github.com/yinqiwen/gsnova/local/proxy"
 )
 
-var gaeHttpClient *http.Client
+//var gaeHttpClient *http.Client
 
-func initGAEClient() error {
-	if nil != gaeHttpClient {
-		return nil
-	}
+func initGAEClient(conf proxy.ProxyChannelConfig) *http.Client {
 	client := new(http.Client)
-
 	sslDial := func(n, addr string) (net.Conn, error) {
 		var remote string
 		var err error
@@ -36,7 +32,7 @@ func initGAEClient() error {
 		host, _, _ := net.SplitHostPort(addr)
 		for i := 0; i < 3; i++ {
 			remote = hosts.GetHost(host)
-			timeout := proxy.GConf.GAE.DialTimeout
+			timeout := conf.DialTimeout
 			if 0 == timeout {
 				timeout = 5
 			}
@@ -45,8 +41,8 @@ func initGAEClient() error {
 			if !strings.EqualFold(remote, host) {
 				connAddr = remote + ":443"
 			}
-			if len(proxy.GConf.GAE.HTTPProxy) > 0 {
-				conn, err = helper.HTTPProxyConn(proxy.GConf.GAE.HTTPProxy, connAddr, dialTimeout)
+			if len(conf.HTTPProxy) > 0 {
+				conn, err = helper.HTTPProxyConn(conf.HTTPProxy, connAddr, dialTimeout)
 			} else {
 				conn, err = netx.DialTimeout(n, connAddr, time.Duration(timeout)*time.Second)
 			}
@@ -60,9 +56,9 @@ func initGAEClient() error {
 		}
 		tlcfg := &tls.Config{}
 		tlcfg.InsecureSkipVerify = true
-		sniLen := len(proxy.GConf.GAE.SNI)
+		sniLen := len(conf.SNI)
 		if sniLen > 0 {
-			tlcfg.ServerName = proxy.GConf.GAE.SNI[rand.Intn(sniLen)]
+			tlcfg.ServerName = conf.SNI[rand.Intn(sniLen)]
 		}
 		tlsConn := tls.Client(conn, tlcfg)
 		err = tlsConn.Handshake()
@@ -73,23 +69,24 @@ func initGAEClient() error {
 		}
 		return tlsConn, nil
 	}
-	readTimeout := proxy.GConf.GAE.ReadTimeout
+	readTimeout := conf.ReadTimeout
 	if 0 == readTimeout {
 		readTimeout = 15
 	}
 	tr := &http.Transport{
 		Dial:                  sslDial,
 		DisableCompression:    true,
-		MaxIdleConnsPerHost:   int(proxy.GConf.GAE.ConnsPerServer),
+		MaxIdleConnsPerHost:   int(conf.ConnsPerServer),
 		ResponseHeaderTimeout: time.Duration(readTimeout) * time.Second,
 	}
 	client.Transport = tr
-	gaeHttpClient = client
-	return nil
+	return client
 }
 
 type httpChannel struct {
-	server string
+	server        string
+	conf          proxy.ProxyChannelConfig
+	gaeHttpClient *http.Client
 }
 
 func (hc *httpChannel) SetCryptoCtx(ctx *event.CryptoContext) {
@@ -100,7 +97,7 @@ func (hc *httpChannel) HandleCtrlEvent(ev event.Event) {
 }
 
 func (tc *httpChannel) ReadTimeout() time.Duration {
-	readTimeout := proxy.GConf.GAE.ReadTimeout
+	readTimeout := tc.conf.ReadTimeout
 	if 0 == readTimeout {
 		readTimeout = 15
 	}
@@ -147,7 +144,7 @@ func (h *httpChannel) Request(p []byte) ([]byte, error) {
 	if len(proxy.GConf.UserAgent) > 0 {
 		req.Header.Set("User-Agent", proxy.GConf.UserAgent)
 	}
-	response, err := gaeHttpClient.Do(req)
+	response, err := h.gaeHttpClient.Do(req)
 	if nil != err {
 		log.Printf("Failed to request data from GAE:%s", err)
 		return nil, err
@@ -173,7 +170,7 @@ func (h *httpChannel) Write(p []byte) (n int, err error) {
 	return 0, nil
 }
 
-func newHTTPChannel(server string) (*proxy.RemoteChannel, error) {
+func newHTTPChannel(server string, hc *http.Client, conf proxy.ProxyChannelConfig) (*proxy.RemoteChannel, error) {
 	rc := &proxy.RemoteChannel{
 		Addr:            server,
 		Index:           0,
@@ -184,6 +181,8 @@ func newHTTPChannel(server string) (*proxy.RemoteChannel, error) {
 	}
 	tc := new(httpChannel)
 	tc.server = server
+	tc.conf = conf
+	tc.gaeHttpClient = hc
 	rc.C = tc
 
 	return rc, nil

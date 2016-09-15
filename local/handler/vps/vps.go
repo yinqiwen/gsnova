@@ -11,36 +11,39 @@ import (
 )
 
 type VPSProxy struct {
-	cs *proxy.RemoteChannelTable
+	cs   *proxy.RemoteChannelTable
+	conf proxy.ProxyChannelConfig
 }
 
 func (p *VPSProxy) PrintStat(w io.Writer) {
-	fmt.Fprintf(w, "VPS Stat:\n")
+	fmt.Fprintf(w, "ProxyChannel %s Stat:\n", p.conf.Name)
 	p.cs.PrintStat(w)
 }
 
-func (p *VPSProxy) Name() string {
-	return "VPS"
+func (p *VPSProxy) Config() *proxy.ProxyChannelConfig {
+	return &p.conf
 }
 
 func (p *VPSProxy) Destory() error {
-	p.cs.StopAll()
+	if nil != p.cs {
+		p.cs.StopAll()
+	}
 	return nil
 }
 
-func (p *VPSProxy) Init() error {
-	if !proxy.GConf.VPS.Enable {
-		return nil
-	}
-	server := proxy.GConf.VPS.Server
-	for i := 0; i < proxy.GConf.VPS.ConnsPerServer; i++ {
-		channel, err := newTCPChannel(server, i)
-		if nil != channel {
-			p.cs.Add(channel)
-		} else {
-			log.Printf("Failed to init proxy channel for %s:%d with reason:%v", server, i, err)
-			if i == 0 {
-				return fmt.Errorf("Failed to auth %s", server)
+func (p *VPSProxy) Init(conf proxy.ProxyChannelConfig) error {
+	p.conf = conf
+	p.cs = proxy.NewRemoteChannelTable()
+	for _, server := range conf.ServerList {
+		for i := 0; i < conf.ConnsPerServer; i++ {
+			channel, err := newTCPChannel(server, i, conf)
+			if nil != channel {
+				p.cs.Add(channel)
+			} else {
+				log.Printf("Failed to init proxy channel for %s:%d with reason:%v", server, i, err)
+				if i == 0 {
+					return fmt.Errorf("Failed to auth %s", server)
+				}
 			}
 		}
 	}
@@ -90,6 +93,6 @@ func (p *VPSProxy) Serve(session *proxy.ProxySession, ev event.Event) error {
 var myvps VPSProxy
 
 func init() {
-	myvps.cs = proxy.NewRemoteChannelTable()
-	proxy.RegisterProxy(&myvps)
+	//myvps.cs = proxy.NewRemoteChannelTable()
+	proxy.RegisterProxyType("VPS", &VPSProxy{})
 }

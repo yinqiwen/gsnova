@@ -23,7 +23,7 @@ func main() {
 	dir := flag.String("dir", home, "Specify running dir for gsnova")
 	flag.Parse()
 
-	err = gsnova.StartLocalProxy(*dir)
+	err = gsnova.StartLocalProxy(*dir, nil)
 	if nil != err {
 		fmt.Printf("Start gsnova error:%v", err)
 	} else {

@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"math/rand"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -85,6 +86,9 @@ func randCryptoCtx() event.CryptoContext {
 }
 func (rc *RemoteChannel) resetCryptoCtx() {
 	rc.cryptoCtx = randCryptoCtx()
+	if rc.SecureTransport && strings.EqualFold(GConf.Encrypt.Method, "auto") {
+		rc.cryptoCtx.Method = 0
+	}
 	//log.Printf("Channel[%d] reset IV:%d.", rc.Index, rc.cryptoCtx.EncryptIV)
 }
 

@@ -16,7 +16,7 @@ import (
 	"github.com/yinqiwen/gsnova/local/proxy"
 )
 
-var paasHttpClient *http.Client
+//var paasHttpClient *http.Client
 
 type chunkChannelReadCloser struct {
 	chunkChannel chan []byte
@@ -48,18 +48,20 @@ func (cr *chunkChannelReadCloser) offer(p []byte) {
 }
 
 func (cr *chunkChannelReadCloser) prepend(p []byte) {
-	if len(cr.lastread) > 0 {
-		log.Printf("###########################No empty:%d", len(cr.lastread))
-	}
+	// if len(cr.lastread) > 0 {
+	// 	log.Printf("###########################No empty:%d", len(cr.lastread))
+	// }
 	cr.lastread = append(p, cr.lastread...)
 	//cr.lastread = p
 }
 
 type httpChannel struct {
-	addr    string
-	idx     int
-	pushurl *url.URL
-	pullurl *url.URL
+	conf       proxy.ProxyChannelConfig
+	paasClient *http.Client
+	addr       string
+	idx        int
+	pushurl    *url.URL
+	pullurl    *url.URL
 
 	cryptoCtx event.CryptoContext
 	rbody     io.ReadCloser
@@ -69,7 +71,7 @@ type httpChannel struct {
 }
 
 func (hc *httpChannel) ReadTimeout() time.Duration {
-	readTimeout := proxy.GConf.PAAS.HTTPReadTimeout
+	readTimeout := hc.conf.ReadTimeout
 	if 0 == readTimeout {
 		readTimeout = 30
 	}
@@ -97,7 +99,7 @@ func (hc *httpChannel) Open() error {
 		u.Path = "/http/push"
 		hc.pushurl = u
 	}
-	if proxy.GConf.PAAS.HTTPChunkPushEnable && nil == hc.chunkChan {
+	if hc.conf.HTTPChunkPushEnable && nil == hc.chunkChan {
 		hc.chunkChan = new(chunkChannelReadCloser)
 		hc.chunkChan.chunkChannel = make(chan []byte, 100)
 		go hc.chunkPush()
@@ -179,13 +181,13 @@ func buildHTTPReq(u *url.URL, body io.ReadCloser) *http.Request {
 	return req
 }
 
-func getHTTPReconnectPeriod() int {
-	period := proxy.GConf.PAAS.HTTPReconnectPeriod
+func (hc *httpChannel) getHTTPReconnectPeriod() int {
+	period := hc.conf.ReconnectPeriod
 	if period == 0 {
 		period = 30
 	}
-	if proxy.GConf.PAAS.HTTPRCPRandomAdjustment > 0 && period > proxy.GConf.PAAS.HTTPRCPRandomAdjustment {
-		adjust := proxy.GConf.PAAS.HTTPRCPRandomAdjustment
+	if hc.conf.RCPRandomAdjustment > 0 && period > hc.conf.RCPRandomAdjustment {
+		adjust := hc.conf.RCPRandomAdjustment
 		period = helper.RandBetween(period-adjust, period+adjust)
 	}
 	return period
@@ -219,11 +221,11 @@ func (hc *httpChannel) chunkPush() {
 		var buf bytes.Buffer
 		event.EncryptEvent(&buf, wAuth, &hc.cryptoCtx)
 		hc.chunkChan.prepend(buf.Bytes())
-		period := getHTTPReconnectPeriod()
+		period := hc.getHTTPReconnectPeriod()
 		ticker = time.NewTicker(time.Duration(period) * time.Second)
 		go closePush()
 		log.Printf("[%s:%d] chunk push channel start.", hc.addr, hc.idx)
-		response, err := paasHttpClient.Do(req)
+		response, err := hc.paasClient.Do(req)
 		if nil != err || response.StatusCode != 200 {
 			log.Printf("Failed to write data to PAAS:%s for reason:%v or res:%v", u.String(), err, response)
 		} else {
@@ -239,13 +241,13 @@ func (hc *httpChannel) postURL(p []byte, u *url.URL) (n int, err error) {
 	req := buildHTTPReq(u, ioutil.NopCloser(bytes.NewBuffer(p)))
 	req.ContentLength = int64(len(p))
 	if u == hc.pullurl {
-		period := getHTTPReconnectPeriod()
+		period := hc.getHTTPReconnectPeriod()
 		req.Header.Set("X-PullPeriod", strconv.Itoa(period))
 	}
-	response, err := paasHttpClient.Do(req)
+	response, err := hc.paasClient.Do(req)
 	if nil != err || response.StatusCode != 200 { //try once more
 		req.Body = ioutil.NopCloser(bytes.NewBuffer(p))
-		response, err = paasHttpClient.Do(req)
+		response, err = hc.paasClient.Do(req)
 	}
 	if nil != err || response.StatusCode != 200 {
 		log.Printf("Failed to write data to PAAS:%s for reason:%v or res:%v", u.String(), err, response)
@@ -267,18 +269,20 @@ func (hc *httpChannel) Write(p []byte) (n int, err error) {
 	return hc.postURL(p, hc.pushurl)
 }
 
-func newHTTPChannel(addr string, idx int) (*proxy.RemoteChannel, error) {
+func newHTTPChannel(addr string, idx int, paasClient *http.Client, conf proxy.ProxyChannelConfig) (*proxy.RemoteChannel, error) {
 
 	rc := &proxy.RemoteChannel{
 		Addr:            addr,
 		Index:           idx,
 		DirectIO:        false,
 		OpenJoinAuth:    false,
-		WriteJoinAuth:   !proxy.GConf.PAAS.HTTPChunkPushEnable,
+		WriteJoinAuth:   !conf.HTTPChunkPushEnable,
 		SecureTransport: strings.HasPrefix(addr, "https://"),
 	}
 
 	tc := new(httpChannel)
+	tc.conf = conf
+	tc.paasClient = paasClient
 	tc.addr = addr
 	tc.idx = idx
 	rc.C = tc

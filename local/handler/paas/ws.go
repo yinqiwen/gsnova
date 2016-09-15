@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -16,13 +17,16 @@ import (
 )
 
 type websocketChannel struct {
-	url     string
+	conf proxy.ProxyChannelConfig
+	url  string
+	dial func(network, addr string) (net.Conn, error)
+
 	conn    *websocket.Conn
 	readbuf bytes.Buffer
 }
 
 func (tc *websocketChannel) ReadTimeout() time.Duration {
-	readTimeout := proxy.GConf.PAAS.WSReadTimeout
+	readTimeout := tc.conf.ReadTimeout
 	if 0 == readTimeout {
 		readTimeout = 15
 	}
@@ -46,14 +50,18 @@ func (wc *websocketChannel) Open() error {
 	}
 	u.Path = "/ws"
 	wsDialer := &websocket.Dialer{}
-	wsDialer.NetDial = paasDial
-	if nil != paasLocalProxyUrl {
-		wsDialer.Proxy = http.ProxyURL(paasLocalProxyUrl)
+	wsDialer.NetDial = wc.dial
+	if len(wc.conf.HTTPProxy) > 0 {
+		proxyUrl, err := url.Parse(wc.conf.HTTPProxy)
+		if nil != err {
+			return err
+		}
+		wsDialer.Proxy = http.ProxyURL(proxyUrl)
 	}
-	if len(proxy.GConf.PAAS.SNI) > 0 {
+	if len(wc.conf.SNI) > 0 {
 		tlscfg := &tls.Config{}
 		tlscfg.InsecureSkipVerify = true
-		tlscfg.ServerName = proxy.GConf.PAAS.SNI
+		tlscfg.ServerName = wc.conf.SNI[0]
 		wsDialer.TLSClientConfig = tlscfg
 	}
 	c, _, err := wsDialer.Dial(u.String(), nil)
@@ -123,21 +131,23 @@ func (wc *websocketChannel) Write(p []byte) (n int, err error) {
 	}
 }
 
-func newWebsocketChannel(addr string, idx int) (*proxy.RemoteChannel, error) {
+func newWebsocketChannel(addr string, idx int, conf proxy.ProxyChannelConfig, dial func(network, addr string) (net.Conn, error)) (*proxy.RemoteChannel, error) {
 	rc := &proxy.RemoteChannel{
 		Addr:                addr,
 		Index:               idx,
 		DirectIO:            false,
 		OpenJoinAuth:        true,
 		WriteJoinAuth:       false,
-		ReconnectPeriod:     proxy.GConf.PAAS.WSReconnectPeriod,
-		RCPRandomAdjustment: proxy.GConf.PAAS.WSRCPRandomAdjustment,
-		HeartBeatPeriod:     proxy.GConf.PAAS.WSHeartBeatPeriod,
+		ReconnectPeriod:     conf.ReconnectPeriod,
+		RCPRandomAdjustment: conf.RCPRandomAdjustment,
+		HeartBeatPeriod:     conf.HeartBeatPeriod,
 		SecureTransport:     strings.HasPrefix(addr, "wss://"),
 	}
 	tc := new(websocketChannel)
 	tc.url = addr
 	rc.C = tc
+	tc.conf = conf
+	tc.dial = dial
 
 	err := rc.Init(idx == 0)
 	if nil != err {

@@ -40,46 +40,68 @@ func matchHostnames(pattern, host string) bool {
 	return true
 }
 
-type PAASConfig struct {
-	Enable                  bool
-	ServerList              []string
-	ConnsPerServer          int
-	SNI                     string
-	SNIProxy                string
-	HTTPProxy               string
-	DialTimeout             int
-	HTTPReadTimeout         int
-	WSReadTimeout           int
-	WSReconnectPeriod       int
-	WSHeartBeatPeriod       int
-	WSRCPRandomAdjustment   int
-	HTTPRCPRandomAdjustment int
-	HTTPReconnectPeriod     int
-	HTTPChunkPushEnable     bool
-}
-
-type GAEConfig struct {
-	Enable         bool
-	ServerList     []string
-	SNI            []string
-	InjectRange    []string
-	ConnsPerServer int
-	HTTPProxy      string
-	DialTimeout    int
-	ReadTimeout    int
-}
-
-type VPSConfig struct {
+type ProxyChannelConfig struct {
 	Enable              bool
-	Server              string
+	Name                string
+	Type                string
+	ServerList          []string
 	ConnsPerServer      int
+	SNI                 []string
+	SNIProxy            string
 	HTTPProxy           string
 	DialTimeout         int
 	ReadTimeout         int
 	ReconnectPeriod     int
 	HeartBeatPeriod     int
 	RCPRandomAdjustment int
+	HTTPChunkPushEnable bool
+	ForceTLS            bool
 }
+
+func (c *ProxyChannelConfig) IsDirect() bool {
+	return c.Type == "DIRECT"
+}
+
+// type PAASConfig struct {
+// 	Enable                  bool
+// 	ServerList              []string
+// 	ConnsPerServer          int
+// 	SNI                     string
+// 	SNIProxy                string
+// 	HTTPProxy               string
+// 	DialTimeout             int
+// 	HTTPReadTimeout         int
+// 	WSReadTimeout           int
+// 	WSReconnectPeriod       int
+// 	WSHeartBeatPeriod       int
+// 	WSRCPRandomAdjustment   int
+// 	HTTPRCPRandomAdjustment int
+// 	HTTPReconnectPeriod     int
+// 	HTTPChunkPushEnable     bool
+// }
+
+// type GAEConfig struct {
+// 	Enable         bool
+// 	ServerList     []string
+// 	SNI            []string
+// 	InjectRange    []string
+// 	ConnsPerServer int
+// 	HTTPProxy      string
+// 	DialTimeout    int
+// 	ReadTimeout    int
+// }
+
+// type VPSConfig struct {
+// 	Enable              bool
+// 	Server              string
+// 	ConnsPerServer      int
+// 	HTTPProxy           string
+// 	DialTimeout         int
+// 	ReadTimeout         int
+// 	ReconnectPeriod     int
+// 	HeartBeatPeriod     int
+// 	RCPRandomAdjustment int
+// }
 
 type PACConfig struct {
 	Method   []string
@@ -229,12 +251,12 @@ func (cfg *ProxyConfig) findProxyByRequest(proto string, ip string, req *http.Re
 	return p
 }
 
-type DirectConfig struct {
-	SNI         []string
-	DialTimeout int
-	ReadTimeout int
-	//SNIMapping  map[string]string
-}
+// type DirectConfig struct {
+// 	SNI         []string
+// 	DialTimeout int
+// 	ReadTimeout int
+// 	//SNIMapping  map[string]string
+// }
 
 type EncryptConfig struct {
 	Method string
@@ -262,20 +284,16 @@ type LocalConfig struct {
 	ChannelKeepAlive bool
 	Admin            AdminConfig
 	Proxy            []ProxyConfig
-	PAAS             PAASConfig
-	GAE              GAEConfig
-	VPS              VPSConfig
-	Direct           DirectConfig
+	Channel          []ProxyChannelConfig
+
+	// PAAS   PAASConfig
+	// GAE    GAEConfig
+	// VPS    VPSConfig
+	// Direct DirectConfig
 }
 
 func (cfg *LocalConfig) init() error {
-	for i, _ := range cfg.Proxy {
-		for j, pac := range cfg.Proxy[i].PAC {
-			cfg.Proxy[i].PAC[j].methodRegex, _ = NewRegex(pac.Method)
-			cfg.Proxy[i].PAC[j].hostRegex, _ = NewRegex(pac.Host)
-			cfg.Proxy[i].PAC[j].pathRegex, _ = NewRegex(pac.Path)
-		}
-	}
+
 	// gfwlist, err := gfwlist.NewGFWList("https://raw.githubusercontent.com/gfwlist/gfwlist/master/gfwlist.txt", "", true)
 	// if nil != err {
 	// 	return err

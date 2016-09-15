@@ -21,14 +21,11 @@ type directChannel struct {
 	conn           net.Conn
 	httpsProxyConn bool
 	udpProxyConn   bool
-
-	// toReplaceSNI string
-	// sniReplaced  bool
-	// sniChunk     []byte
+	conf           *proxy.ProxyChannelConfig
 }
 
 func (tc *directChannel) ReadTimeout() time.Duration {
-	readTimeout := proxy.GConf.Direct.ReadTimeout
+	readTimeout := tc.conf.ReadTimeout
 	if 0 == readTimeout {
 		readTimeout = 15
 	}
@@ -76,24 +73,6 @@ func (tc *directChannel) Write(p []byte) (n int, err error) {
 	if nil == conn {
 		return 0, io.EOF
 	}
-	// if len(tc.toReplaceSNI) > 0 && !tc.sniReplaced {
-	// 	tc.sniChunk = append(tc.sniChunk, p...)
-	// 	newData, oldSNI, err := helper.TLSReplaceSNI(tc.sniChunk, tc.toReplaceSNI)
-	// 	if nil != err {
-	// 		if err == helper.ErrTLSIncomplete {
-	// 			return len(p), nil
-	// 		} else {
-	// 			log.Printf("No SNI:%v", err)
-	// 			p = tc.sniChunk
-	// 		}
-	// 	} else {
-	// 		log.Printf("####Replaced SNI:%s from %s", tc.toReplaceSNI, oldSNI)
-	// 		ss, err1 := helper.TLSParseSNI(newData)
-	// 		log.Printf("####Parse new SNI:%s %v", ss, err1)
-	// 		p = newData
-	// 	}
-	// 	tc.sniReplaced = true
-	// }
 	return conn.Write(p)
 }
 
@@ -129,7 +108,7 @@ func (d *directChannel) read() {
 	}
 }
 
-func newDirectChannel(ev event.Event, useTLS bool) (*directChannel, error) {
+func newDirectChannel(ev event.Event, conf *proxy.ProxyChannelConfig) (*directChannel, error) {
 	host := ""
 	port := ""
 	network := "tcp"
@@ -156,21 +135,12 @@ func newDirectChannel(ev event.Event, useTLS bool) (*directChannel, error) {
 	}
 
 	isIP := net.ParseIP(host) != nil
-	// toReplaceSNI := ""
-	// if port == "443" {
-	// 	for pattern, sni := range proxy.GConf.Direct.SNIMapping {
-	// 		if helper.WildcardMatch(host, pattern) {
-	// 			toReplaceSNI = sni
-	// 			break
-	// 		}
-	// 	}
-	// }
 
 	if !isIP && !hosts.InHosts(host) && hosts.InHosts(hosts.SNIProxy) && port == "443" && network == "tcp" {
 		host = hosts.SNIProxy
 	}
-
-	if useTLS && port == "80" && hosts.InHosts(host) {
+	useTLS := false
+	if conf.ForceTLS && port == "80" && hosts.InHosts(host) {
 		useTLS = true
 	} else {
 		useTLS = false
@@ -194,7 +164,7 @@ func newDirectChannel(ev event.Event, useTLS bool) (*directChannel, error) {
 			}
 		}
 	}
-	dailTimeout := proxy.GConf.PAAS.DialTimeout
+	dailTimeout := conf.DialTimeout
 	if 0 == dailTimeout {
 		dailTimeout = 5
 	}
@@ -205,14 +175,14 @@ func newDirectChannel(ev event.Event, useTLS bool) (*directChannel, error) {
 		return nil, err
 	}
 
-	d := &directChannel{ev.GetId(), c, fromHttpsConnect, network == "udp"}
+	d := &directChannel{ev.GetId(), c, fromHttpsConnect, network == "udp", conf}
 	//d := &directChannel{ev.GetId(), c, fromHttpsConnect, network == "udp", toReplaceSNI, false, nil}
 	if useTLS {
 		tlcfg := &tls.Config{}
 		tlcfg.InsecureSkipVerify = true
-		sniLen := len(proxy.GConf.Direct.SNI)
+		sniLen := len(conf.SNI)
 		if sniLen > 0 {
-			tlcfg.ServerName = proxy.GConf.Direct.SNI[rand.Intn(sniLen)]
+			tlcfg.ServerName = conf.SNI[rand.Intn(sniLen)]
 		}
 		tlsconn := tls.Client(c, tlcfg)
 		err = tlsconn.Handshake()
@@ -226,21 +196,18 @@ func newDirectChannel(ev event.Event, useTLS bool) (*directChannel, error) {
 }
 
 type DirectProxy struct {
-	useTLS bool
+	conf proxy.ProxyChannelConfig
 }
 
 func (p *DirectProxy) PrintStat(w io.Writer) {
 }
 
-func (p *DirectProxy) Name() string {
-	if p.useTLS {
-		return "TLSDirect"
-	} else {
-		return "Direct"
-	}
+func (p *DirectProxy) Config() *proxy.ProxyChannelConfig {
+	return &p.conf
 }
 
-func (p *DirectProxy) Init() error {
+func (p *DirectProxy) Init(conf proxy.ProxyChannelConfig) error {
+	p.conf = conf
 	return nil
 }
 func (p *DirectProxy) Destory() error {
@@ -261,7 +228,7 @@ func (p *DirectProxy) Serve(session *proxy.ProxySession, ev event.Event) error {
 		default:
 			return fmt.Errorf("Can NOT create direct channel by event:%T", ev)
 		}
-		c, err := newDirectChannel(ev, p.useTLS)
+		c, err := newDirectChannel(ev, &p.conf)
 		if nil != err {
 			return err
 		}
@@ -304,11 +271,7 @@ func (p *DirectProxy) Serve(session *proxy.ProxySession, ev event.Event) error {
 
 }
 
-var directProxy DirectProxy
-var tlsDirectProy DirectProxy
-
 func init() {
-	tlsDirectProy.useTLS = true
-	proxy.RegisterProxy(&directProxy)
-	proxy.RegisterProxy(&tlsDirectProy)
+	proxy.RegisterProxyType("DIRECT", &DirectProxy{})
+	//proxy.RegisterProxy(&tlsDirectProy)
 }

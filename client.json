@@ -47,90 +47,92 @@
 		{
 			"Local": ":48101",
 			"PAC":[
-				{"Remote":"GAE"}
+				{"Remote":"mygae"}
 			]
 		},
 		{
 			"Local": ":48102",
 			"PAC":[
-				{"Remote":"PAAS"}
+				{"Remote":"heroku"}
 			]
 		},
 		{
 			"Local": ":48103",
 			"PAC":[
-				{"Remote":"VPS"}
+				{"Remote":"linode"}
 			]
 		}
 	],
 
-	"Direct":{
-		"SNI":["www.google.com.hk", "www.google.co.jp"],
-		//Unit: second
-		"DialTimeout":5,
-		//Unit: second
-		"ReadTimeout":15
-	},
-
-	"PAAS":{
-		"Enable":false,
-		"ServerList":[
-			 "wss://example.paasapp.com"
-		],
-		//if u want to use another sni to replace the default
-		"SNI": "",
-		//'cn_sni_proxy' is defined in hosts.json if u want use more than one IP for this
-		"SNIProxy" : "cn_sni_proxy",
-		//if u are behind a HTTP proxy
-		"HTTPProxy":"",
-		//Max connections per server
-		"ConnsPerServer":1,
-		//Unit: second
-		"DialTimeout":5,
-		//Unit: second
-		"HTTPReadTimeout":30,
-		//Set this positive value to enable chunk encoding request for faster HTTP push
-		"HTTPChunkPushEnable": true,
-		"HTTPReconnectPeriod": 30,
-		//ReconnectPeriod rand adjustment, the real reconnect period is random value between [P - adjust, P + adjust] 
-		"HTTPRCPRandomAdjustment" : 5,
-		//Unit: second
-		"WSReadTimeout":15,
-		//Reconnect after 60s
-		"WSReconnectPeriod": 60,
-		//ReconnectPeriod rand adjustment, the real reconnect period is random value between [P - adjust, P + adjust] 
-		"WSRCPRandomAdjustment" : 15,
-		"WSHeartBeatPeriod": 0
-	},
-	"GAE":{
-	    "Enable":false,
-		"ServerList":[
-			"appid"
-		],
-		"SNI":["www.google.com.hk", "www.google.co.jp"],
-		//if u are behind a HTTP proxy
-		"HTTPProxy":"",
-		"ConnsPerServer":2,
-		//Unit: second
-		"DialTimeout":5,
-		//Unit: second
-		"HTTPReadTimeout":30
-	},
-	"VPS":{
-	    "Enable":false,
-	    "Server":"10.10.10.10:8080",
-	    //if u are behind a HTTP proxy
-	    "HTTPProxy":"",
-		"ConnsPerServer":2,
-		//Unit: second
-		"DialTimeout":5,
-		//Unit: second
-		"ReadTimeout":15,
-		//Reconnect after 60s
-		"ReconnectPeriod": 120,
-		//ReconnectPeriod rand adjustment, the real reconnect period is random value between [P - adjust, P + adjust] 
-		"RCPRandomAdjustment" : 60,
-		//Send heartbeat msg to keep alive 
-		"HeartBeatPeriod": 10
-	}
+	"Channel":[
+		{
+			"Enable":true,
+			"Type":"direct",
+			"Name":"Direct"
+		},
+		{
+			"Enable":true,
+			"Type":"direct",
+			"Name":"TLSDirect",
+			"SNI":["www.google.com.hk", "www.google.co.jp"],
+			"ForceTLS":true
+		},
+		{
+			"Enable":false,
+			"Type":"GAE",
+			"Name":"mygae",
+            "ServerList":["myappid"],
+			"SNI":["www.google.com.hk", "www.google.co.jp"],
+		     //Unit: second
+		     "DialTimeout":5,
+		     //Unit: second
+		     "ReadTimeout":15
+		},
+		{
+			"Enable":false,
+			"Type":"paas",
+			"Name":"heroku",
+		    "ServerList":[
+			    "wss://example.paasapp.com"
+		    ],
+		     //if u want to use another sni to replace the default
+		    "SNI": [],
+		    //'cn_sni_proxy' is defined in hosts.json if u want use more than one IP for this
+		    //"SNIProxy" : "cn_sni_proxy",
+		    "SNIProxy" : "",
+		    //if u are behind a HTTP proxy
+		    "HTTPProxy":"",
+		    //Max connections per server
+		    "ConnsPerServer":3,
+		    //Unit: second
+		    "DialTimeout":5,
+		    //Unit: second
+		    "ReadTimeout":30,
+		    //Enable chunk encoding request for faster HTTP push
+		    "HTTPChunkPushEnable": true,
+		    "ReconnectPeriod": 30,
+		    //ReconnectPeriod rand adjustment, the real reconnect period is random value between [P - adjust, P + adjust] 
+		    "RCPRandomAdjustment" : 5,
+		    "HeartBeatPeriod": 0 
+		},
+		{
+		    "Enable":false,
+		    "Type":"vps",
+			"Name":"linode",
+            "ServerList":["10.10.10.10:8080"],
+	        //if u are behind a HTTP proxy
+	        "HTTPProxy":"",
+		    "ConnsPerServer":3,
+		    //Unit: second
+		    "DialTimeout":5,
+		    //Unit: second
+		    "ReadTimeout":15,
+		    //Reconnect after 120s
+		    "ReconnectPeriod": 120,
+		    //ReconnectPeriod rand adjustment, the real reconnect period is random value between [P - adjust, P + adjust] 
+		    "RCPRandomAdjustment" : 60,
+		    //Send heartbeat msg to keep alive 
+		    "HeartBeatPeriod": 10
+		}
+	]
 }
