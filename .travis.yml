@@ -5,8 +5,8 @@ before_install:
 - rm -r ./remote/gae/*.go
 install:
 - go get github.com/tools/godep
-- cd remote/paas && godep save && cd ../../
 - go get -t ./...
+- cd remote/paas && godep save && cd ../../
 - go get github.com/mitchellh/gox
 script:
 - cd remote/paas && tar cf ../../gsnova-paas-deploy-with-dependencies.tar * && cd ../.. && tar uf gsnova-paas-deploy-with-dependencies.tar server.json && bzip2 gsnova-paas-deploy-with-dependencies.tar
