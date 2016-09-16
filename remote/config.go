@@ -58,10 +58,10 @@ func init() {
 	auth := flag.String("auth", "*", "Auth user setting, split by ','")
 	dps := flag.String("dps", "", "Candidate dynamic ports")
 	ndp := flag.Uint("ndp", 0, "Max dynamic ports")
+	conf := flag.String("conf", "server.json", "Server config file")
 	flag.Parse()
 
-	file := "server.json"
-	if _, err := os.Stat(file); os.IsNotExist(err) {
+	if _, err := os.Stat(*conf); os.IsNotExist(err) {
 		if len(*key) == 0 || len(*listen) == 0 {
 			flag.PrintDefaults()
 			return
@@ -79,13 +79,13 @@ func init() {
 		ServerConf.Encrypt.Key = *key
 		ServerConf.MaxDynamicPort = int(*ndp)
 	} else {
-		data, err := helper.ReadWithoutComment(file, "//")
+		data, err := helper.ReadWithoutComment(*conf, "//")
 		//data, err := ioutil.ReadFile(file)
 		if nil == err {
 			err = json.Unmarshal(data, &ServerConf)
 		}
 		if nil != err {
-			log.Fatalf("Failed to load server config:%s for reason:%v", file, err)
+			log.Fatalf("Failed to load server config:%s for reason:%v", *conf, err)
 			return
 		}
 	}
