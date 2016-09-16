@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"crypto/tls"
 	"fmt"
 	"log"
 	"net"
@@ -217,11 +218,22 @@ func listenTCPServer(addr string, vs *vpsServer) (net.Listener, error) {
 		log.Fatalf("Empty listen address.")
 		return nil, nil
 	}
+
 	//var lp *net.TCPListener
 	lp, err := net.Listen("tcp", addr)
 	if nil != err {
 		log.Printf("Can NOT listen on address:%s", addr)
 		return nil, err
+	}
+	if len(remote.ServerConf.TLS.Cert) > 0 {
+		tlscfg := &tls.Config{}
+		tlscfg.Certificates = make([]tls.Certificate, 1)
+		tlscfg.Certificates[0], err = tls.LoadX509KeyPair(remote.ServerConf.TLS.Cert, remote.ServerConf.TLS.Key)
+		if nil != err {
+			log.Fatalf("Invalid cert/key for reason:%v", err)
+			return nil, nil
+		}
+		lp = tls.NewListener(lp, tlscfg)
 	}
 	tcpaddr := lp.Addr().(*net.TCPAddr)
 	log.Printf("Listen on address %v", tcpaddr)

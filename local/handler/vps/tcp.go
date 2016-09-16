@@ -1,15 +1,19 @@
 package vps
 
 import (
+	"crypto/tls"
 	"io"
 	"log"
 	"net"
+	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/getlantern/netx"
 	"github.com/yinqiwen/gsnova/common/event"
 	"github.com/yinqiwen/gsnova/common/helper"
+	"github.com/yinqiwen/gsnova/local/hosts"
 	"github.com/yinqiwen/gsnova/local/proxy"
 )
 
@@ -47,13 +51,39 @@ func (tc *tcpChannel) Open() error {
 	if 0 == dailTimeout {
 		dailTimeout = 5
 	}
+	var tlscfg *tls.Config
+	u, _ := url.Parse(tc.addr)
+	hostport := u.Host
+	vpsHost, vpsPort, _ := net.SplitHostPort(hostport)
+	if strings.EqualFold(u.Scheme, "tls") {
+		tlscfg = &tls.Config{}
+		tlscfg.ServerName = vpsHost
+		if len(tc.conf.SNIProxy) > 0 && vpsPort == "443" {
+			vpsHost = hosts.GetHost(tc.conf.SNIProxy)
+			hostport = vpsHost + ":443"
+			log.Printf("VPS channel select SNIProxy %s to connect", vpsHost)
+		}
+	}
+
+	if net.ParseIP(vpsHost) == nil {
+		tcpaddr, err := netx.Resolve("tcp", hostport)
+		if nil != err {
+			return err
+		}
+		hostport = tcpaddr.String()
+		//tc.hostport = net.JoinHostPort(vpsHost, vpsPort)
+	}
+	//log.Printf("######%s %s", vpsHost, tc.hostport)
 	timeout := time.Duration(dailTimeout) * time.Second
 	var c net.Conn
 	var err error
 	if len(tc.conf.HTTPProxy) > 0 {
-		c, err = helper.HTTPProxyConn(tc.conf.HTTPProxy, tc.addr, timeout)
+		c, err = helper.HTTPProxyConn(tc.conf.HTTPProxy, hostport, timeout)
 	} else {
-		c, err = netx.DialTimeout("tcp", tc.addr, timeout)
+		c, err = netx.DialTimeout("tcp", hostport, timeout)
+	}
+	if nil != tlscfg {
+		c = tls.Client(c, tlscfg)
 	}
 	if err != nil {
 		if tc.addr != tc.originAddr {
@@ -110,6 +140,7 @@ func newTCPChannel(addr string, idx int, conf proxy.ProxyChannelConfig) (*proxy.
 		HeartBeatPeriod:     conf.HeartBeatPeriod,
 		ReconnectPeriod:     conf.ReconnectPeriod,
 		RCPRandomAdjustment: conf.RCPRandomAdjustment,
+		SecureTransport:     strings.HasPrefix(addr, "tls://"),
 	}
 	tc := new(tcpChannel)
 	tc.addr = addr

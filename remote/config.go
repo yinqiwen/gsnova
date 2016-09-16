@@ -18,6 +18,11 @@ type EncryptConfig struct {
 	Key    string
 }
 
+type TLServerConfig struct {
+	Cert string
+	Key  string
+}
+
 type ServerConfig struct {
 	Listen               string
 	AdminListen          string
@@ -27,6 +32,7 @@ type ServerConfig struct {
 	Auth                 []string
 	Encrypt              EncryptConfig
 	Log                  []string
+	TLS                  TLServerConfig
 }
 
 func (conf *ServerConfig) VerifyUser(user string) bool {

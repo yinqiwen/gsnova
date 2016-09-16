@@ -11,5 +11,12 @@
 	//user name auth
 	"Auth":["*", "gsnova"],
 	"Encrypt":{"Key":"809240d3a021449f6e67bb73221d42df942a308a"},
+	//If u want to listen with TLS, add the key/cert configuration
+    "TLS":{
+       //"Key":"/etc/letsencrypt/live/testdomain.tk/privkey.pem",
+       //"Cert":"/etc/letsencrypt/live/testdomain.tk/fullchain.pem"
+       "Key": "",
+       "Cert":""
+    },
 	"Log": ["stdout", "server.log"]
 }

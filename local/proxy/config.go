@@ -62,47 +62,6 @@ func (c *ProxyChannelConfig) IsDirect() bool {
 	return c.Type == "DIRECT"
 }
 
-// type PAASConfig struct {
-// 	Enable                  bool
-// 	ServerList              []string
-// 	ConnsPerServer          int
-// 	SNI                     string
-// 	SNIProxy                string
-// 	HTTPProxy               string
-// 	DialTimeout             int
-// 	HTTPReadTimeout         int
-// 	WSReadTimeout           int
-// 	WSReconnectPeriod       int
-// 	WSHeartBeatPeriod       int
-// 	WSRCPRandomAdjustment   int
-// 	HTTPRCPRandomAdjustment int
-// 	HTTPReconnectPeriod     int
-// 	HTTPChunkPushEnable     bool
-// }
-
-// type GAEConfig struct {
-// 	Enable         bool
-// 	ServerList     []string
-// 	SNI            []string
-// 	InjectRange    []string
-// 	ConnsPerServer int
-// 	HTTPProxy      string
-// 	DialTimeout    int
-// 	ReadTimeout    int
-// }
-
-// type VPSConfig struct {
-// 	Enable              bool
-// 	Server              string
-// 	ConnsPerServer      int
-// 	HTTPProxy           string
-// 	DialTimeout         int
-// 	ReadTimeout         int
-// 	ReconnectPeriod     int
-// 	HeartBeatPeriod     int
-// 	RCPRandomAdjustment int
-// }
-
 type PACConfig struct {
 	Method   []string
 	Host     []string

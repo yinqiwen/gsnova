@@ -32,10 +32,12 @@ func (p *VPSProxy) Destory() error {
 }
 
 func (p *VPSProxy) Init(conf proxy.ProxyChannelConfig) error {
-	p.conf = conf
 	p.cs = proxy.NewRemoteChannelTable()
 	for _, server := range conf.ServerList {
 		for i := 0; i < conf.ConnsPerServer; i++ {
+			if !strings.Contains(server, "://") {
+				server = "tcp://" + server
+			}
 			channel, err := newTCPChannel(server, i, conf)
 			if nil != channel {
 				p.cs.Add(channel)
@@ -47,6 +49,7 @@ func (p *VPSProxy) Init(conf proxy.ProxyChannelConfig) error {
 			}
 		}
 	}
+	p.conf = conf
 	return nil
 }
 
