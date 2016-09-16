@@ -19,7 +19,7 @@ import (
 
 type tcpChannel struct {
 	conf         proxy.ProxyChannelConfig
-	addr         string
+	rurl         *url.URL
 	originAddr   string
 	conn         net.Conn
 	proxyChannel *proxy.RemoteChannel
@@ -38,11 +38,11 @@ func (tc *tcpChannel) SetCryptoCtx(ctx *event.CryptoContext) {
 func (tc *tcpChannel) HandleCtrlEvent(ev event.Event) {
 	switch ev.(type) {
 	case *event.PortUnicastEvent:
-		host, _, _ := net.SplitHostPort(tc.addr)
+		host, _, _ := net.SplitHostPort(tc.rurl.Host)
 		port := ev.(*event.PortUnicastEvent).Port
-		tc.addr = net.JoinHostPort(host, strconv.Itoa(int(port)))
-		tc.proxyChannel.Addr = tc.addr
-		log.Printf("VPS channel updated remote address to %s", tc.addr)
+		tc.rurl.Host = net.JoinHostPort(host, strconv.Itoa(int(port)))
+		tc.proxyChannel.Addr = tc.rurl.String()
+		log.Printf("VPS channel updated remote address to %s", tc.rurl.String())
 	}
 }
 
@@ -52,10 +52,9 @@ func (tc *tcpChannel) Open() error {
 		dailTimeout = 5
 	}
 	var tlscfg *tls.Config
-	u, _ := url.Parse(tc.addr)
-	hostport := u.Host
+	hostport := tc.rurl.Host
 	vpsHost, vpsPort, _ := net.SplitHostPort(hostport)
-	if strings.EqualFold(u.Scheme, "tls") {
+	if strings.EqualFold(tc.rurl.Scheme, "tls") {
 		tlscfg = &tls.Config{}
 		tlscfg.ServerName = vpsHost
 		if len(tc.conf.SNIProxy) > 0 && vpsPort == "443" {
@@ -71,7 +70,6 @@ func (tc *tcpChannel) Open() error {
 			return err
 		}
 		hostport = tcpaddr.String()
-		//tc.hostport = net.JoinHostPort(vpsHost, vpsPort)
 	}
 	//log.Printf("######%s %s", vpsHost, tc.hostport)
 	timeout := time.Duration(dailTimeout) * time.Second
@@ -82,14 +80,15 @@ func (tc *tcpChannel) Open() error {
 	} else {
 		c, err = netx.DialTimeout("tcp", hostport, timeout)
 	}
-	if nil != tlscfg {
+	if nil != tlscfg && nil == err {
 		c = tls.Client(c, tlscfg)
 	}
 	if err != nil {
-		if tc.addr != tc.originAddr {
-			tc.addr = tc.originAddr
-			tc.proxyChannel.Addr = tc.addr
+		if tc.rurl.String() != tc.originAddr {
+			tc.rurl, _ = url.Parse(tc.originAddr)
+			tc.proxyChannel.Addr = tc.rurl.String()
 		}
+		log.Printf("###Failed to connect %s with err:%v", hostport, err)
 		return err
 	}
 	tc.conn = c
@@ -142,14 +141,18 @@ func newTCPChannel(addr string, idx int, conf proxy.ProxyChannelConfig) (*proxy.
 		RCPRandomAdjustment: conf.RCPRandomAdjustment,
 		SecureTransport:     strings.HasPrefix(addr, "tls://"),
 	}
+	var err error
 	tc := new(tcpChannel)
-	tc.addr = addr
 	tc.originAddr = addr
+	tc.rurl, err = url.Parse(addr)
+	if nil != err {
+		return nil, err
+	}
 	tc.conf = conf
 	tc.proxyChannel = rc
 	rc.C = tc
 
-	err := rc.Init(idx == 0)
+	err = rc.Init(idx == 0)
 	if nil != err {
 		return nil, err
 	}
