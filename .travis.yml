@@ -21,16 +21,16 @@ script:
 - gox -output="gsnova_vps_{{.OS}}_{{.Arch}}" -osarch="linux/amd64" github.com/yinqiwen/gsnova/remote/vps
 - gox -output="gsnova_paas_{{.OS}}_{{.Arch}}" -osarch="linux/386" github.com/yinqiwen/gsnova/remote/paas
 - gox -output="gsnova_paas_{{.OS}}_{{.Arch}}" -osarch="linux/amd64" github.com/yinqiwen/gsnova/remote/paas
-- tar cjf gsnova_windows_386.tar.bz2 client.json hosts.json apnic_cn.txt Fake-ACRoot-* gsnova_windows_386.exe
-- tar cjf gsnova_windows_amd64.tar.bz2 client.json hosts.json apnic_cn.txt Fake-ACRoot-* gsnova_windows_amd64.exe
-- tar cjf gsnova_linux_386.tar.bz2 client.json hosts.json apnic_cn.txt Fake-ACRoot-* gsnova_linux_386
-- tar cjf gsnova_linux_amd64.tar.bz2 client.json hosts.json apnic_cn.txt Fake-ACRoot-* gsnova_linux_amd64
-- tar cjf gsnova_linux_arm.tar.bz2 client.json hosts.json apnic_cn.txt Fake-ACRoot-* gsnova_linux_arm
-- tar cjf gsnova_darwin_amd64.tar.bz2 client.json hosts.json apnic_cn.txt Fake-ACRoot-* gsnova_darwin_amd64
-- tar cjf gsnova_vps_linux_amd64.tar.bz2 server.json gsnova_vps_linux_amd64
-- tar cjf gsnova_vps_linux_386.tar.bz2 server.json gsnova_vps_linux_386
-- tar cjf gsnova_paas_linux_amd64.tar.bz2 server.json gsnova_paas_linux_amd64
-- tar cjf gsnova_paas_linux_386.tar.bz2 server.json gsnova_paas_linux_386
+- tar cjf gsnova_windows_386-${TRAVIS_TAG}.tar.bz2 client.json hosts.json apnic_cn.txt Fake-ACRoot-* gsnova_windows_386.exe
+- tar cjf gsnova_windows_amd64-${TRAVIS_TAG}.tar.bz2 client.json hosts.json apnic_cn.txt Fake-ACRoot-* gsnova_windows_amd64.exe
+- tar cjf gsnova_linux_386-${TRAVIS_TAG}.tar.bz2 client.json hosts.json apnic_cn.txt Fake-ACRoot-* gsnova_linux_386
+- tar cjf gsnova_linux_amd64-${TRAVIS_TAG}.tar.bz2 client.json hosts.json apnic_cn.txt Fake-ACRoot-* gsnova_linux_amd64
+- tar cjf gsnova_linux_arm-${TRAVIS_TAG}.tar.bz2 client.json hosts.json apnic_cn.txt Fake-ACRoot-* gsnova_linux_arm
+- tar cjf gsnova_macos_amd64-${TRAVIS_TAG}.tar.bz2 client.json hosts.json apnic_cn.txt Fake-ACRoot-* gsnova_darwin_amd64
+- tar cjf gsnova_vps_linux_amd64-${TRAVIS_TAG}.tar.bz2 server.json gsnova_vps_linux_amd64
+- tar cjf gsnova_vps_linux_386-${TRAVIS_TAG}.tar.bz2 server.json gsnova_vps_linux_386
+- tar cjf gsnova_paas_linux_amd64-${TRAVIS_TAG}.tar.bz2 server.json gsnova_paas_linux_amd64
+- tar cjf gsnova_paas_linux_386-${TRAVIS_TAG}.tar.bz2 server.json gsnova_paas_linux_386
 
 
 
@@ -39,17 +39,17 @@ deploy:
   api_key:
     secure: YngDT2JlydCG+qb8Ww9wBFyWiLRQJczybNLeoFKluBXKoh1Vu+TZeReMK+rRUjOqOmYV8sNtOnEVSg4+ICeYDNp9fRRwcNKTkp0H+8pH0OynxdH2faCjx1H5U0WQuWqMLQoMSHZ90I0tL40kEJOChLY6WGvwY47YBqi/dsvmTfg=
   file: 
-    - "gsnova_windows_386.tar.bz2"
-    - "gsnova_windows_amd64.tar.bz2"
-    - "gsnova_darwin_amd64.tar.bz2"
-    - "gsnova_linux_386.tar.bz2"
-    - "gsnova_linux_amd64.tar.bz2"
-    - "gsnova_linux_arm.tar.bz2"
-    - "gsnova_vps_linux_amd64.tar.bz2"
-    - "gsnova_vps_linux_386.tar.bz2"
-    - "gsnova_paas_linux_amd64.tar.bz2"
-    - "gsnova_paas_linux_386.tar.bz2"
-    - "gsnova-paas-deploy-with-dependencies.tar.bz2"
+    - "gsnova_windows_386-${TRAVIS_TAG}.tar.bz2"
+    - "gsnova_windows_amd64-${TRAVIS_TAG}.tar.bz2"
+    - "gsnova_macos_amd64-${TRAVIS_TAG}.tar.bz2"
+    - "gsnova_linux_386-${TRAVIS_TAG}.tar.bz2"
+    - "gsnova_linux_amd64-${TRAVIS_TAG}.tar.bz2"
+    - "gsnova_linux_arm-${TRAVIS_TAG}.tar.bz2"
+    - "gsnova_vps_linux_amd64-${TRAVIS_TAG}.tar.bz2"
+    - "gsnova_vps_linux_386-${TRAVIS_TAG}.tar.bz2"
+    - "gsnova_paas_linux_amd64-${TRAVIS_TAG}.tar.bz2"
+    - "gsnova_paas_linux_386-${TRAVIS_TAG}.tar.bz2"
+    - "gsnova-paas-deploy-with-dependencies-${TRAVIS_TAG}.tar.bz2"
   skip_cleanup: true
   on:
     tags: true
