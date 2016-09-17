@@ -60,9 +60,8 @@ func (p *PaasProxy) Init(conf proxy.ProxyChannelConfig) error {
 	paasDial := func(network, addr string) (net.Conn, error) {
 		host, port, _ := net.SplitHostPort(addr)
 		if port == "443" && len(conf.SNIProxy) > 0 {
-			//host = hosts.GetHost(hosts.SNIProxy)
-			host = hosts.GetHost(conf.SNIProxy)
-			addr = host + ":" + port
+			addr = hosts.GetAddr(conf.SNIProxy, "443")
+			host, _, _ = net.SplitHostPort(addr)
 		}
 		if net.ParseIP(host) == nil {
 			tcpaddr, err := netx.Resolve("tcp", addr)

@@ -67,6 +67,22 @@ func GetHost(host string) string {
 	return s
 }
 
+func GetAddr(addr string, defaultPort string) string {
+	host, port, err := net.SplitHostPort(addr)
+	if nil != err {
+		host = addr
+	}
+	if net.ParseIP(host) == nil {
+		mappingMutex.Lock()
+		defer mappingMutex.Unlock()
+		host, _ = getHost(host)
+	}
+	if nil == err {
+		return net.JoinHostPort(host, port)
+	}
+	return net.JoinHostPort(host, defaultPort)
+}
+
 func InHosts(host string) bool {
 	mappingMutex.Lock()
 	defer mappingMutex.Unlock()
