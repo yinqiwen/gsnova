@@ -23,6 +23,7 @@ type tcpChannel struct {
 	originAddr   string
 	conn         net.Conn
 	proxyChannel *proxy.RemoteChannel
+	useSNIProxy  bool
 }
 
 func (tc *tcpChannel) ReadTimeout() time.Duration {
@@ -38,6 +39,9 @@ func (tc *tcpChannel) SetCryptoCtx(ctx *event.CryptoContext) {
 func (tc *tcpChannel) HandleCtrlEvent(ev event.Event) {
 	switch ev.(type) {
 	case *event.PortUnicastEvent:
+		if tc.useSNIProxy {
+			return
+		}
 		host, _, _ := net.SplitHostPort(tc.rurl.Host)
 		port := ev.(*event.PortUnicastEvent).Port
 		tc.rurl.Host = net.JoinHostPort(host, strconv.Itoa(int(port)))
@@ -60,6 +64,7 @@ func (tc *tcpChannel) Open() error {
 		if len(tc.conf.SNIProxy) > 0 && vpsPort == "443" {
 			vpsHost = hosts.GetHost(tc.conf.SNIProxy)
 			hostport = vpsHost + ":443"
+			tc.useSNIProxy = true
 			log.Printf("VPS channel select SNIProxy %s to connect", vpsHost)
 		}
 	}
