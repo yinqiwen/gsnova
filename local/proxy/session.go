@@ -38,7 +38,7 @@ func (s *ProxySession) handle(ev event.Event) error {
 }
 
 func (s *ProxySession) Close() error {
-	closeEv := &event.TCPCloseEvent{}
+	closeEv := &event.ConnCloseEvent{}
 	closeEv.SetId(s.id)
 	s.handle(closeEv)
 	return nil
@@ -102,7 +102,7 @@ func HandleEvent(ev event.Event) error {
 	session := getProxySession(ev.GetId())
 	if nil == session {
 		switch ev.(type) {
-		case *event.TCPCloseEvent:
+		case *event.ConnCloseEvent:
 		case *event.NotifyEvent:
 		case *event.HeartBeatEvent:
 		default:

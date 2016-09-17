@@ -30,13 +30,13 @@ func (ev *TCPOpenEvent) Decode(buffer *bytes.Buffer) (err error) {
 	return
 }
 
-type TCPCloseEvent struct {
+type ConnCloseEvent struct {
 	EventHeader
 }
 
-func (ev *TCPCloseEvent) Encode(buffer *bytes.Buffer) {
+func (ev *ConnCloseEvent) Encode(buffer *bytes.Buffer) {
 }
-func (ev *TCPCloseEvent) Decode(buffer *bytes.Buffer) (err error) {
+func (ev *ConnCloseEvent) Decode(buffer *bytes.Buffer) (err error) {
 	return nil
 }
 

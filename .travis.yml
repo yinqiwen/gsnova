@@ -10,6 +10,7 @@ install:
 - go get github.com/mitchellh/gox
 script:
 - cd remote/paas && godep save && tar cf ../../gsnova-paas-deploy-with-dependencies.tar * .godir && cd ../.. && tar uf gsnova-paas-deploy-with-dependencies.tar server.json && bzip2 gsnova-paas-deploy-with-dependencies.tar
+- export CGO_ENABLED=0
 - gox -output="gsnova_{{.OS}}_{{.Arch}}" -osarch="windows/386" github.com/yinqiwen/gsnova/local/main
 - gox -output="gsnova_{{.OS}}_{{.Arch}}" -osarch="windows/amd64" github.com/yinqiwen/gsnova/local/main
 - gox -output="gsnova_{{.OS}}_{{.Arch}}" -osarch="linux/386" github.com/yinqiwen/gsnova/local/main

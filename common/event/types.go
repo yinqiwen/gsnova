@@ -4,7 +4,7 @@ const (
 	EventHttpReq         = 10000
 	EventHttpRes         = 10001
 	EventTCPOpen         = 10002
-	EventTCPClose        = 10003
+	EventConnClose       = 10003
 	EventTCPChunk        = 10004
 	EventAuth            = 10005
 	EventNotify          = 10006
@@ -29,7 +29,7 @@ func init() {
 	RegistObject(EventHttpReq, &HTTPRequestEvent{})
 	RegistObject(EventHttpRes, &HTTPResponseEvent{})
 	RegistObject(EventTCPOpen, &TCPOpenEvent{})
-	RegistObject(EventTCPClose, &TCPCloseEvent{})
+	RegistObject(EventConnClose, &ConnCloseEvent{})
 	RegistObject(EventTCPChunk, &TCPChunkEvent{})
 	RegistObject(EventNotify, &NotifyEvent{})
 	RegistObject(EventAuth, &AuthEvent{})

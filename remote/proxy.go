@@ -117,13 +117,6 @@ func removeProxySession(s *ProxySession) {
 	}
 }
 
-// func sessionExist(sid SessionId) bool {
-// 	sessionMutex.Lock()
-// 	defer sessionMutex.Unlock()
-// 	_, exist := proxySessionMap[sid]
-// 	return exist
-// }
-
 func removeUserSessions(user string, runid int64) {
 	sessionMutex.Lock()
 	defer sessionMutex.Unlock()
@@ -142,27 +135,20 @@ func (p *ProxySession) dump(wr io.Writer) {
 func (p *ProxySession) publish(ev event.Event) {
 	ev.SetId(p.Id.Id)
 	start := time.Now()
-	for !p.closeByClient {
+	timeout := start.Add(60 * time.Second)
+	for !p.closeByClient && time.Now().Before(timeout) {
 		queue := getEventQueue(p.Id.ConnId, false)
 		if nil != queue {
 			err := queue.Publish(ev, 10*time.Second)
 			if nil != err {
-				if !queue.acuired {
-					log.Printf("Session[%s:%d] write event error:%v.", p.Id.User, p.Id.Id, err)
-					p.forceClose()
-				} else {
-					continue
-				}
+				continue
 			}
 			return
 		}
-		if time.Now().After(start.Add(10 * time.Second)) {
-			log.Printf("No avaliable connection to write event")
-			p.forceClose()
-			break
-		}
-		time.Sleep(1 * time.Millisecond)
+		time.Sleep(5 * time.Millisecond)
 	}
+	log.Printf("Session[%s:%d] publish event timeout.", p.Id.User, p.Id.Id)
+	p.forceClose()
 }
 
 func (p *ProxySession) close() error {
@@ -183,7 +169,7 @@ func (p *ProxySession) forceClose() {
 
 func (p *ProxySession) initialClose() {
 	if p.network == "tcp" {
-		ev := &event.TCPCloseEvent{}
+		ev := &event.ConnCloseEvent{}
 		p.publish(ev)
 	}
 	p.forceClose()
@@ -245,7 +231,13 @@ func (p *ProxySession) readNetwork() error {
 		if nil == conn {
 			return nil
 		}
-		conn.SetReadDeadline(time.Now().Add(30 * time.Second))
+		readTimeout := 0
+		if p.network == "udp" {
+			readTimeout = 30
+		}
+		if readTimeout > 0 {
+			conn.SetReadDeadline(time.Now().Add(time.Duration(readTimeout) * time.Second))
+		}
 		n, err := conn.Read(b)
 		if n > 0 {
 			content := make([]byte, n)
@@ -281,7 +273,7 @@ func (p *ProxySession) handle(ev event.Event) error {
 		return err
 	case *event.TCPOpenEvent:
 		return p.open("tcp", ev.(*event.TCPOpenEvent).Addr)
-	case *event.TCPCloseEvent:
+	case *event.ConnCloseEvent:
 		p.close()
 		removeProxySession(p)
 	case *event.TCPChunkEvent:
@@ -359,7 +351,7 @@ func handleEvent(ev event.Event, ctx *ConnContext) (event.Event, error) {
 		if nil != session {
 			session.offer(ev)
 		}
-		if _, ok := ev.(*event.TCPCloseEvent); !ok {
+		if _, ok := ev.(*event.ConnCloseEvent); !ok {
 			if nil == session {
 				log.Printf("No session:%d found for event %T", ev.GetId(), ev)
 			}

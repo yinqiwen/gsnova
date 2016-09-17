@@ -115,7 +115,7 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 			switch ev.(type) {
 			case *event.NotifyEvent:
 				//donothing now
-			case *event.TCPCloseEvent:
+			case *event.ConnCloseEvent:
 				connClosed = true
 				conn.Close()
 				return
@@ -293,7 +293,7 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 		}
 	}
 	if nil != p {
-		tcpclose := &event.TCPCloseEvent{}
+		tcpclose := &event.ConnCloseEvent{}
 		tcpclose.SetId(sid)
 		p.Serve(session, tcpclose)
 	}

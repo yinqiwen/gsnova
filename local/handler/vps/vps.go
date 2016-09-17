@@ -74,7 +74,7 @@ func (p *VPSProxy) Serve(session *proxy.ProxySession, ev event.Event) error {
 		session.Remote.Write(ev)
 	case *event.TCPOpenEvent:
 		session.Remote.Write(ev)
-	case *event.TCPCloseEvent:
+	case *event.ConnCloseEvent:
 		session.Remote.Write(ev)
 	case *event.HTTPRequestEvent:
 		if strings.EqualFold(ev.(*event.HTTPRequestEvent).Method, "Connect") {

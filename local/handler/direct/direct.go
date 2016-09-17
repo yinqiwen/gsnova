@@ -99,7 +99,7 @@ func (d *directChannel) read() {
 		}
 		if nil != err {
 			if !d.udpProxyConn {
-				closeEv := &event.TCPCloseEvent{}
+				closeEv := &event.ConnCloseEvent{}
 				closeEv.SetId(d.sid)
 				proxy.HandleEvent(closeEv)
 			}
@@ -247,7 +247,7 @@ func (p *DirectProxy) Serve(session *proxy.ProxySession, ev event.Event) error {
 	switch ev.(type) {
 	case *event.UDPEvent:
 		session.Remote.WriteRaw(ev.(*event.UDPEvent).Content)
-	case *event.TCPCloseEvent:
+	case *event.ConnCloseEvent:
 		session.Remote.Close()
 	case *event.TCPOpenEvent:
 		//do nothing
@@ -258,7 +258,7 @@ func (p *DirectProxy) Serve(session *proxy.ProxySession, ev event.Event) error {
 		content := req.HTTPEncode()
 		_, err := session.Remote.WriteRaw(content)
 		if nil != err {
-			closeEv := &event.TCPCloseEvent{}
+			closeEv := &event.ConnCloseEvent{}
 			closeEv.SetId(ev.GetId())
 			proxy.HandleEvent(closeEv)
 			return err

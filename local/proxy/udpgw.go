@@ -297,7 +297,7 @@ func handleUDPGatewayConn(conn net.Conn, proxy ProxyConfig) {
 		}
 		if len(usession.targetAddr) > 0 {
 			if usession.targetAddr != ev.Addr {
-				closeEv := &event.TCPCloseEvent{}
+				closeEv := &event.ConnCloseEvent{}
 				closeEv.SetId(usession.session.id)
 				p.Serve(usession.session, closeEv)
 			}
