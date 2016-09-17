@@ -147,8 +147,10 @@ func (p *ProxySession) publish(ev event.Event) {
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
-	log.Printf("Session[%s:%d] publish event timeout.", p.Id.User, p.Id.Id)
-	p.forceClose()
+	if !p.closeByClient {
+		log.Printf("Session[%s:%d] publish event timeout after %v", p.Id.User, p.Id.Id, time.Now().Sub(start))
+		p.forceClose()
+	}
 }
 
 func (p *ProxySession) close() error {
