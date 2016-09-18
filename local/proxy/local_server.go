@@ -45,7 +45,7 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 			proxyName := "Direct"
 			p = getProxyByName(proxyName)
 		} else {
-			creq, _ := http.NewRequest("Connect", addr, nil)
+			creq, _ := http.NewRequest("Connect", "https://"+addr, nil)
 			p = proxy.findProxyByRequest(protocol, socksTargetHost, creq)
 		}
 		if nil == p {
