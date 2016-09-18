@@ -102,6 +102,14 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 	}
 	defer conn.Close()
 
+	testConn := func() {
+		if nil != p {
+			var testConnEv event.ConnTestEvent
+			testConnEv.SetId(sid)
+			p.Serve(session, &testConnEv)
+		}
+	}
+
 	go func() {
 		for !connClosed {
 			ev, err := queue.Read(1 * time.Second)
@@ -138,10 +146,15 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 	}
 	sniChunk := make([]byte, 0)
 	for !connClosed {
+		conn.SetReadDeadline(time.Now().Add(60 * time.Second))
 		if session.Hijacked {
 			buffer := make([]byte, 8192)
 			n, err := bufconn.Read(buffer)
 			if nil != err {
+				if helper.IsTimeoutError(err) {
+					testConn()
+					continue
+				}
 				if err != io.EOF && !connClosed {
 					log.Printf("Session:%d read chunk failed from proxy connection:%v", sid, err)
 				}
@@ -179,6 +192,10 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 		}
 		req, err := http.ReadRequest(bufconn)
 		if nil != err {
+			if helper.IsTimeoutError(err) {
+				testConn()
+				continue
+			}
 			if err != io.EOF && !connClosed {
 				if len(socksTargetHost) > 0 {
 					log.Printf("Session:%d read request failed from proxy connection to %s:%s for reason:%v", sid, socksTargetHost, socksTargetPort, err)

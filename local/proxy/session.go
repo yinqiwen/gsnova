@@ -1,6 +1,8 @@
 package proxy
 
 import (
+	"fmt"
+	"io"
 	"log"
 	"math/rand"
 	"sync"
@@ -8,8 +10,6 @@ import (
 
 	"github.com/yinqiwen/gsnova/common/event"
 )
-
-// import "net"
 
 var sessions map[uint32]*ProxySession = make(map[uint32]*ProxySession)
 var sessionMutex sync.Mutex
@@ -21,6 +21,7 @@ type ProxySession struct {
 	Remote      *RemoteChannel
 	Hijacked    bool
 	SSLHijacked bool
+	createTime  time.Time
 }
 
 func (s *ProxySession) SetRemoteChannel(r *RemoteChannel) {
@@ -54,12 +55,22 @@ func getProxySession(sid uint32) *ProxySession {
 	return nil
 }
 
+func dumpProxySessions(w io.Writer) {
+	fmt.Fprintf(w, "ProxySessions Dump:\n")
+	sessionMutex.Lock()
+	defer sessionMutex.Unlock()
+	for _, s := range sessions {
+		fmt.Fprintf(w, "Session[%d]:proxy=%s[%d],age=%v\n", s.id, s.Remote.Addr, s.Remote.Index, time.Now().Sub(s.createTime))
+	}
+}
+
 func newProxySession(sid uint32, queue *event.EventQueue) *ProxySession {
 	sessionMutex.Lock()
 	defer sessionMutex.Unlock()
 	s := new(ProxySession)
 	s.id = sid
 	s.queue = queue
+	s.createTime = time.Now()
 	sessions[s.id] = s
 	return s
 }

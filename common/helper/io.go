@@ -1,6 +1,9 @@
 package helper
 
-import "io"
+import (
+	"io"
+	"net"
+)
 
 type BufferChunkReader struct {
 	io.Reader
@@ -14,4 +17,11 @@ func (r *BufferChunkReader) Read(p []byte) (int, error) {
 		return n, err
 	}
 	return n, io.EOF
+}
+
+func IsTimeoutError(err error) bool {
+	if err, ok := err.(net.Error); ok && err.Timeout() {
+		return true
+	}
+	return false
 }

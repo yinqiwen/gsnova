@@ -13,6 +13,7 @@ const (
 	EventChannelCloseReq = 10010
 	EventChannelCloseACK = 10011
 	EventPortUnicast     = 10012
+	EventConnTest        = 10013
 
 	NoneCompressor    = 0
 	SnappyCompressor  = 1
@@ -38,4 +39,5 @@ func init() {
 	RegistObject(EventChannelCloseReq, &ChannelCloseReqEvent{})
 	RegistObject(EventChannelCloseACK, &ChannelCloseACKEvent{})
 	RegistObject(EventPortUnicast, &PortUnicastEvent{})
+	RegistObject(EventConnTest, &ConnTestEvent{})
 }

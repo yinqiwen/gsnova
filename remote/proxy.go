@@ -348,6 +348,17 @@ func handleEvent(ev event.Event, ctx *ConnContext) (event.Event, error) {
 		if nil != queue {
 			queue.Publish(nil, 1*time.Minute)
 		}
+	case *event.ConnTestEvent:
+		session := getProxySessionByEvent(ctx, ev)
+		if nil == session {
+			log.Printf("Session:%d is NOT exist now.", ev.GetId())
+			queue := getEventQueue(ctx.ConnId, false)
+			if nil != queue {
+				closeEv := &event.ConnCloseEvent{}
+				closeEv.SetId(ev.GetId())
+				queue.Publish(closeEv, 10*time.Millisecond)
+			}
+		}
 	default:
 		session := getProxySessionByEvent(ctx, ev)
 		if nil != session {

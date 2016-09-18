@@ -40,6 +40,16 @@ func (ev *ConnCloseEvent) Decode(buffer *bytes.Buffer) (err error) {
 	return nil
 }
 
+type ConnTestEvent struct {
+	EventHeader
+}
+
+func (ev *ConnTestEvent) Encode(buffer *bytes.Buffer) {
+}
+func (ev *ConnTestEvent) Decode(buffer *bytes.Buffer) (err error) {
+	return nil
+}
+
 type PortUnicastEvent struct {
 	EventHeader
 	Port uint32

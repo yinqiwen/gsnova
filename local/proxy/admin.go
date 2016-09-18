@@ -37,6 +37,7 @@ func statCallback(w http.ResponseWriter, r *http.Request) {
 	for _, p := range proxyTable {
 		p.PrintStat(w)
 	}
+	dumpProxySessions(w)
 }
 func stackdumpCallback(w http.ResponseWriter, req *http.Request) {
 	w.WriteHeader(200)
