@@ -70,6 +70,8 @@ func (p *VPSProxy) Serve(session *proxy.ProxySession, ev event.Event) error {
 	switch ev.(type) {
 	case *event.TCPChunkEvent:
 		session.Remote.Write(ev)
+	case *event.ConnTestEvent:
+		session.Remote.Write(ev)
 	case *event.UDPEvent:
 		session.Remote.Write(ev)
 	case *event.TCPOpenEvent:

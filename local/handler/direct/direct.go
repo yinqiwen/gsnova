@@ -250,6 +250,7 @@ func (p *DirectProxy) Serve(session *proxy.ProxySession, ev event.Event) error {
 	case *event.ConnCloseEvent:
 		session.Remote.Close()
 	case *event.TCPOpenEvent:
+	case *event.ConnTestEvent:
 		//do nothing
 	case *event.TCPChunkEvent:
 		session.Remote.WriteRaw(ev.(*event.TCPChunkEvent).Content)

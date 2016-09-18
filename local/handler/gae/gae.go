@@ -61,6 +61,7 @@ func (p *GAEProxy) Serve(session *proxy.ProxySession, ev event.Event) error {
 	}
 	switch ev.(type) {
 	case *event.ConnCloseEvent:
+	case *event.ConnTestEvent:
 		//session.Channel.Write(ev)
 	case *event.HTTPRequestEvent:
 		req := ev.(*event.HTTPRequestEvent)
