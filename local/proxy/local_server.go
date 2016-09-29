@@ -40,6 +40,9 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 	tryRemoteResolve := false
 	socksConn, bufconn, err := socks.NewSocksConn(conn)
 
+	//indicate that if remote opened by event
+	remoteOpened := false
+
 	socksInitProxy := func(addr string) {
 		if socksTargetHost == "127.0.0.1" {
 			proxyName := "Direct"
@@ -59,6 +62,7 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 		tcpOpen := &event.TCPOpenEvent{}
 		tcpOpen.SetId(sid)
 		tcpOpen.Addr = addr
+		remoteOpened = true
 		p.Serve(session, tcpOpen)
 	}
 
@@ -146,13 +150,21 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 	}
 	sniChunk := make([]byte, 0)
 	for !connClosed {
-		conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+		if remoteOpened {
+			conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+		} else {
+			conn.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
+		}
 		if session.Hijacked {
 			buffer := make([]byte, 8192)
 			n, err := bufconn.Read(buffer)
 			if nil != err {
 				if helper.IsTimeoutError(err) {
-					testConn()
+					if remoteOpened {
+						testConn()
+					} else {
+						socksInitProxy(net.JoinHostPort(socksTargetHost, socksTargetPort))
+					}
 					continue
 				}
 				if err != io.EOF && !connClosed {
@@ -227,7 +239,7 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 				}
 			}
 		}
-		//log.Printf("[%s]Session:%d request:%s %v", p.Name(), sid, req.Method, reqUrl)
+		log.Printf("Session:%d request:%s %v", sid, req.Method, reqUrl)
 
 		req.Header.Del("Proxy-Connection")
 		ev := event.NewHTTPRequestEvent(req)
