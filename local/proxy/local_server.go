@@ -269,6 +269,7 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 		}
 
 		p.Serve(session, ev)
+		remoteOpened = true
 		if maxBody < 0 && req.ContentLength != 0 {
 			for nil != req.Body {
 				buffer := make([]byte, 8192)
@@ -300,7 +301,7 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 			}
 		}
 		if strings.EqualFold(req.Method, "Connect") && (session.SSLHijacked || session.Hijacked) {
-			conn.Write([]byte("HTTP/1.1 200 Connection established\r\n\r\n"))
+			conn.Write([]byte("HTTP/1.0 200 Connection established\r\n\r\n"))
 		}
 
 		//do not parse http rquest next process,since it would upgrade to websocket/spdy/http2
