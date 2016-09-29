@@ -65,7 +65,7 @@ func fetch(context appengine.Context, ev *event.HTTPRequestEvent) event.Event {
 
 func statCallback(w http.ResponseWriter, req *http.Request) {
 	w.WriteHeader(200)
-	fmt.Fprintf(c, "Version:    %s\n", remote.Version)
+	fmt.Fprintf(w, "Version:    %s\n", remote.Version)
 }
 
 func httpInvoke(w http.ResponseWriter, r *http.Request) {
