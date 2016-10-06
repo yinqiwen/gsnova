@@ -12,6 +12,7 @@ import (
 
 	"github.com/getlantern/netx"
 	"github.com/yinqiwen/gsnova/common/event"
+	"github.com/yinqiwen/gsnova/common/helper"
 	"github.com/yinqiwen/gsnova/local/hosts"
 	"github.com/yinqiwen/gsnova/local/proxy"
 )
@@ -22,6 +23,7 @@ type directChannel struct {
 	httpsProxyConn bool
 	udpProxyConn   bool
 	conf           *proxy.ProxyChannelConfig
+	addr           string
 }
 
 func (tc *directChannel) ReadTimeout() time.Duration {
@@ -112,17 +114,18 @@ func newDirectChannel(ev event.Event, conf *proxy.ProxyChannelConfig) (*directCh
 	host := ""
 	port := ""
 	network := "tcp"
-	fromHttpsConnect := false
+	needHttpsConnect := false
 	switch ev.(type) {
 	case *event.UDPEvent:
 		network = "udp"
 		host = ev.(*event.UDPEvent).Addr
 	case *event.TCPOpenEvent:
 		host = ev.(*event.TCPOpenEvent).Addr
+		needHttpsConnect = true
 	case *event.HTTPRequestEvent:
 		req := ev.(*event.HTTPRequestEvent)
 		host = req.Headers.Get("Host")
-		fromHttpsConnect = strings.EqualFold(req.Method, "Connect")
+		needHttpsConnect = strings.EqualFold(req.Method, "Connect")
 	default:
 		return nil, fmt.Errorf("Can NOT create direct channel by event:%T", ev)
 	}
@@ -132,11 +135,16 @@ func newDirectChannel(ev event.Event, conf *proxy.ProxyChannelConfig) (*directCh
 	}
 	if strings.Contains(host, ":") {
 		host, port, _ = net.SplitHostPort(host)
+	} else {
+		if needHttpsConnect {
+			port = "443"
+		} else {
+			port = "80"
+		}
 	}
 
 	isIP := net.ParseIP(host) != nil
-
-	if !isIP && !hosts.InHosts(host) && hosts.InHosts(hosts.SNIProxy) && port == "443" && network == "tcp" {
+	if nil == conf.ProxyURL() && !isIP && !hosts.InHosts(host) && hosts.InHosts(hosts.SNIProxy) && port == "443" && network == "tcp" {
 		host = hosts.SNIProxy
 	}
 	useTLS := false
@@ -145,37 +153,50 @@ func newDirectChannel(ev event.Event, conf *proxy.ProxyChannelConfig) (*directCh
 	} else {
 		useTLS = false
 	}
-	if !isIP {
+	if !isIP && nil == conf.ProxyURL() {
 		host = hosts.GetHost(host)
 	}
 
 	//log.Printf("Session:%d get host:%s", ev.GetId(), host)
 	addr := ""
-	if useTLS {
-		addr = addr + ":443"
-	} else {
-		if len(port) > 0 {
-			addr = host + ":" + port
+	if nil == conf.ProxyURL() {
+		if useTLS {
+			addr = addr + ":443"
 		} else {
-			if fromHttpsConnect {
-				addr = host + ":443"
+			if len(port) > 0 {
+				addr = host + ":" + port
 			} else {
-				addr = host + ":80"
+				if needHttpsConnect {
+					addr = host + ":443"
+				} else {
+					addr = host + ":80"
+				}
 			}
 		}
+	} else {
+		addr = conf.ProxyURL().Host
 	}
+
 	dailTimeout := conf.DialTimeout
 	if 0 == dailTimeout {
 		dailTimeout = 5
 	}
-	log.Printf("Session:%d connect %s:%s for %s %T", ev.GetId(), network, addr, host, ev)
+	//log.Printf("Session:%d connect %s:%s for %s %T %v %v %s", ev.GetId(), network, addr, host, ev, needHttpsConnect, conf.ProxyURL(), net.JoinHostPort(host, port))
 	c, err := netx.DialTimeout(network, addr, time.Duration(dailTimeout)*time.Second)
+	if nil != conf.ProxyURL() && nil == err {
+		if strings.HasPrefix(conf.ProxyURL().Scheme, "socks") {
+			err = helper.Socks5ProxyConnect(conf.ProxyURL(), c, net.JoinHostPort(host, port))
+		} else {
+			if needHttpsConnect {
+				err = helper.HTTPProxyConnect(conf.ProxyURL(), c, net.JoinHostPort(host, port))
+			}
+		}
+	}
 	if nil != err {
 		log.Printf("Failed to connect %s for %s with error:%v", addr, host, err)
 		return nil, err
 	}
-
-	d := &directChannel{ev.GetId(), c, fromHttpsConnect, network == "udp", conf}
+	d := &directChannel{ev.GetId(), c, needHttpsConnect, network == "udp", conf, addr}
 	//d := &directChannel{ev.GetId(), c, fromHttpsConnect, network == "udp", toReplaceSNI, false, nil}
 	if useTLS {
 		tlcfg := &tls.Config{}
@@ -226,13 +247,16 @@ func (p *DirectProxy) Serve(session *proxy.ProxySession, ev event.Event) error {
 		case *event.HTTPRequestEvent:
 		case *event.UDPEvent:
 		default:
+			session.Close()
 			return fmt.Errorf("Can NOT create direct channel by event:%T", ev)
 		}
 		c, err := newDirectChannel(ev, &p.conf)
 		if nil != err {
+			session.Close()
 			return err
 		}
 		session.Remote = &proxy.RemoteChannel{
+			Addr:     c.addr,
 			DirectIO: true,
 		}
 		session.Remote.C = c
@@ -274,5 +298,4 @@ func (p *DirectProxy) Serve(session *proxy.ProxySession, ev event.Event) error {
 
 func init() {
 	proxy.RegisterProxyType("DIRECT", &DirectProxy{})
-	//proxy.RegisterProxy(&tlsDirectProy)
 }

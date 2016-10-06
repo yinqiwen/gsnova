@@ -28,3 +28,9 @@ func Configure(protect Protect, dnsServer string) {
 		dnsServer = defaultDnsServer
 	}
 }
+
+func SetDNSServer(server string) {
+	if len(currentDnsServer) > 0 {
+		currentDnsServer = server
+	}
+}

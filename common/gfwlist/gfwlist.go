@@ -8,127 +8,101 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"regexp"
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/yinqiwen/gsnova/common/helper"
 )
 
-type gfwListRule interface {
-	init(rule string) error
-	match(req *http.Request) bool
+type hostWildcardRule struct {
+	pattern string
 }
 
-type hostUrlWildcardRule struct {
-	only_http bool
-	host_rule string
-	url_rule  string
-}
-
-func (r *hostUrlWildcardRule) init(rule string) (err error) {
-	if !strings.Contains(rule, "/") {
-		r.host_rule = rule
-		return
+func (r *hostWildcardRule) match(req *http.Request) bool {
+	if strings.Contains(req.Host, r.pattern) {
+		return true
 	}
-	rules := strings.SplitN(rule, "/", 2)
-	r.host_rule = rules[0]
-	if nil != err {
-		return
-	}
-	if len(rules) == 2 && len(rules[1]) > 0 {
-		r.url_rule = rules[1]
-	}
-	return
-}
-
-func (r *hostUrlWildcardRule) match(req *http.Request) bool {
-	if r.only_http && strings.EqualFold(req.Method, "Connect") {
-		return false
-	}
-	if ret := helper.WildcardMatch(req.Host, r.host_rule); !ret {
-		return false
-	}
-	if len(r.url_rule) > 0 {
-		return helper.WildcardMatch(req.URL.RequestURI(), r.url_rule)
-	}
-	return true
+	return false
 }
 
 type urlWildcardRule struct {
-	url_rule string
-}
-
-func (r *urlWildcardRule) init(rule string) (err error) {
-	if !strings.Contains(rule, "*") {
-		rule = "*" + rule
-	}
-	r.url_rule = rule
-	return
+	pattern     string
+	prefixMatch bool
 }
 
 func (r *urlWildcardRule) match(req *http.Request) bool {
-	return helper.WildcardMatch(helper.GetRequestURLString(req), r.url_rule)
-}
-
-type urlRegexRule struct {
-	is_raw_regex bool
-	url_reg      *regexp.Regexp
-}
-
-func (r *urlRegexRule) init(rule string) (err error) {
-	if r.is_raw_regex {
-		r.url_reg, err = regexp.Compile(rule)
-	} else {
-		r.url_reg, err = helper.PrepareRegexp(rule, false)
+	if len(req.URL.Scheme) == 0 {
+		req.URL.Scheme = "https"
 	}
-	return
+	if r.prefixMatch {
+		return strings.HasPrefix(req.URL.String(), r.pattern)
+	}
+	return strings.Contains(req.URL.String(), r.pattern)
 }
 
-func (r *urlRegexRule) match(req *http.Request) bool {
-	ret := r.url_reg.MatchString(helper.GetRequestURLString(req))
-	//	if ret{
-	//	   log.Printf("url is %s, rule is %s\n", util.GetURLString(req, false), r.url_reg.String())
-	//	}
-	return ret
+type regexRule struct {
+	pattern string
+}
+
+func (r *regexRule) match(req *http.Request) bool {
+	if len(req.URL.Scheme) == 0 {
+		req.URL.Scheme = "https"
+	}
+	matched, err := regexp.MatchString(r.pattern, req.URL.String())
+	if nil != err {
+		log.Printf("Invalid regex pattern:%s wiuth reason:%v", r.pattern, err)
+	}
+	return matched
+}
+
+type whiteListRule struct {
+	r gfwListRule
+}
+
+func (r *whiteListRule) match(req *http.Request) bool {
+	return r.r.match(req)
+}
+
+type gfwListRule interface {
+	match(req *http.Request) bool
 }
 
 type GFWList struct {
-	white_list []gfwListRule
-	black_list []gfwListRule
-	mutex      sync.Mutex
+	ruleList []gfwListRule
+	mutex    sync.Mutex
+}
+
+func (gfw *GFWList) clone(n *GFWList) {
+	gfw.mutex.Lock()
+	defer gfw.mutex.Unlock()
+	gfw.ruleList = n.ruleList
 }
 
 func (gfw *GFWList) IsBlockedByGFW(req *http.Request) bool {
 	gfw.mutex.Lock()
 	defer gfw.mutex.Unlock()
-	for _, rule := range gfw.white_list {
+	for _, rule := range gfw.ruleList {
 		if rule.match(req) {
-			return false
-		}
-	}
-	for _, rule := range gfw.black_list {
-		if rule.match(req) {
-			//log.Printf("matched for :%v for %v\n", req.URL, rule)
+			if _, ok := rule.(*whiteListRule); ok {
+				//log.Printf("#### %s is in whilte list %v", req.Host, rule.(*whiteListRule).r)
+				return false
+			}
 			return true
 		}
 	}
 	return false
 }
 
-func (gfw *GFWList) clone(l *GFWList) {
-	if nil == l {
-		return
-	}
-	gfw.mutex.Lock()
-	defer gfw.mutex.Unlock()
-	gfw.white_list = l.white_list
-	gfw.black_list = l.black_list
-}
+// func replaceRegexChars(rule string) string {
+// 	rule = strings.TrimSpace(rule)
+// 	rule = strings.Replace(rule, ".", "\\.", -1)
+// 	rule = strings.Replace(rule, "?", "\\?", -1)
+// 	rule = strings.Replace(rule, "*", ".*", -1)
+// 	return rule
+// }
 
 func Parse(rules string) (*GFWList, error) {
-
 	reader := bufio.NewReader(strings.NewReader(rules))
 	gfw := new(GFWList)
 	//i := 0
@@ -139,52 +113,31 @@ func Parse(rules string) (*GFWList, error) {
 		}
 		str := strings.TrimSpace(string(line))
 		//comment
-		if strings.HasPrefix(str, "!") || len(str) == 0 {
+		if strings.HasPrefix(str, "!") || len(str) == 0 || strings.HasPrefix(str, "[") {
 			continue
 		}
-		if strings.HasPrefix(str, "@@||") {
-			rule := new(hostUrlWildcardRule)
-			err := rule.init(str[4:])
-			if nil != err {
-				log.Printf("Failed to init exclude rule:%s for %v\n", str[4:], err)
-				continue
-			}
-			gfw.white_list = append(gfw.white_list, rule)
-		} else if strings.HasPrefix(str, "||") {
-			rule := new(hostUrlWildcardRule)
-			err := rule.init(str[2:])
-			if nil != err {
-				log.Printf("Failed to init host url rule:%s for %v\n", str[2:], err)
-				continue
-			}
-			gfw.black_list = append(gfw.black_list, rule)
-		} else if strings.HasPrefix(str, "|http") {
-			rule := new(urlWildcardRule)
-			err := rule.init(str[1:])
-			if nil != err {
-				log.Printf("Failed to init url rule:%s for %v\n", str[1:], err)
-				continue
-			}
-			gfw.black_list = append(gfw.black_list, rule)
-		} else if strings.HasPrefix(str, "/") && strings.HasSuffix(str, "/") {
-			rule := new(urlRegexRule)
-			rule.is_raw_regex = true
-			err := rule.init(str[1 : len(str)-1])
-			if nil != err {
-				log.Printf("Failed to init url rule:%s for %v\n", str[1:len(str)-1], err)
-				continue
-			}
-			gfw.black_list = append(gfw.black_list, rule)
-		} else {
-			rule := new(hostUrlWildcardRule)
-			//rule.only_http = true
-			err := rule.init(str)
-			if nil != err {
-				log.Printf("Failed to init host url rule:%s for %v\n", str, err)
-				continue
-			}
-			gfw.black_list = append(gfw.black_list, rule)
+		var rule gfwListRule
+		isWhileListRule := false
+		if strings.HasPrefix(str, "@@") {
+			str = str[2:]
+			isWhileListRule = true
 		}
+		if strings.HasPrefix(str, "/") && strings.HasSuffix(str, "/") {
+			str = str[1 : len(str)-1]
+			rule = &regexRule{str}
+		} else {
+			if strings.HasPrefix(str, "||") {
+				rule = &hostWildcardRule{str[2:]}
+			} else if strings.HasPrefix(str, "|") {
+				rule = &urlWildcardRule{str[1:], true}
+			} else {
+				rule = &urlWildcardRule{str, false}
+			}
+		}
+		if isWhileListRule {
+			rule = &whiteListRule{rule}
+		}
+		gfw.ruleList = append(gfw.ruleList, rule)
 	}
 	return gfw, nil
 }
@@ -194,11 +147,10 @@ func ParseRaw(rules string) (*GFWList, error) {
 	if err != nil {
 		return nil, err
 	}
-	ioutil.WriteFile("./tmp.txt", content, 0666)
 	return Parse(string(content))
 }
 
-func NewGFWList(u string, proxy string, watch bool) (*GFWList, error) {
+func NewGFWList(u string, proxy string, userRules []string, cacheFile string, watch bool) (*GFWList, error) {
 	hc := &http.Client{}
 	if len(proxy) > 0 {
 		hc.Transport = &http.Transport{
@@ -207,41 +159,59 @@ func NewGFWList(u string, proxy string, watch bool) (*GFWList, error) {
 			},
 		}
 	}
-
-	fetch := func(last time.Time) ([]byte, time.Time, error) {
-		zero := time.Time{}
-		resp, err := hc.Get(u)
-		if nil != err {
-			return nil, zero, err
+	nextFetchTime := 6 * time.Hour
+	firstFetch := true
+	fetch := func() (string, error) {
+		var gfwlistContent string
+		fetchFromRemote := false
+		if firstFetch {
+			if len(cacheFile) > 0 {
+				if _, err := os.Stat(cacheFile); nil == err {
+					gfwlistBody, _ := ioutil.ReadFile(cacheFile)
+					gfwlistContent = string(gfwlistBody)
+					nextFetchTime = 30 * time.Second
+				}
+			}
 		}
-		defer resp.Body.Close()
-		if resp.StatusCode != 200 {
-			return nil, zero, fmt.Errorf("Invalid response:%v", resp)
+		if len(gfwlistContent) == 0 || !firstFetch {
+			firstFetch = false
+			resp, err := hc.Get(u)
+			if nil != err {
+				return "", err
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != 200 {
+				return "", fmt.Errorf("Invalid response:%v", resp)
+			}
+			body, err := ioutil.ReadAll(resp.Body)
+			if nil != err {
+				return "", err
+			}
+			plainTxt, err := base64.StdEncoding.DecodeString(string(body))
+			if nil != err {
+				return "", err
+			}
+			fetchFromRemote = true
+			gfwlistContent = string(plainTxt)
+			if len(userRules) > 0 {
+				userGfwlistContent := "\n!################User Rule List Begin#################\n"
+				for _, rule := range userRules {
+					userGfwlistContent = userGfwlistContent + rule + "\n"
+				}
+				userGfwlistContent = userGfwlistContent + "!################User Rule List End#################\n"
+				gfwlistContent = gfwlistContent + userGfwlistContent
+			}
 		}
-		// lastModDate := resp.Header.Get("last-modified")
-		// if len(lastModDate) == 0 {
-		// 	return nil, zero, fmt.Errorf("No 'last-modified' header in head %v", resp.Header)
-		// }
-		// t, err := time.Parse(time.RFC1123, lastModDate)
-		// if nil != err {
-		// 	return nil, zero, err
-		// }
-		// if !t.After(last) {
-		// 	return nil, t, fmt.Errorf("No updated content")
-		// }
-		t := time.Now()
-		body, err := ioutil.ReadAll(resp.Body)
-		if nil != err {
-			return nil, zero, err
+		if len(cacheFile) > 0 && fetchFromRemote {
+			ioutil.WriteFile(cacheFile, []byte(gfwlistContent), 0666)
 		}
-		return body, t, nil
+		return gfwlistContent, nil
 	}
-	start := time.Time{}
-	content, modTime, err := fetch(start)
+	content, err := fetch()
 	if nil != err {
 		return nil, err
 	}
-	gfwlist, err := ParseRaw(string(content))
+	gfwlist, err := Parse(content)
 	if nil != err {
 		return nil, err
 	}
@@ -249,11 +219,10 @@ func NewGFWList(u string, proxy string, watch bool) (*GFWList, error) {
 		go func() {
 			for {
 				select {
-				case <-time.After(10 * time.Minute):
-					newContent, newModTime, nerr := fetch(modTime)
+				case <-time.After(nextFetchTime):
+					newContent, nerr := fetch()
 					if nerr == nil {
-						modTime = newModTime
-						nlist, _ := ParseRaw(string(newContent))
+						nlist, _ := Parse(newContent)
 						gfwlist.clone(nlist)
 					}
 				}

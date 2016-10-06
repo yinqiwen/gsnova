@@ -84,6 +84,7 @@ func Start(home string, monitor InternalEventMonitor) error {
 		log.Printf("Failed to init local hosts with reason:%v.", err)
 	}
 	event.SetDefaultSecretKey(GConf.Encrypt.Method, GConf.Encrypt.Key)
+	GConf.init()
 	for _, conf := range GConf.Channel {
 		conf.Type = strings.ToUpper(conf.Type)
 		if t, ok := proxyTypeTable[conf.Type]; !ok {
@@ -110,13 +111,8 @@ func Start(home string, monitor InternalEventMonitor) error {
 
 	proxyHome = home
 	logger.InitLogger(GConf.Log)
-
 	log.Printf("Starting GSnova %s.", local.Version)
-
-	if len(GConf.LocalDNS.Listen) > 0 {
-		go startLocalDNS(GConf.LocalDNS.Listen)
-	}
-
+	go initDNS()
 	go startAdminServer()
 	startLocalServers()
 	return nil

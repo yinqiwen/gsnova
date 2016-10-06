@@ -80,8 +80,8 @@ func (tc *tcpChannel) Open() error {
 	timeout := time.Duration(dailTimeout) * time.Second
 	var c net.Conn
 	var err error
-	if len(tc.conf.HTTPProxy) > 0 {
-		c, err = helper.HTTPProxyConn(tc.conf.HTTPProxy, hostport, timeout)
+	if len(tc.conf.Proxy) > 0 {
+		c, err = helper.HTTPProxyDial(tc.conf.Proxy, hostport, timeout)
 	} else {
 		c, err = netx.DialTimeout("tcp", hostport, timeout)
 	}

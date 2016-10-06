@@ -29,12 +29,10 @@ func GetRequestURLString(req *http.Request) string {
 	return str
 }
 
-func PrepareRegexp(rule string, only_star bool) (*regexp.Regexp, error) {
+func PrepareRegexp(rule string) (*regexp.Regexp, error) {
 	rule = strings.TrimSpace(rule)
 	rule = strings.Replace(rule, ".", "\\.", -1)
-	if !only_star {
-		rule = strings.Replace(rule, "?", "\\?", -1)
-	}
+	rule = strings.Replace(rule, "?", "\\?", -1)
 	rule = strings.Replace(rule, "*", ".*", -1)
 	return regexp.Compile(rule)
 }

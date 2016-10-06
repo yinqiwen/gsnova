@@ -41,8 +41,8 @@ func initGAEClient(conf proxy.ProxyChannelConfig) *http.Client {
 			if !strings.EqualFold(remote, host) {
 				connAddr = remote + ":443"
 			}
-			if len(conf.HTTPProxy) > 0 {
-				conn, err = helper.HTTPProxyConn(conf.HTTPProxy, connAddr, dialTimeout)
+			if len(conf.Proxy) > 0 {
+				conn, err = helper.HTTPProxyDial(conf.Proxy, connAddr, dialTimeout)
 			} else {
 				conn, err = netx.DialTimeout(n, connAddr, time.Duration(timeout)*time.Second)
 			}

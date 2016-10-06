@@ -56,6 +56,7 @@ func (p *GAEProxy) Serve(session *proxy.ProxySession, ev event.Event) error {
 		session.SetRemoteChannel(p.cs.Select())
 		//session.Remote = p.cs.Select()
 		if session.Remote == nil {
+			session.Close()
 			return fmt.Errorf("No proxy channel in PaasProxy")
 		}
 	}
@@ -143,6 +144,7 @@ func (p *GAEProxy) Serve(session *proxy.ProxySession, ev event.Event) error {
 			return nil
 		}
 	default:
+		session.Close()
 		log.Printf("Invalid event type:%T to process", ev)
 	}
 	return nil

@@ -2,8 +2,10 @@ package helper
 
 import (
 	"bufio"
+	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"math"
 	"net"
@@ -193,24 +195,65 @@ func IPv42Int(ip string) (int64, error) {
 	return num, nil
 }
 
+var privateIPRanges [][]net.IP
+
+func init() {
+	range1 := []net.IP{net.ParseIP("192.168.0.0"), net.ParseIP("192.168.255.255")}
+	range2 := []net.IP{net.ParseIP("172.16.0.0"), net.ParseIP("172.31.255.255")}
+	range3 := []net.IP{net.ParseIP("10.0.0.0"), net.ParseIP("10.255.255.255")}
+	privateIPRanges = append(privateIPRanges, range1)
+	privateIPRanges = append(privateIPRanges, range2)
+	privateIPRanges = append(privateIPRanges, range3)
+}
+
 func IsPrivateIP(ip string) bool {
 	if strings.EqualFold(ip, "localhost") {
 		return true
 	}
-	value, err := IPv42Int(ip)
-	if nil != err {
+	trial := net.ParseIP(ip)
+	if trial.To4() == nil {
 		return false
 	}
 	if strings.HasPrefix(ip, "127.0") {
 		return true
 	}
-	if (value >= 0x0A000000 && value <= 0x0AFFFFFF) || (value >= 0xAC100000 && value <= 0xAC1FFFFF) || (value >= 0xC0A80000 && value <= 0xC0A8FFFF) {
-		return true
+	for _, r := range privateIPRanges {
+		if bytes.Compare(trial, r[0]) >= 0 && bytes.Compare(trial, r[1]) <= 0 {
+			return true
+		}
 	}
 	return false
 }
 
-func HTTPProxyConn(proxyURL string, addr string, timeout time.Duration) (net.Conn, error) {
+func HTTPProxyConnect(proxyURL *url.URL, c net.Conn, addr string) error {
+	if !strings.Contains(addr, "://") {
+		addr = "https://" + addr
+	}
+	connReq, err := http.NewRequest("Connect", addr, nil)
+	if err != nil {
+		return err
+	}
+	err = connReq.Write(c)
+	if err != nil {
+		return err
+	}
+	connRes, err := http.ReadResponse(bufio.NewReader(c), connReq)
+	if err != nil {
+		var tmp bytes.Buffer
+		connReq.Write(&tmp)
+		log.Printf("CONNECT %v error with request %s", proxyURL, string(tmp.Bytes()))
+		return err
+	}
+	if nil != connRes.Body {
+		connRes.Body.Close()
+	}
+	if connRes.StatusCode >= 300 {
+		return fmt.Errorf("Invalid Connect response:%d", connRes.StatusCode)
+	}
+	return nil
+}
+
+func HTTPProxyDial(proxyURL string, addr string, timeout time.Duration) (net.Conn, error) {
 	u, err := url.Parse(proxyURL)
 	if nil != err {
 		return nil, err
@@ -219,20 +262,183 @@ func HTTPProxyConn(proxyURL string, addr string, timeout time.Duration) (net.Con
 	if err != nil {
 		return nil, err
 	}
-	connReq, _ := http.NewRequest("Connect", addr, nil)
-	err = connReq.Write(c)
+	err = HTTPProxyConnect(u, c, addr)
+	if nil != err {
+		c.Close()
+		return nil, err
+	}
+	return c, nil
+}
+
+const socks5Version = 5
+
+const (
+	socks5AuthNone     = 0
+	socks5AuthPassword = 2
+)
+
+const socks5Connect = 1
+
+const (
+	socks5IP4    = 1
+	socks5Domain = 3
+	socks5IP6    = 4
+)
+
+var socks5Errors = []string{
+	"",
+	"general failure",
+	"connection forbidden",
+	"network unreachable",
+	"host unreachable",
+	"connection refused",
+	"TTL expired",
+	"command not supported",
+	"address type not supported",
+}
+
+func Socks5ProxyConnect(proxyURL *url.URL, conn net.Conn, addr string) error {
+	host, portStr, err := net.SplitHostPort(addr)
+	if err != nil {
+		return err
+	}
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		return errors.New("proxy: failed to parse port number: " + portStr)
+	}
+	if port < 1 || port > 0xffff {
+		return errors.New("proxy: port number out of range: " + portStr)
+	}
+
+	// the size here is just an estimate
+	buf := make([]byte, 0, 6+len(host))
+
+	buf = append(buf, socks5Version)
+	if nil != proxyURL.User && len(proxyURL.User.Username()) > 0 && len(proxyURL.User.Username()) < 256 {
+		buf = append(buf, 2 /* num auth methods */, socks5AuthNone, socks5AuthPassword)
+	} else {
+		buf = append(buf, 1 /* num auth methods */, socks5AuthNone)
+	}
+
+	if _, err := conn.Write(buf); err != nil {
+		return errors.New("proxy: failed to write greeting to SOCKS5 proxy at " + addr + ": " + err.Error())
+	}
+
+	if _, err := io.ReadFull(conn, buf[:2]); err != nil {
+		return errors.New("proxy: failed to read greeting from SOCKS5 proxy at " + addr + ": " + err.Error())
+	}
+	if buf[0] != 5 {
+		return errors.New("proxy: SOCKS5 proxy at " + addr + " has unexpected version " + strconv.Itoa(int(buf[0])))
+	}
+	if buf[1] == 0xff {
+		return errors.New("proxy: SOCKS5 proxy at " + addr + " requires authentication")
+	}
+
+	if buf[1] == socks5AuthPassword {
+		buf = buf[:0]
+		passwd, _ := proxyURL.User.Password()
+		buf = append(buf, 1 /* password protocol version */)
+		buf = append(buf, uint8(len(proxyURL.User.Username())))
+		buf = append(buf, proxyURL.User.Username()...)
+		buf = append(buf, uint8(len(passwd)))
+		buf = append(buf, passwd...)
+
+		if _, err := conn.Write(buf); err != nil {
+			return errors.New("proxy: failed to write authentication request to SOCKS5 proxy at " + addr + ": " + err.Error())
+		}
+
+		if _, err := io.ReadFull(conn, buf[:2]); err != nil {
+			return errors.New("proxy: failed to read authentication reply from SOCKS5 proxy at " + addr + ": " + err.Error())
+		}
+
+		if buf[1] != 0 {
+			return errors.New("proxy: SOCKS5 proxy at " + addr + " rejected username/password")
+		}
+	}
+
+	buf = buf[:0]
+	buf = append(buf, socks5Version, socks5Connect, 0 /* reserved */)
+
+	if ip := net.ParseIP(host); ip != nil {
+		if ip4 := ip.To4(); ip4 != nil {
+			buf = append(buf, socks5IP4)
+			ip = ip4
+		} else {
+			buf = append(buf, socks5IP6)
+		}
+		buf = append(buf, ip...)
+	} else {
+		if len(host) > 255 {
+			return errors.New("proxy: destination hostname too long: " + host)
+		}
+		buf = append(buf, socks5Domain)
+		buf = append(buf, byte(len(host)))
+		buf = append(buf, host...)
+	}
+	buf = append(buf, byte(port>>8), byte(port))
+
+	if _, err := conn.Write(buf); err != nil {
+		return errors.New("proxy: failed to write connect request to SOCKS5 proxy at " + addr + ": " + err.Error())
+	}
+
+	if _, err := io.ReadFull(conn, buf[:4]); err != nil {
+		return errors.New("proxy: failed to read connect reply from SOCKS5 proxy at " + addr + ": " + err.Error())
+	}
+
+	failure := "unknown error"
+	if int(buf[1]) < len(socks5Errors) {
+		failure = socks5Errors[buf[1]]
+	}
+
+	if len(failure) > 0 {
+		return errors.New("proxy: SOCKS5 proxy at " + addr + " failed to connect: " + failure)
+	}
+
+	bytesToDiscard := 0
+	switch buf[3] {
+	case socks5IP4:
+		bytesToDiscard = net.IPv4len
+	case socks5IP6:
+		bytesToDiscard = net.IPv6len
+	case socks5Domain:
+		_, err := io.ReadFull(conn, buf[:1])
+		if err != nil {
+			return errors.New("proxy: failed to read domain length from SOCKS5 proxy at " + addr + ": " + err.Error())
+		}
+		bytesToDiscard = int(buf[0])
+	default:
+		return errors.New("proxy: got unknown address type " + strconv.Itoa(int(buf[3])) + " from SOCKS5 proxy at " + addr)
+	}
+
+	if cap(buf) < bytesToDiscard {
+		buf = make([]byte, bytesToDiscard)
+	} else {
+		buf = buf[:bytesToDiscard]
+	}
+	if _, err := io.ReadFull(conn, buf); err != nil {
+		return errors.New("proxy: failed to read address from SOCKS5 proxy at " + addr + ": " + err.Error())
+	}
+
+	// Also need to discard the port number
+	if _, err := io.ReadFull(conn, buf[:2]); err != nil {
+		return errors.New("proxy: failed to read port from SOCKS5 proxy at " + addr + ": " + err.Error())
+	}
+	return nil
+}
+
+func Socks5ProxyDial(proxyURL string, addr string, timeout time.Duration) (net.Conn, error) {
+	u, err := url.Parse(proxyURL)
+	if nil != err {
+		return nil, err
+	}
+	c, err := netx.DialTimeout("tcp", u.Host, timeout)
 	if err != nil {
 		return nil, err
 	}
-	connRes, err := http.ReadResponse(bufio.NewReader(c), connReq)
-	if err != nil {
+	err = Socks5ProxyConnect(u, c, addr)
+	if nil != err {
+		c.Close()
 		return nil, err
-	}
-	if nil != connRes.Body {
-		connRes.Body.Close()
-	}
-	if connRes.StatusCode >= 300 {
-		return nil, fmt.Errorf("Invalid Connect response:%d", connRes.StatusCode)
 	}
 	return c, nil
 }

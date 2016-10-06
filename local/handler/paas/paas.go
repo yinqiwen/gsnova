@@ -91,8 +91,8 @@ func (p *PaasProxy) Init(conf proxy.ProxyChannelConfig) error {
 		tlscfg.ServerName = conf.SNI[0]
 		tr.TLSClientConfig = tlscfg
 	}
-	if len(conf.HTTPProxy) > 0 {
-		proxyUrl, err := url.Parse(conf.HTTPProxy)
+	if len(conf.Proxy) > 0 {
+		proxyUrl, err := url.Parse(conf.Proxy)
 		if nil != err {
 			return err
 		}
@@ -139,6 +139,7 @@ func (p *PaasProxy) Serve(session *proxy.ProxySession, ev event.Event) error {
 		session.SetRemoteChannel(p.cs.Select())
 		//session.Remote = p.cs.Select()
 		if session.Remote == nil {
+			session.Close()
 			return fmt.Errorf("No proxy channel in PaasProxy")
 		}
 	}
@@ -164,6 +165,7 @@ func (p *PaasProxy) Serve(session *proxy.ProxySession, ev event.Event) error {
 			session.Remote.Write(ev)
 		}
 	default:
+		session.Close()
 		log.Printf("Invalid event type:%T to process", ev)
 	}
 	return nil

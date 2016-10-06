@@ -33,6 +33,9 @@ func statCallback(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(200)
 	fmt.Fprintf(w, "Version: %s\n", local.Version)
 	fmt.Fprintf(w, "NumSession: %d\n", getProxySessionSize())
+	if nil != dnsCache {
+		fmt.Fprintf(w, "DNSCacheSize: %d\n", dnsCache.Len())
+	}
 	ots.Handle("stat", w)
 	for _, p := range proxyTable {
 		p.PrintStat(w)
@@ -42,6 +45,14 @@ func statCallback(w http.ResponseWriter, r *http.Request) {
 func stackdumpCallback(w http.ResponseWriter, req *http.Request) {
 	w.WriteHeader(200)
 	ots.Handle("stackdump", w)
+}
+func memdumpCallback(w http.ResponseWriter, req *http.Request) {
+	w.WriteHeader(200)
+	ots.Handle("MemProfile", w)
+}
+func gcCallback(w http.ResponseWriter, req *http.Request) {
+	w.WriteHeader(200)
+	ots.Handle("gc", w)
 }
 
 func startAdminServer() {
@@ -61,6 +72,8 @@ func startAdminServer() {
 	mux.HandleFunc("/_conflist", getConfigList)
 	mux.HandleFunc("/stat", statCallback)
 	mux.HandleFunc("/stackdump", stackdumpCallback)
+	mux.HandleFunc("/gc", gcCallback)
+	mux.HandleFunc("/memdump", memdumpCallback)
 	err := http.ListenAndServe(GConf.Admin.Listen, mux)
 	if nil != err {
 		log.Printf("[ERROR]Failed to start config store server:%v", err)

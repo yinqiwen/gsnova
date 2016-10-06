@@ -82,7 +82,7 @@ func Resolve(network string, addr string) (*net.TCPAddr, error) {
 	setQueryTimeouts(fileConn)
 
 	//log.Printf("performing dns lookup...!!")
-	result, err := dnsLookup(host, fileConn)
+	result, err := DnsLookup(host, fileConn)
 	if err != nil {
 		log.Printf("Error doing DNS resolution: %v", err)
 		return nil, err

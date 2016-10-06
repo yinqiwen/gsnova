@@ -51,8 +51,8 @@ func (wc *websocketChannel) Open() error {
 	u.Path = "/ws"
 	wsDialer := &websocket.Dialer{}
 	wsDialer.NetDial = wc.dial
-	if len(wc.conf.HTTPProxy) > 0 {
-		proxyUrl, err := url.Parse(wc.conf.HTTPProxy)
+	if len(wc.conf.Proxy) > 0 {
+		proxyUrl, err := url.Parse(wc.conf.Proxy)
 		if nil != err {
 			return err
 		}

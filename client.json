@@ -13,7 +13,10 @@
     "LocalDNS":{
     	//only listen UDP
     	"Listen": "127.0.0.1:48100",
+    	//for PAC rule 'IsCNIP', it would resolve the domain by 'TrustedDNS' if 'BlockedByGFW', and resolve the rest by 'FastDNS'
+    	"FastDNS":["114.114.114.114"],
     	"TrustedDNS": ["208.67.222.222:443", "208.67.220.220:443"],
+    	"CacheSize":1024,
     	"TCPConnect": false 
     },
 
@@ -32,6 +35,12 @@
     	"ConfigDir":"./android"
     },
 
+    "GFWList":{
+    	"URL":"https://raw.githubusercontent.com/gfwlist/gfwlist/master/gfwlist.txt",
+    	"Proxy":"",
+    	"UserRule":[]
+    },
+
 	"Proxy":[
 		{
 			"Local": ":48100",
@@ -40,8 +49,10 @@
 			"PAC":[
 				//// 'Direct/TLSDirect' MUST  proxy channel names confgiured below 
 				{"Protocol":["dns", "udp"],"Remote":"Direct"},
+				// Support rules 'IsCNIP/InHosts/BlockedByGFW'
 				{"Rule":["IsCNIP"],"Remote":"Direct"},
 				{"Rule":["InHosts"],"Remote":"TLSDirect"},
+				{"Rule":["BlockedByGFW"],"Remote":"TLSDirect"},
 				{"Host":["*"],"Remote":"Direct"}
 			]
 		},

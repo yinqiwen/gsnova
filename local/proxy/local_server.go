@@ -35,34 +35,27 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 	session := newProxySession(sid, queue)
 	defer closeProxySession(sid)
 
-	socksTargetHost := ""
-	socksTargetPort := ""
+	remoteHost := ""
+	remotePort := ""
+	//indicate that if remote opened by event
 	tryRemoteResolve := false
 	socksConn, bufconn, err := socks.NewSocksConn(conn)
 
-	//indicate that if remote opened by event
-	remoteOpened := false
-
-	socksInitProxy := func(addr string) {
-		if socksTargetHost == "127.0.0.1" {
-			proxyName := "Direct"
-			p = getProxyByName(proxyName)
-		} else {
-			creq, _ := http.NewRequest("Connect", "https://"+addr, nil)
-			p = proxy.findProxyByRequest(protocol, socksTargetHost, creq)
-		}
+	socksInitProxy := func() {
+		remoteAddr := net.JoinHostPort(remoteHost, remotePort)
+		creq, _ := http.NewRequest("Connect", "https://"+remoteAddr, nil)
+		p = proxy.findProxyByRequest(protocol, remoteHost, creq)
 		if nil == p {
 			conn.Close()
 			return
 		}
-		log.Printf("Session:%d select channel:%s", sid, p.Config().Name)
-		if p.Config().IsDirect() && net.ParseIP(socksTargetHost) != nil {
-			addr = net.JoinHostPort(socksTargetHost, socksTargetPort)
-		}
+		log.Printf("Session:%d select channel:%s for %s", sid, p.Config().Name, remoteHost)
+		// if p.Config().IsDirect() && net.ParseIP(remoteHost) != nil {
+		// 	addr = net.JoinHostPort(remoteHost, remotePort)
+		// }
 		tcpOpen := &event.TCPOpenEvent{}
 		tcpOpen.SetId(sid)
-		tcpOpen.Addr = addr
-		remoteOpened = true
+		tcpOpen.Addr = remoteAddr
 		p.Serve(session, tcpOpen)
 	}
 
@@ -79,22 +72,21 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 		conn = socksConn
 		session.Hijacked = true
 
-		socksTargetHost, socksTargetPort, err = net.SplitHostPort(socksConn.Req.Target)
+		remoteHost, remotePort, err = net.SplitHostPort(socksConn.Req.Target)
 		if nil != err {
 			log.Printf("Invalid socks target addresss:%s with reason %v", socksConn.Req.Target, err)
 			return
 		}
-		if socksTargetHost != "127.0.0.1" && net.ParseIP(socksTargetHost) != nil && proxy.SNISniff {
+		if net.ParseIP(remoteHost) != nil && !helper.IsPrivateIP(remoteHost) && proxy.SNISniff {
 			//this is a ip from local dns query
 			tryRemoteResolve = true
-			if socksTargetPort == "80" {
+			if remotePort == "80" {
 				//we can parse http request directly
 				session.Hijacked = false
 			}
 		} else {
-			socksInitProxy(net.JoinHostPort(socksTargetHost, socksTargetPort))
+			socksInitProxy()
 		}
-
 	} else {
 		if nil == bufconn {
 			conn.Close()
@@ -150,7 +142,7 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 	}
 	sniChunk := make([]byte, 0)
 	for !connClosed {
-		if remoteOpened {
+		if nil != p {
 			conn.SetReadDeadline(time.Now().Add(60 * time.Second))
 		} else {
 			conn.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
@@ -160,10 +152,10 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 			n, err := bufconn.Read(buffer)
 			if nil != err {
 				if helper.IsTimeoutError(err) {
-					if remoteOpened {
+					if nil != p {
 						testConn()
 					} else {
-						socksInitProxy(net.JoinHostPort(socksTargetHost, socksTargetPort))
+						socksInitProxy()
 					}
 					continue
 				}
@@ -182,15 +174,16 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 						chunkContent = sniChunk
 						//downgrade to use old address
 						tryRemoteResolve = false
-						socksInitProxy(net.JoinHostPort(socksTargetHost, socksTargetPort))
+						socksInitProxy()
 					} else {
 						continue
 					}
 				} else {
 					sniSniffed = true
 					chunkContent = sniChunk
-					log.Printf("Sniffed SNI:%s:%s for IP:%s:%s", sni, socksTargetPort, socksTargetHost, socksTargetPort)
-					socksInitProxy(net.JoinHostPort(sni, socksTargetPort))
+					log.Printf("Sniffed SNI:%s:%s for IP:%s:%s", sni, remotePort, remoteHost, remotePort)
+					remoteHost = sni
+					socksInitProxy()
 				}
 			}
 			if nil == p {
@@ -209,8 +202,8 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 				continue
 			}
 			if err != io.EOF && !connClosed {
-				if len(socksTargetHost) > 0 {
-					log.Printf("Session:%d read request failed from proxy connection to %s:%s for reason:%v", sid, socksTargetHost, socksTargetPort, err)
+				if len(remoteHost) > 0 {
+					log.Printf("Session:%d read request failed from proxy connection to %s:%s for reason:%v", sid, remoteHost, remotePort, err)
 				} else {
 					log.Printf("Session:%d read request failed from proxy connection for reason:%v", sid, err)
 				}
@@ -219,13 +212,29 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 		}
 
 		if nil == p {
-			p = proxy.findProxyByRequest("http", socksTargetHost, req)
+			if strings.Contains(req.Host, ":") {
+				remoteHost, remotePort, _ = net.SplitHostPort(req.Host)
+			} else {
+				remoteHost = req.Host
+			}
+			if strings.EqualFold(req.Method, "CONNECT") {
+				protocol = "https"
+				if len(remotePort) == 0 {
+					remotePort = "443"
+				}
+			} else {
+				protocol = "http"
+				if len(remotePort) == 0 {
+					remotePort = "80"
+				}
+			}
+			p = proxy.findProxyByRequest(protocol, remoteHost, req)
 			if nil == p {
 				connClosed = true
 				conn.Close()
 				return
 			}
-			//log.Printf("Session:%d select handler:%s", sid, p.Name())
+			log.Printf("Session:%d select channel:%s for %s", sid, p.Config().Name, remoteHost)
 		}
 		reqUrl := req.URL.String()
 		if strings.EqualFold(req.Method, "Connect") {
@@ -239,7 +248,7 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 				}
 			}
 		}
-		log.Printf("Session:%d request:%s %v", sid, req.Method, reqUrl)
+		//log.Printf("Session:%d request:%s %v", sid, req.Method, reqUrl)
 
 		req.Header.Del("Proxy-Connection")
 		ev := event.NewHTTPRequestEvent(req)
@@ -261,15 +270,14 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 			}
 		}
 
-		if tryRemoteResolve && p.Config().IsDirect() && net.ParseIP(socksTargetHost) != nil && session.Remote == nil {
+		if tryRemoteResolve && p.Config().IsDirect() && net.ParseIP(remoteHost) != nil && session.Remote == nil {
 			tcpOpen := &event.TCPOpenEvent{}
 			tcpOpen.SetId(sid)
-			tcpOpen.Addr = net.JoinHostPort(socksTargetHost, socksTargetPort)
+			tcpOpen.Addr = net.JoinHostPort(remoteHost, remotePort)
 			p.Serve(session, tcpOpen)
 		}
 
 		p.Serve(session, ev)
-		remoteOpened = true
 		if maxBody < 0 && req.ContentLength != 0 {
 			for nil != req.Body {
 				buffer := make([]byte, 8192)

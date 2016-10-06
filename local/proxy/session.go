@@ -60,7 +60,12 @@ func dumpProxySessions(w io.Writer) {
 	sessionMutex.Lock()
 	defer sessionMutex.Unlock()
 	for _, s := range sessions {
-		fmt.Fprintf(w, "Session[%d]:proxy=%s[%d],age=%v\n", s.id, s.Remote.Addr, s.Remote.Index, time.Now().Sub(s.createTime))
+		if nil != s.Remote {
+			fmt.Fprintf(w, "Session[%d]:proxy=%s[%d],age=%v\n", s.id, s.Remote.Addr, s.Remote.Index, time.Now().Sub(s.createTime))
+		} else {
+			fmt.Fprintf(w, "Session[%d]:nil remote,age=%v\n", s.id, time.Now().Sub(s.createTime))
+			//delete(sessions, s.id)
+		}
 	}
 }
 

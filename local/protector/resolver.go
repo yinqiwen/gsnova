@@ -11,13 +11,13 @@ import (
 	"github.com/miekg/dns"
 )
 
-type record struct {
-	IP  net.IP
-	ttl time.Duration
+type DNSRecord struct {
+	IP       net.IP
+	ExpireAt time.Time
 }
 
 type DnsResponse struct {
-	records []record
+	records []DNSRecord
 }
 
 // PickRandomIP picks a random IP address from a DNS response
@@ -36,13 +36,20 @@ func (response *DnsResponse) PickRandomIP() (net.IP, error) {
 	return record.IP, nil
 }
 
-// dnsLookup is used whenever we need to conduct a DNS query over a given TCP connection
-func dnsLookup(addr string, conn net.Conn) (*DnsResponse, error) {
+func (response *DnsResponse) PickRecord() (*DNSRecord, error) {
+	length := int64(len(response.records))
+	if length < 1 {
+		return nil, errors.New("no IP address")
+	}
+	return &response.records[0], nil
+}
 
-	log.Printf("Doing a DNS lookup on %s", addr)
+// dnsLookup is used whenever we need to conduct a DNS query over a given TCP connection
+func DnsLookup(addr string, conn net.Conn) (*DnsResponse, error) {
+	//log.Printf("Doing a DNS lookup on %s", addr)
 
 	dnsResponse := &DnsResponse{
-		records: make([]record, 0),
+		records: make([]DNSRecord, 0),
 	}
 
 	// create the connection to the DNS server
@@ -63,7 +70,7 @@ func dnsLookup(addr string, conn net.Conn) (*DnsResponse, error) {
 		log.Printf("Could not process DNS response: %v", err)
 		return nil, err
 	}
-
+	now := time.Now()
 	// iterate over RRs containing the DNS answer
 	for _, answer := range response.Answer {
 		if a, ok := answer.(*dns.A); ok {
@@ -71,10 +78,11 @@ func dnsLookup(addr string, conn net.Conn) (*DnsResponse, error) {
 			// the A records in the RDATA section of the DNS answer
 			// contains the actual IP address
 			dnsResponse.records = append(dnsResponse.records,
-				record{
-					IP:  a.A,
-					ttl: time.Duration(a.Hdr.Ttl) * time.Second,
+				DNSRecord{
+					IP:       a.A,
+					ExpireAt: now.Add(time.Duration(a.Hdr.Ttl) * time.Second),
 				})
+			//log.Printf("###TTL:%d", a.Hdr.Ttl)
 		}
 	}
 	return dnsResponse, nil
