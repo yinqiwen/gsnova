@@ -50,9 +50,9 @@
 				//// 'Direct/TLSDirect' MUST  proxy channel names confgiured below 
 				{"Protocol":["dns", "udp"],"Remote":"Direct"},
 				// Support rules 'IsCNIP/InHosts/BlockedByGFW'
-				{"Rule":["IsCNIP"],"Remote":"Direct"},
 				{"Rule":["InHosts"],"Remote":"TLSDirect"},
-				{"Rule":["BlockedByGFW"],"Remote":"TLSDirect"},
+				{"Rule":["!IsCNIP"],"Remote":"heroku"},
+				{"Rule":["BlockedByGFW"],"Remote":"heroku"},
 				{"Host":["*"],"Remote":"Direct"}
 			]
 		},

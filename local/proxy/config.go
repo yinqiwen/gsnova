@@ -266,7 +266,6 @@ type AdminConfig struct {
 }
 
 type GFWListConfig struct {
-	Enable   bool
 	URL      string
 	UserRule []string
 	Proxy    string
