@@ -53,7 +53,7 @@
 				{"Rule":["InHosts"],"Remote":"TLSDirect"},
 				{"Rule":["!IsCNIP"],"Remote":"heroku"},
 				{"Rule":["BlockedByGFW"],"Remote":"heroku"},
-				{"Host":["*pornhub.com"],"Remote":"Reject"},
+				{"Host":["*notexist_domain.com"],"Remote":"Reject"},
 				{"Host":["*"],"Remote":"Direct"},
 				{"URL":["*"],"Remote":"Direct"},
 				{"Method":["CONNECT"],"Remote":"Direct"}
