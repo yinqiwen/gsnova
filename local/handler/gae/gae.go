@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"regexp"
 	"strings"
 
 	"github.com/yinqiwen/gsnova/common/event"
@@ -12,9 +11,8 @@ import (
 )
 
 type GAEProxy struct {
-	cs               *proxy.RemoteChannelTable
-	injectRangeRegex []*regexp.Regexp
-	conf             proxy.ProxyChannelConfig
+	cs   *proxy.RemoteChannelTable
+	conf proxy.ProxyChannelConfig
 }
 
 func (p *GAEProxy) Config() *proxy.ProxyChannelConfig {
@@ -82,9 +80,9 @@ func (p *GAEProxy) Serve(session *proxy.ProxySession, ev event.Event) error {
 			if len(rangeHeader) > 0 {
 				rangeFetch = true
 			}
-			if !rangeFetch && strings.EqualFold(req.Method, "Get") && len(p.injectRangeRegex) > 0 && proxy.MatchRegexs(req.GetHost(), p.injectRangeRegex) {
-				rangeFetch = true
-			}
+			// if !rangeFetch && strings.EqualFold(req.Method, "Get") && len(p.injectRangeRegex) > 0 && proxy.MatchPatterns(req.GetHost(), p.injectRangeRegex) {
+			// 	rangeFetch = true
+			// }
 			adjustResp := func(r *event.HTTPResponseEvent) {
 				r.Headers.Del("Transfer-Encoding")
 				lenh := r.Headers.Get("Content-Length")

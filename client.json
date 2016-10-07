@@ -53,7 +53,10 @@
 				{"Rule":["InHosts"],"Remote":"TLSDirect"},
 				{"Rule":["!IsCNIP"],"Remote":"heroku"},
 				{"Rule":["BlockedByGFW"],"Remote":"heroku"},
-				{"Host":["*"],"Remote":"Direct"}
+				{"Host":["*pornhub.com"],"Remote":"Reject"},
+				{"Host":["*"],"Remote":"Direct"},
+				{"URL":["*"],"Remote":"Direct"},
+				{"Method":["CONNECT"],"Remote":"Direct"}
 			]
 		},
 		{
@@ -77,7 +80,7 @@
 		}
 	],
 
-    //there is 4 channel types: direct/gae/paas/vps
+    //there is 5 channel types: direct/reject/gae/paas/vps
 	"Channel":[
 		{
 			"Enable":true,
@@ -90,6 +93,12 @@
 			"Name":"TLSDirect",
 			"SNI":["www.google.com.hk", "www.google.co.jp"],
 			"ForceTLS":true
+		},
+		{
+			"Enable":true,
+			//'reject' channel would reject all traffic
+			"Type":"reject",
+			"Name":"Reject"
 		},
 		{
 			"Enable":false,

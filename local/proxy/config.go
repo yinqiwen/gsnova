@@ -5,7 +5,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"regexp"
+	"path/filepath"
 	"strings"
 
 	"github.com/yinqiwen/gsnova/common/gfwlist"
@@ -89,14 +89,10 @@ func (c *ProxyChannelConfig) ProxyURL() *url.URL {
 type PACConfig struct {
 	Method   []string
 	Host     []string
-	Path     []string
+	URL      []string
 	Rule     []string
 	Protocol []string
 	Remote   string
-
-	methodRegex []*regexp.Regexp
-	hostRegex   []*regexp.Regexp
-	pathRegex   []*regexp.Regexp
 }
 
 func (pac *PACConfig) ruleInHosts(req *http.Request) bool {
@@ -170,36 +166,22 @@ func (pac *PACConfig) matchRules(ip string, req *http.Request) bool {
 	return ok
 }
 
-func MatchRegexs(str string, rules []*regexp.Regexp) bool {
+func MatchPatterns(str string, rules []string) bool {
 	if len(rules) == 0 {
 		return true
 	}
 	str = strings.ToLower(str)
-	for _, regex := range rules {
-		if regex.MatchString(str) {
+	for _, pattern := range rules {
+		matched, err := filepath.Match(pattern, str)
+		if nil != err {
+			log.Printf("Invalid pattern:%s with reason:%v", pattern, err)
+			continue
+		}
+		if matched {
 			return true
 		}
 	}
 	return false
-}
-
-func newRegex(rules []string) ([]*regexp.Regexp, error) {
-	regexs := make([]*regexp.Regexp, 0)
-	for _, originrule := range rules {
-		if originrule == "*" && len(rules) == 1 {
-			break
-		}
-		rule := strings.Replace(strings.ToLower(originrule), "*", ".*", -1)
-		reg, err := regexp.Compile(rule)
-		if nil != err {
-			log.Printf("Invalid pattern:%s for reason:%v", originrule, err)
-			return nil, err
-		} else {
-			regexs = append(regexs, reg)
-		}
-	}
-
-	return regexs, nil
 }
 
 func (pac *PACConfig) Match(protocol string, ip string, req *http.Request) bool {
@@ -211,13 +193,17 @@ func (pac *PACConfig) Match(protocol string, ip string, req *http.Request) bool 
 	if !ret {
 		return false
 	}
+	host := req.Host
 	if nil == req {
-		if len(pac.hostRegex) > 0 || len(pac.methodRegex) > 0 || len(pac.pathRegex) > 0 {
+		if len(pac.Host) > 0 || len(pac.Method) > 0 || len(pac.URL) > 0 {
 			return false
 		}
 		return true
 	}
-	return MatchRegexs(req.Host, pac.hostRegex) && MatchRegexs(req.Method, pac.methodRegex) && MatchRegexs(req.URL.Path, pac.pathRegex)
+	if len(pac.Host) > 0 && strings.Contains(host, ":") {
+		host, _, _ = net.SplitHostPort(host)
+	}
+	return MatchPatterns(host, pac.Host) && MatchPatterns(req.Method, pac.Method) && MatchPatterns(req.URL.String(), pac.URL)
 }
 
 type ProxyConfig struct {
@@ -307,9 +293,6 @@ func (cfg *LocalConfig) init() error {
 	gfwlistEnable := false
 	for i, _ := range cfg.Proxy {
 		for j, _ := range cfg.Proxy[i].PAC {
-			cfg.Proxy[i].PAC[j].hostRegex, _ = newRegex(cfg.Proxy[i].PAC[j].Host)
-			cfg.Proxy[i].PAC[j].methodRegex, _ = newRegex(cfg.Proxy[i].PAC[j].Method)
-			cfg.Proxy[i].PAC[j].pathRegex, _ = newRegex(cfg.Proxy[i].PAC[j].Path)
 			rules := cfg.Proxy[i].PAC[j].Rule
 			for _, r := range rules {
 				if strings.Contains(r, BlockedByGFWRule) || strings.Contains(r, IsCNIPRule) {

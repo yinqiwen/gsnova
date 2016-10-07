@@ -5,6 +5,7 @@ import (
 	_ "github.com/yinqiwen/gsnova/local/handler/direct"
 	_ "github.com/yinqiwen/gsnova/local/handler/gae"
 	_ "github.com/yinqiwen/gsnova/local/handler/paas"
+	_ "github.com/yinqiwen/gsnova/local/handler/reject"
 	_ "github.com/yinqiwen/gsnova/local/handler/vps"
 	"github.com/yinqiwen/gsnova/local/proxy"
 )
