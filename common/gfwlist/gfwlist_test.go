@@ -4,6 +4,7 @@ import (
 	"log"
 	"net/http"
 	"testing"
+	"time"
 )
 
 func TestGFWList(t *testing.T) {
@@ -13,7 +14,11 @@ func TestGFWList(t *testing.T) {
 		log.Printf("#####%v", err)
 		return
 	}
-	req, _ := http.NewRequest("GET", "https://r2---sn-oguesnze.googlevideo.com", nil)
+	req, _ := http.NewRequest("GET", "https://static.soup.io", nil)
+	s1 := time.Now()
+	for i := 0; i < 100; i++ {
+		gfwlist.IsBlockedByGFW(req)
+	}
 	v := gfwlist.IsBlockedByGFW(req)
-	log.Printf("#####match %v", v)
+	log.Printf("#####match %v %v", v, time.Now().Sub(s1))
 }

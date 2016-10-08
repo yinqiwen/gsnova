@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -69,6 +70,7 @@ type gfwListRule interface {
 }
 
 type GFWList struct {
+	ruleMap  map[string]gfwListRule
 	ruleList []gfwListRule
 	mutex    sync.Mutex
 }
@@ -82,7 +84,32 @@ func (gfw *GFWList) clone(n *GFWList) {
 func (gfw *GFWList) IsBlockedByGFW(req *http.Request) bool {
 	gfw.mutex.Lock()
 	defer gfw.mutex.Unlock()
-	for _, rule := range gfw.ruleList {
+	domain := req.Host
+	rootDomain := domain
+	if strings.Contains(rootDomain, ":") {
+		domain, _, _ = net.SplitHostPort(rootDomain)
+		rootDomain = domain
+	}
+	ss := strings.Split(domain, ".")
+	if len(ss) > 2 {
+		rootDomain = ss[len(ss)-2] + "." + ss[len(ss)-1]
+		if len(ss[len(ss)-2]) < 4 && len(ss) >= 3 {
+			rootDomain = ss[len(ss)-3] + "." + rootDomain
+		}
+	}
+	rule, exist := gfw.ruleMap[domain]
+	if !exist {
+		rule, exist = gfw.ruleMap[rootDomain]
+	}
+	if exist {
+		matched := rule.match(req)
+		if _, ok := rule.(*whiteListRule); ok {
+			return !matched
+		}
+		return matched
+	}
+
+	for _, rule = range gfw.ruleList {
 		if rule.match(req) {
 			if _, ok := rule.(*whiteListRule); ok {
 				//log.Printf("#### %s is in whilte list %v", req.Host, rule.(*whiteListRule).r)
@@ -94,17 +121,10 @@ func (gfw *GFWList) IsBlockedByGFW(req *http.Request) bool {
 	return false
 }
 
-// func replaceRegexChars(rule string) string {
-// 	rule = strings.TrimSpace(rule)
-// 	rule = strings.Replace(rule, ".", "\\.", -1)
-// 	rule = strings.Replace(rule, "?", "\\?", -1)
-// 	rule = strings.Replace(rule, "*", ".*", -1)
-// 	return rule
-// }
-
 func Parse(rules string) (*GFWList, error) {
 	reader := bufio.NewReader(strings.NewReader(rules))
 	gfw := new(GFWList)
+	gfw.ruleMap = make(map[string]gfwListRule)
 	//i := 0
 	for {
 		line, _, err := reader.ReadLine()
@@ -118,6 +138,7 @@ func Parse(rules string) (*GFWList, error) {
 		}
 		var rule gfwListRule
 		isWhileListRule := false
+		fastMatch := false
 		if strings.HasPrefix(str, "@@") {
 			str = str[2:]
 			isWhileListRule = true
@@ -127,17 +148,31 @@ func Parse(rules string) (*GFWList, error) {
 			rule = &regexRule{str}
 		} else {
 			if strings.HasPrefix(str, "||") {
-				rule = &hostWildcardRule{str[2:]}
+				str = str[2:]
+				rule = &hostWildcardRule{str}
+				fastMatch = true
 			} else if strings.HasPrefix(str, "|") {
 				rule = &urlWildcardRule{str[1:], true}
 			} else {
-				rule = &urlWildcardRule{str, false}
+				if !strings.Contains(str, "/") {
+					fastMatch = true
+					rule = &hostWildcardRule{str}
+					if strings.HasPrefix(str, ".") {
+						str = str[1:]
+					}
+				} else {
+					rule = &urlWildcardRule{str, false}
+				}
 			}
 		}
 		if isWhileListRule {
 			rule = &whiteListRule{rule}
 		}
-		gfw.ruleList = append(gfw.ruleList, rule)
+		if fastMatch {
+			gfw.ruleMap[str] = rule
+		} else {
+			gfw.ruleList = append(gfw.ruleList, rule)
+		}
 	}
 	return gfw, nil
 }
