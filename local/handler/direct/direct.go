@@ -188,7 +188,7 @@ func newDirectChannel(ev event.Event, conf *proxy.ProxyChannelConfig) (*directCh
 			err = helper.Socks5ProxyConnect(conf.ProxyURL(), c, net.JoinHostPort(host, port))
 		} else {
 			if needHttpsConnect {
-				err = helper.HTTPProxyConnect(conf.ProxyURL(), c, net.JoinHostPort(host, port))
+				err = helper.HTTPProxyConnect(conf.ProxyURL(), c, "https://"+net.JoinHostPort(host, port))
 			}
 		}
 	}
