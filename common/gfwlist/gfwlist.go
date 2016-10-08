@@ -81,35 +81,45 @@ func (gfw *GFWList) clone(n *GFWList) {
 	gfw.ruleList = n.ruleList
 }
 
-func (gfw *GFWList) IsBlockedByGFW(req *http.Request) bool {
-	gfw.mutex.Lock()
-	defer gfw.mutex.Unlock()
+func (gfw *GFWList) FastMatchDoamin(req *http.Request) (bool, bool) {
 	domain := req.Host
 	rootDomain := domain
-	if strings.Contains(rootDomain, ":") {
-		domain, _, _ = net.SplitHostPort(rootDomain)
+	if strings.Contains(domain, ":") {
+		domain, _, _ = net.SplitHostPort(domain)
 		rootDomain = domain
 	}
-	ss := strings.Split(domain, ".")
-	if len(ss) > 2 {
-		rootDomain = ss[len(ss)-2] + "." + ss[len(ss)-1]
-		if len(ss[len(ss)-2]) < 4 && len(ss) >= 3 {
-			rootDomain = ss[len(ss)-3] + "." + rootDomain
-		}
-	}
+
 	rule, exist := gfw.ruleMap[domain]
 	if !exist {
+		ss := strings.Split(domain, ".")
+		if len(ss) > 2 {
+			rootDomain = ss[len(ss)-2] + "." + ss[len(ss)-1]
+			if len(ss[len(ss)-2]) < 4 && len(ss) >= 3 {
+				rootDomain = ss[len(ss)-3] + "." + rootDomain
+			}
+		}
 		rule, exist = gfw.ruleMap[rootDomain]
 	}
 	if exist {
 		matched := rule.match(req)
 		if _, ok := rule.(*whiteListRule); ok {
-			return !matched
+			return !matched, true
 		}
-		return matched
+		return matched, true
+	}
+	return false, false
+}
+
+func (gfw *GFWList) IsBlockedByGFW(req *http.Request) bool {
+	gfw.mutex.Lock()
+	defer gfw.mutex.Unlock()
+
+	fastMatchResult, exist := gfw.FastMatchDoamin(req)
+	if exist {
+		return fastMatchResult
 	}
 
-	for _, rule = range gfw.ruleList {
+	for _, rule := range gfw.ruleList {
 		if rule.match(req) {
 			if _, ok := rule.(*whiteListRule); ok {
 				//log.Printf("#### %s is in whilte list %v", req.Host, rule.(*whiteListRule).r)

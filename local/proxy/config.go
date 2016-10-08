@@ -193,13 +193,13 @@ func (pac *PACConfig) Match(protocol string, ip string, req *http.Request) bool 
 	if !ret {
 		return false
 	}
-	host := req.Host
 	if nil == req {
 		if len(pac.Host) > 0 || len(pac.Method) > 0 || len(pac.URL) > 0 {
 			return false
 		}
 		return true
 	}
+	host := req.Host
 	if len(pac.Host) > 0 && strings.Contains(host, ":") {
 		host, _, _ = net.SplitHostPort(host)
 	}

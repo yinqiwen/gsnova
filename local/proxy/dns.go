@@ -79,7 +79,8 @@ func dnsGetDoaminIP(domain string) (string, error) {
 		var dnsServers []string
 		if nil != mygfwlist {
 			connReq, _ := http.NewRequest("CONNECT", "https://"+domain, nil)
-			if !mygfwlist.IsBlockedByGFW(connReq) {
+			isBlocked, _ := mygfwlist.FastMatchDoamin(connReq)
+			if !isBlocked {
 				dnsServers = GConf.LocalDNS.FastDNS
 			}
 		}
@@ -98,7 +99,11 @@ func dnsGetDoaminIP(domain string) (string, error) {
 		}
 		defer c.Close()
 		c.SetReadDeadline(time.Now().Add(3 * time.Second))
-		res, err := protector.DnsLookup(domain, c)
+		if pc, ok := c.(getConnIntf); ok {
+			c = pc.GetConn()
+		}
+		var res *protector.DnsResponse
+		res, err = protector.DnsLookup(domain, c)
 		if nil != err {
 			return "", err
 		}
