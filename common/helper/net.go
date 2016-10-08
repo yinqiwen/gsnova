@@ -226,9 +226,6 @@ func IsPrivateIP(ip string) bool {
 }
 
 func HTTPProxyConnect(proxyURL *url.URL, c net.Conn, addr string) error {
-	if !strings.Contains(addr, "://") {
-		addr = "https://" + addr
-	}
 	connReq, err := http.NewRequest("Connect", addr, nil)
 	if err != nil {
 		return err
