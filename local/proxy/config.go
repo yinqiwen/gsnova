@@ -145,7 +145,7 @@ func (pac *PACConfig) matchRules(ip string, req *http.Request) bool {
 			} else {
 				var err error
 				if net.ParseIP(ip) == nil {
-					ip, err = dnsGetDoaminIP(ip)
+					ip, err = DnsGetDoaminIP(ip)
 				}
 				if nil == err {
 					_, err = cnIPRange.FindCountry(ip)

@@ -129,7 +129,7 @@ func dnsQueryRaw(r []byte) ([]byte, error) {
 	return res.Pack()
 }
 
-func dnsGetDoaminIP(domain string) (string, error) {
+func DnsGetDoaminIP(domain string) (string, error) {
 	m := new(dns.Msg)
 	m.Id = dns.Id()
 	m.SetQuestion(dns.Fqdn(domain), dns.TypeA)

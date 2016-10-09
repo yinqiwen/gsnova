@@ -176,7 +176,14 @@ func newDirectChannel(ev event.Event, conf *proxy.ProxyChannelConfig) (*directCh
 	} else {
 		addr = conf.ProxyURL().Host
 	}
-
+	connectHost, connectPort, _ := net.SplitHostPort(addr)
+	if net.ParseIP(connectHost) == nil {
+		iphost, err := proxy.DnsGetDoaminIP(connectHost)
+		if nil != err {
+			return nil, err
+		}
+		addr = net.JoinHostPort(iphost, connectPort)
+	}
 	dailTimeout := conf.DialTimeout
 	if 0 == dailTimeout {
 		dailTimeout = 5
