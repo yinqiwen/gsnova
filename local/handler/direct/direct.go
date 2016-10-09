@@ -143,17 +143,17 @@ func newDirectChannel(ev event.Event, conf *proxy.ProxyChannelConfig) (*directCh
 		}
 	}
 
-	isIP := net.ParseIP(host) != nil
-	if nil == conf.ProxyURL() && !isIP && !hosts.InHosts(host) && hosts.InHosts(hosts.SNIProxy) && port == "443" && network == "tcp" {
-		host = hosts.SNIProxy
+	if len(conf.SNIProxy) > 0 && port == "443" && network == "tcp" {
+		host = conf.SNIProxy
 	}
+	isIP := net.ParseIP(host) != nil
 	useTLS := false
 	if conf.ForceTLS && port == "80" && hosts.InHosts(host) {
 		useTLS = true
 	} else {
 		useTLS = false
 	}
-	if !isIP && nil == conf.ProxyURL() {
+	if !isIP {
 		host = hosts.GetHost(host)
 	}
 
@@ -161,7 +161,7 @@ func newDirectChannel(ev event.Event, conf *proxy.ProxyChannelConfig) (*directCh
 	addr := ""
 	if nil == conf.ProxyURL() {
 		if useTLS {
-			addr = addr + ":443"
+			addr = host + ":443"
 		} else {
 			if len(port) > 0 {
 				addr = host + ":" + port
