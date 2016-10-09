@@ -1,4 +1,4 @@
 package local
 
 //'r1' means revision 1
-const Version = "r6"
+const Version = "r7"
