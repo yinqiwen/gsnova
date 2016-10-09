@@ -12,11 +12,37 @@ import (
 	"github.com/getlantern/netx"
 	"github.com/hashicorp/golang-lru"
 	"github.com/miekg/dns"
-	"github.com/yinqiwen/gsnova/local/protector"
 )
 
 var errNoDNServer = errors.New("No DNS server configured.")
 var dnsCache *lru.Cache
+
+type dnsCacheRecord struct {
+	expireAt time.Time
+	res      *dns.Msg
+}
+
+func pickIP(res *dns.Msg) string {
+	for _, answer := range res.Answer {
+		if a, ok := answer.(*dns.A); ok {
+			return a.A.String()
+		}
+	}
+	return ""
+}
+
+func newDNSCacheRecord(res *dns.Msg) *dnsCacheRecord {
+	record := new(dnsCacheRecord)
+	record.res = res
+	now := time.Now()
+	for _, answer := range res.Answer {
+		if a, ok := answer.(*dns.A); ok {
+			record.expireAt = now.Add(time.Duration(a.Hdr.Ttl+10) * time.Second)
+			break
+		}
+	}
+	return record
+}
 
 func selectDNSServer(servers []string) string {
 	serverLen := len(servers)
@@ -32,13 +58,49 @@ type getConnIntf interface {
 }
 
 func dnsQuery(r *dns.Msg) (*dns.Msg, error) {
+	dnsServers := GConf.LocalDNS.TrustedDNS
+	var record *dnsCacheRecord
+	var domain string
+	useTrustedDNS := true
+	if len(r.Question) == 1 && r.Question[0].Qtype == dns.TypeA && dns.IsFqdn(r.Question[0].Name) {
+		domain = r.Question[0].Name
+		domain = domain[0 : len(domain)-1]
+		if nil != dnsCache {
+			item, exist := dnsCache.Get(domain)
+			if exist {
+				record = item.(*dnsCacheRecord)
+				if time.Now().After(record.expireAt) {
+					record = nil
+					dnsCache.Remove(domain)
+				} else {
+					return record.res, nil
+				}
+			}
+		}
+		if nil != mygfwlist {
+			connReq, _ := http.NewRequest("CONNECT", "https://"+domain, nil)
+			isBlocked, _ := mygfwlist.FastMatchDoamin(connReq)
+			if !isBlocked {
+				dnsServers = GConf.LocalDNS.FastDNS
+				useTrustedDNS = false
+			}
+		}
+	}
+	if len(dnsServers) == 0 {
+		dnsServers = GConf.LocalDNS.TrustedDNS
+		useTrustedDNS = true
+	}
+	if len(dnsServers) == 0 {
+		log.Printf("At least one DNS server need to be configured in 'FastDNS/TrustedDNS'")
+		return nil, errNoDNServer
+	}
+	server := selectDNSServer(dnsServers)
 	network := "udp"
-	if GConf.LocalDNS.TCPConnect {
+	if GConf.LocalDNS.TCPConnect && useTrustedDNS {
 		network = "tcp"
 	}
-	server := selectDNSServer(GConf.LocalDNS.TrustedDNS)
 	log.Printf("DNS query to %s", server)
-	c, err := netx.DialTimeout(network, server, 3*time.Second)
+	c, err := netx.DialTimeout(network, server, 2*time.Second)
 	if nil != err {
 		return nil, err
 	}
@@ -49,7 +111,12 @@ func dnsQuery(r *dns.Msg) (*dns.Msg, error) {
 	}
 	dnsConn.Conn = c
 	dnsConn.WriteMsg(r)
-	return dnsConn.ReadMsg()
+	res, err1 := dnsConn.ReadMsg()
+	if nil == err1 && nil != dnsCache && len(domain) > 0 {
+		record = newDNSCacheRecord(res)
+		dnsCache.Add(domain, record)
+	}
+	return res, err1
 }
 
 func dnsQueryRaw(r []byte) ([]byte, error) {
@@ -63,59 +130,15 @@ func dnsQueryRaw(r []byte) ([]byte, error) {
 }
 
 func dnsGetDoaminIP(domain string) (string, error) {
-	var record *protector.DNSRecord
-	if nil != dnsCache {
-		item, exist := dnsCache.Get(domain)
-		if exist {
-			record = item.(*protector.DNSRecord)
-			if time.Now().After(record.ExpireAt) {
-				record = nil
-				dnsCache.Remove(domain)
-			}
-		}
+	m := new(dns.Msg)
+	m.Id = dns.Id()
+	m.SetQuestion(dns.Fqdn(domain), dns.TypeA)
+	m.RecursionDesired = true
+	res, err := dnsQuery(m)
+	if nil != err {
+		return "", err
 	}
-
-	if nil == record {
-		var dnsServers []string
-		if nil != mygfwlist {
-			connReq, _ := http.NewRequest("CONNECT", "https://"+domain, nil)
-			isBlocked, _ := mygfwlist.FastMatchDoamin(connReq)
-			if !isBlocked {
-				dnsServers = GConf.LocalDNS.FastDNS
-			}
-		}
-		if len(dnsServers) == 0 {
-			dnsServers = GConf.LocalDNS.TrustedDNS
-		}
-		if len(dnsServers) == 0 {
-			log.Printf("At least one DNS server need to be configured in 'FastDNS/TrustedDNS'")
-			return "", errNoDNServer
-		}
-		server := selectDNSServer(dnsServers)
-		log.Printf("DNS query %s to %s", domain, server)
-		c, err := netx.DialTimeout("udp", server, 2*time.Second)
-		if nil != err {
-			return "", err
-		}
-		defer c.Close()
-		c.SetReadDeadline(time.Now().Add(3 * time.Second))
-		if pc, ok := c.(getConnIntf); ok {
-			c = pc.GetConn()
-		}
-		var res *protector.DnsResponse
-		res, err = protector.DnsLookup(domain, c)
-		if nil != err {
-			return "", err
-		}
-		record, err = res.PickRecord()
-		if nil != err {
-			return "", err
-		}
-		if nil != dnsCache {
-			dnsCache.Add(domain, record)
-		}
-	}
-	return record.IP.String(), nil
+	return pickIP(res), nil
 }
 
 func proxyDNS(w dns.ResponseWriter, r *dns.Msg) {
