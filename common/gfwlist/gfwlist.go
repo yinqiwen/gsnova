@@ -8,7 +8,6 @@ import (
 	"log"
 	"net"
 	"net/http"
-	"net/url"
 	"os"
 	"regexp"
 	"strings"
@@ -195,15 +194,15 @@ func ParseRaw(rules string) (*GFWList, error) {
 	return Parse(string(content))
 }
 
-func NewGFWList(u string, proxy string, userRules []string, cacheFile string, watch bool) (*GFWList, error) {
-	hc := &http.Client{}
-	if len(proxy) > 0 {
-		hc.Transport = &http.Transport{
-			Proxy: func(*http.Request) (*url.URL, error) {
-				return url.Parse(proxy)
-			},
-		}
-	}
+func NewGFWList(u string, hc *http.Client, userRules []string, cacheFile string, watch bool) (*GFWList, error) {
+	// hc := &http.Client{}
+	// if len(proxy) > 0 {
+	// 	hc.Transport = &http.Transport{
+	// 		Proxy: func(*http.Request) (*url.URL, error) {
+	// 			return url.Parse(proxy)
+	// 		},
+	// 	}
+	// }
 	nextFetchTime := 6 * time.Hour
 	firstFetch := true
 	fetch := func() (string, error) {

@@ -131,10 +131,6 @@ func SyncConfig(addr string, localDir string) error {
 		if nil != err {
 			return err
 		}
-		err = syncConfigFile(addr, localDir, conf, "apnic_cn.txt")
-		if nil != err {
-			return err
-		}
 		log.Printf("Synced config:%s success", conf)
 	}
 	return nil

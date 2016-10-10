@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/yinqiwen/gsnova/common/gfwlist"
 	"github.com/yinqiwen/gsnova/common/helper"
@@ -15,6 +16,7 @@ import (
 
 var GConf LocalConfig
 var mygfwlist *gfwlist.GFWList
+var cnIPRange *IPRangeHolder
 
 const (
 	BlockedByGFWRule = "BlockedByGFW"
@@ -137,10 +139,12 @@ func (pac *PACConfig) matchRules(ip string, req *http.Request) bool {
 					log.Printf("#### %s is NOT BlockedByGFW", req.Host)
 				}
 			} else {
+				ok = true
 				log.Printf("NIL GFWList object or request")
 			}
 		} else if strings.EqualFold(rule, IsCNIPRule) {
-			if len(ip) == 0 {
+			if len(ip) == 0 || nil == cnIPRange {
+				log.Printf("NIL CNIP content  or IP/Domain")
 				ok = false
 			} else {
 				var err error
@@ -151,8 +155,9 @@ func (pac *PACConfig) matchRules(ip string, req *http.Request) bool {
 					_, err = cnIPRange.FindCountry(ip)
 				}
 				ok = (nil == err)
+				log.Printf("ip:%s is CNIP:%v", ip, ok)
 			}
-			log.Printf("ip:%s is CNIP:%v", ip, ok)
+
 		} else {
 			log.Printf("###Invalid rule:%s", rule)
 		}
@@ -291,6 +296,7 @@ func (cfg *LocalConfig) init() error {
 	}
 
 	gfwlistEnable := false
+	cnIPEnable := false
 	for i, _ := range cfg.Proxy {
 		for j, _ := range cfg.Proxy[i].PAC {
 			rules := cfg.Proxy[i].PAC[j].Rule
@@ -298,17 +304,52 @@ func (cfg *LocalConfig) init() error {
 				if strings.Contains(r, BlockedByGFWRule) || strings.Contains(r, IsCNIPRule) {
 					gfwlistEnable = true
 				}
+				if strings.Contains(r, IsCNIPRule) {
+					cnIPEnable = true
+				}
 			}
 		}
 	}
 
 	if gfwlistEnable {
 		go func() {
-			tmp, err := gfwlist.NewGFWList(cfg.GFWList.URL, cfg.GFWList.Proxy, cfg.GFWList.UserRule, proxyHome+"/gfwlist.txt", true)
+			hc, _ := NewHTTPClient(&ProxyChannelConfig{Proxy: cfg.GFWList.Proxy})
+			dst := proxyHome + "/gfwlist.txt"
+			tmp, err := gfwlist.NewGFWList(cfg.GFWList.URL, hc, cfg.GFWList.UserRule, dst, true)
 			if nil == err {
 				mygfwlist = tmp
 			} else {
 				log.Printf("[ERROR]Failed to create gfwlist  for reason:%v", err)
+			}
+		}()
+	}
+	if cnIPEnable {
+		go func() {
+			iprangeFile := proxyHome + "/" + cnIPFile
+			ipHolder, err := parseApnicIPFile(iprangeFile)
+			nextFetchTime := 1 * time.Second
+			if nil == err {
+				cnIPRange = ipHolder
+				nextFetchTime = 1 * time.Minute
+			}
+			var hc *http.Client
+			for {
+				select {
+				case <-time.After(nextFetchTime):
+					if nil == hc {
+						hc, err = NewHTTPClient(&ProxyChannelConfig{})
+					}
+					if nil != hc {
+						ipHolder, err = getCNIPRangeHolder(hc)
+						if nil != err {
+							log.Printf("[ERROR]Failed to fetch CNIP file:%v", err)
+							nextFetchTime = 1 * time.Second
+						} else {
+							nextFetchTime = 24 * time.Hour
+							cnIPRange = ipHolder
+						}
+					}
+				}
 			}
 		}()
 	}

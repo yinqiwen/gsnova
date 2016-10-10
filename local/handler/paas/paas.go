@@ -1,19 +1,13 @@
 package paas
 
 import (
-	"crypto/tls"
 	"fmt"
 	"io"
 	"log"
-	"net"
 	"net/http"
-	"net/url"
 	"strings"
-	"time"
 
-	"github.com/getlantern/netx"
 	"github.com/yinqiwen/gsnova/common/event"
-	"github.com/yinqiwen/gsnova/local/hosts"
 	"github.com/yinqiwen/gsnova/local/proxy"
 )
 
@@ -52,62 +46,16 @@ func (p *PaasProxy) Destory() error {
 func (p *PaasProxy) Init(conf proxy.ProxyChannelConfig) error {
 	p.conf = conf
 	p.cs = proxy.NewRemoteChannelTable()
-	readTimeout := conf.ReadTimeout
-	if 0 == readTimeout {
-		readTimeout = 30
+	paasHttpClient, err := proxy.NewHTTPClient(&p.conf)
+	if nil != err {
+		return err
 	}
-
-	paasDial := func(network, addr string) (net.Conn, error) {
-		host, port, _ := net.SplitHostPort(addr)
-		if port == "443" && len(conf.SNIProxy) > 0 {
-			addr = hosts.GetAddr(conf.SNIProxy, "443")
-			host, _, _ = net.SplitHostPort(addr)
-		}
-		if net.ParseIP(host) == nil {
-			tcpaddr, err := netx.Resolve("tcp", addr)
-			if nil != err {
-				return nil, err
-			}
-			addr = tcpaddr.String()
-			//addr = net.JoinHostPort(host, port)
-		}
-		log.Printf("[PAAS]Connect %s", addr)
-		dailTimeout := conf.DialTimeout
-		if 0 == dailTimeout {
-			dailTimeout = 5
-		}
-		return netx.DialTimeout(network, addr, time.Duration(dailTimeout)*time.Second)
-	}
-
-	tr := &http.Transport{
-		Dial:                  paasDial,
-		DisableCompression:    true,
-		MaxIdleConnsPerHost:   2 * int(conf.ConnsPerServer),
-		ResponseHeaderTimeout: time.Duration(readTimeout) * time.Second,
-	}
-	if len(conf.SNI) > 0 {
-		tlscfg := &tls.Config{}
-		tlscfg.InsecureSkipVerify = true
-		tlscfg.ServerName = conf.SNI[0]
-		tr.TLSClientConfig = tlscfg
-	}
-	if len(conf.Proxy) > 0 {
-		proxyUrl, err := url.Parse(conf.Proxy)
-		if nil != err {
-			return err
-		}
-		//paasLocalProxyUrl = proxyUrl
-		tr.Proxy = http.ProxyURL(proxyUrl)
-	}
-	paasHttpClient := &http.Client{}
-	paasHttpClient.Timeout = tr.ResponseHeaderTimeout
-	paasHttpClient.Transport = tr
 	for _, server := range conf.ServerList {
 		for i := 0; i < conf.ConnsPerServer; i++ {
 			var channel *proxy.RemoteChannel
 			var err error
 			if strings.HasPrefix(server, "ws://") || strings.HasPrefix(server, "wss://") {
-				channel, err = newWebsocketChannel(server, i, conf, paasDial)
+				channel, err = newWebsocketChannel(server, i, conf, paasHttpClient.Transport.(*http.Transport).Dial)
 			} else if strings.HasPrefix(server, "http://") || strings.HasPrefix(server, "https://") {
 				channel, err = newHTTPChannel(server, i, paasHttpClient, conf)
 			} else {

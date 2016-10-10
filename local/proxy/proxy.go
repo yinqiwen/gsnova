@@ -17,8 +17,6 @@ import (
 
 var proxyHome string
 
-var cnIPRange *IPRangeHolder
-
 type InternalEventMonitor func(code int, desc string) error
 
 type Feature struct {
@@ -73,17 +71,12 @@ func Start(home string, monitor InternalEventMonitor) error {
 		fmt.Printf("Failed to unmarshal json:%s to config for reason:%v", string(confdata), err)
 		return err
 	}
-	iprangeFile := home + "/apnic_cn.txt"
-	cnIPRange, err = parseApnicIPFile(iprangeFile)
-	if nil != err {
-		fmt.Printf("Failed to parse iprange file:%s for reason:%v", iprangeFile, err)
-		return err
-	}
 	err = hosts.Init(hostsConf)
 	if nil != err {
 		log.Printf("Failed to init local hosts with reason:%v.", err)
 	}
 	event.SetDefaultSecretKey(GConf.Encrypt.Method, GConf.Encrypt.Key)
+	proxyHome = home
 	GConf.init()
 	for _, conf := range GConf.Channel {
 		conf.Type = strings.ToUpper(conf.Type)
@@ -109,7 +102,6 @@ func Start(home string, monitor InternalEventMonitor) error {
 		}
 	}
 
-	proxyHome = home
 	logger.InitLogger(GConf.Log)
 	log.Printf("Starting GSnova %s.", local.Version)
 	go initDNS()

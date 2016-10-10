@@ -70,11 +70,11 @@ func (tc *tcpChannel) Open() error {
 	}
 
 	if net.ParseIP(vpsHost) == nil {
-		tcpaddr, err := netx.Resolve("tcp", hostport)
+		iphost, err := proxy.DnsGetDoaminIP(vpsHost)
 		if nil != err {
 			return err
 		}
-		hostport = tcpaddr.String()
+		hostport = net.JoinHostPort(iphost, vpsPort)
 	}
 	//log.Printf("######%s %s", vpsHost, tc.hostport)
 	timeout := time.Duration(dailTimeout) * time.Second

@@ -1,33 +1,20 @@
 package proxy
 
 import (
+	"crypto/tls"
+	"log"
 	"math/rand"
+	"net"
+	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
+	"github.com/getlantern/netx"
 	"github.com/yinqiwen/gsnova/common/event"
 	"github.com/yinqiwen/gsnova/common/helper"
+	"github.com/yinqiwen/gsnova/local/hosts"
 )
-
-// var currentDeviceId string
-
-// func getDeviceId() string {
-// 	if len(currentDeviceId) > 0 {
-// 		return currentDeviceId
-// 	}
-// 	deviceIdFile := proxyHome + "/.deviceid"
-// 	storedId, err := ioutil.ReadFile(deviceIdFile)
-// 	if nil == err && len(storedId) > 0 {
-// 		currentDeviceId = string(storedId)
-// 		currentDeviceId = strings.TrimSpace(currentDeviceId)
-// 		if len(currentDeviceId) > 0 {
-// 			return currentDeviceId
-// 		}
-// 	}
-// 	currentDeviceId = helper.RandAsciiString(32)
-// 	ioutil.WriteFile(deviceIdFile, []byte(currentDeviceId), 0660)
-// 	return currentDeviceId
-// }
 
 func NewAuthEvent(secureTransport bool) *event.AuthEvent {
 	auth := &event.AuthEvent{}
@@ -42,6 +29,57 @@ func NewAuthEvent(secureTransport bool) *event.AuthEvent {
 		auth.EncryptMethod = event.GetDefaultCryptoMethod()
 	}
 	return auth
+}
+
+func NewHTTPClient(conf *ProxyChannelConfig) (*http.Client, error) {
+	localDial := func(network, addr string) (net.Conn, error) {
+		host, port, _ := net.SplitHostPort(addr)
+		if port == "443" && len(conf.SNIProxy) > 0 {
+			addr = hosts.GetAddr(conf.SNIProxy, "443")
+			host, _, _ = net.SplitHostPort(addr)
+		}
+		if net.ParseIP(host) == nil {
+			iphost, err := DnsGetDoaminIP(host)
+			if nil != err {
+				return nil, err
+			}
+			addr = net.JoinHostPort(iphost, port)
+		}
+		dailTimeout := conf.DialTimeout
+		if 0 == dailTimeout {
+			dailTimeout = 5
+		}
+		log.Printf("[Proxy]Connect %s", addr)
+		return netx.DialTimeout(network, addr, time.Duration(dailTimeout)*time.Second)
+	}
+	readTimeout := conf.ReadTimeout
+	if 0 == readTimeout {
+		readTimeout = 30
+	}
+	tr := &http.Transport{
+		Dial:                  localDial,
+		DisableCompression:    true,
+		MaxIdleConnsPerHost:   2 * int(conf.ConnsPerServer),
+		ResponseHeaderTimeout: time.Duration(readTimeout) * time.Second,
+	}
+	if len(conf.SNI) > 0 {
+		tlscfg := &tls.Config{}
+		tlscfg.InsecureSkipVerify = true
+		tlscfg.ServerName = conf.SNI[0]
+		tr.TLSClientConfig = tlscfg
+	}
+	if len(conf.Proxy) > 0 {
+		proxyUrl, err := url.Parse(conf.Proxy)
+		if nil != err {
+			log.Printf("[ERROR]Invalid proxy url:%s to create http client.", conf.Proxy)
+			return nil, err
+		}
+		tr.Proxy = http.ProxyURL(proxyUrl)
+	}
+	hc := &http.Client{}
+	hc.Timeout = tr.ResponseHeaderTimeout
+	hc.Transport = tr
+	return hc, nil
 }
 
 // func FillNOnce(auth *event.AuthEvent, nonceLen int) {

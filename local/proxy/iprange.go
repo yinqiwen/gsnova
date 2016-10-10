@@ -4,7 +4,10 @@ import (
 	"bufio"
 	"bytes"
 	"errors"
+	"fmt"
+	"io"
 	"log"
+	"net/http"
 	"os"
 	"sort"
 	"strconv"
@@ -14,6 +17,8 @@ import (
 )
 
 var errIPRangeNotMatch = errors.New("No ip range could match the ip")
+
+const cnIPFile = "apnic_cn.txt"
 
 type IPRange struct {
 	Start, End uint64
@@ -87,23 +92,31 @@ func (h *IPRangeHolder) FindCountry(ip string) (string, error) {
 	return "", errIPRangeNotMatch
 }
 
-func parseApnicIPFile(name string) (*IPRangeHolder, error) {
-	var file *os.File
+func parseApnicIPReader(rc io.ReadCloser, persist bool) (*IPRangeHolder, error) {
 	var err error
-	if file, err = os.Open(name); err != nil {
-		return nil, err
-	}
-
-	reader := bufio.NewReader(file)
+	reader := bufio.NewReader(rc)
 	var buffer bytes.Buffer
 	var (
 		part   []byte
 		prefix bool
 	)
-
+	defer rc.Close()
 	holder := new(IPRangeHolder)
+	var perststFile *os.File
+	if persist {
+		var err error
+		perststFile, err = os.Create(proxyHome + "/" + cnIPFile)
+		if nil == err {
+			defer perststFile.Close()
+		} else {
+			log.Printf("[ERROR]Failed to open CN IP file:%v", err)
+		}
+	}
 	for {
 		if part, prefix, err = reader.ReadLine(); err != nil {
+			if err != io.EOF {
+				return nil, err
+			}
 			break
 		}
 		buffer.Write(part)
@@ -120,11 +133,35 @@ func parseApnicIPFile(name string) (*IPRangeHolder, error) {
 					ipcount, _ := strconv.ParseUint(sp[4], 10, 32)
 					tmp := &IPRange{uint64(startip), uint64(startip) + uint64(ipcount-1), sp[1]}
 					holder.ranges = append(holder.ranges, tmp)
+					if nil != perststFile {
+						perststFile.Write([]byte(line))
+						perststFile.Write([]byte("\r\n"))
+					}
 				}
 			}
 		}
 	}
-	file.Close()
 	holder.sort()
 	return holder, nil
+}
+
+func parseApnicIPFile(name string) (*IPRangeHolder, error) {
+	var file *os.File
+	var err error
+	if file, err = os.Open(name); err != nil {
+		return nil, err
+	}
+	return parseApnicIPReader(file, false)
+}
+
+func getCNIPRangeHolder(hc *http.Client) (*IPRangeHolder, error) {
+	url := "http://ftp.apnic.net/apnic/stats/apnic/delegated-apnic-latest"
+	res, err := hc.Get(url)
+	if nil != err {
+		return nil, err
+	}
+	if res.StatusCode != 200 {
+		return nil, fmt.Errorf("Invalid IP range response:%v", res)
+	}
+	return parseApnicIPReader(res.Body, true)
 }
