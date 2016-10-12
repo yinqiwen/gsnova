@@ -61,7 +61,7 @@ func (tc *tcpChannel) Open() error {
 	if strings.EqualFold(tc.rurl.Scheme, "tls") {
 		tlscfg = &tls.Config{}
 		tlscfg.ServerName = vpsHost
-		if len(tc.conf.SNIProxy) > 0 && vpsPort == "443" {
+		if len(tc.conf.SNIProxy) > 0 && vpsPort == "443" && hosts.InHosts(tc.conf.SNIProxy) {
 			hostport = hosts.GetAddr(tc.conf.SNIProxy, "443")
 			vpsHost, _, _ = net.SplitHostPort(hostport)
 			tc.useSNIProxy = true

@@ -143,7 +143,7 @@ func newDirectChannel(ev event.Event, conf *proxy.ProxyChannelConfig) (*directCh
 		}
 	}
 
-	if len(conf.SNIProxy) > 0 && port == "443" && network == "tcp" {
+	if len(conf.SNIProxy) > 0 && port == "443" && network == "tcp" && hosts.InHosts(conf.SNIProxy) {
 		host = conf.SNIProxy
 	}
 	isIP := net.ParseIP(host) != nil

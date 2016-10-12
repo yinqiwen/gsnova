@@ -91,7 +91,7 @@
 			"Enable":true,
 			"Type":"direct",
 			"Name":"TLSDirect",
-			"SNI":["www.google.com.hk", "www.google.co.jp"],
+			"SNIProxy":"sni_proxy",
 			"ForceTLS":true
 		},
 		{

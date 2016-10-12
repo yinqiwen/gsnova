@@ -34,7 +34,7 @@ func NewAuthEvent(secureTransport bool) *event.AuthEvent {
 func NewHTTPClient(conf *ProxyChannelConfig) (*http.Client, error) {
 	localDial := func(network, addr string) (net.Conn, error) {
 		host, port, _ := net.SplitHostPort(addr)
-		if port == "443" && len(conf.SNIProxy) > 0 {
+		if port == "443" && len(conf.SNIProxy) > 0 && hosts.InHosts(conf.SNIProxy) {
 			addr = hosts.GetAddr(conf.SNIProxy, "443")
 			host, _, _ = net.SplitHostPort(addr)
 		}

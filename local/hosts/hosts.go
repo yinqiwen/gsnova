@@ -84,6 +84,9 @@ func GetAddr(addr string, defaultPort string) string {
 }
 
 func InHosts(host string) bool {
+	if strings.Contains(host, ":") {
+		return true
+	}
 	mappingMutex.Lock()
 	defer mappingMutex.Unlock()
 	if strings.Contains(host, ":") {
