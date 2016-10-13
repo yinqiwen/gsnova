@@ -111,6 +111,7 @@ func dnsQuery(r *dns.Msg) (*dns.Msg, error) {
 	}
 	dnsConn.Conn = c
 	dnsConn.WriteMsg(r)
+	dnsConn.SetReadDeadline(time.Now().Add(3 * time.Second))
 	res, err1 := dnsConn.ReadMsg()
 	if nil == err1 && nil != dnsCache && len(domain) > 0 {
 		record = newDNSCacheRecord(res)
