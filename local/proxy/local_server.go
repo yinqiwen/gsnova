@@ -93,6 +93,7 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 			return
 		}
 	}
+
 	if nil == bufconn {
 		bufconn = bufio.NewReader(conn)
 	}
@@ -248,7 +249,7 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 				}
 			}
 		}
-		//log.Printf("Session:%d request:%s %v", sid, req.Method, reqUrl)
+		//log.Printf("Session:%d request:%s %v %v %v", sid, req.Method, reqUrl, req.Header, req.TransferEncoding)
 
 		req.Header.Del("Proxy-Connection")
 		ev := event.NewHTTPRequestEvent(req)
@@ -282,6 +283,22 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 			for nil != req.Body {
 				buffer := make([]byte, 8192)
 				n, err := req.Body.Read(buffer)
+				if n > 0 {
+					buffer = buffer[0:n]
+					var chunk event.TCPChunkEvent
+					chunk.SetId(sid)
+					if req.ContentLength > 0 {
+						chunk.Content = buffer
+					} else {
+						//HTTP chunked body
+						var chunkBuffer bytes.Buffer
+						fmt.Fprintf(&chunkBuffer, "%x\r\n", len(buffer))
+						chunkBuffer.Write(buffer)
+						chunkBuffer.WriteString("\r\n")
+						chunk.Content = chunkBuffer.Bytes()
+					}
+					p.Serve(session, &chunk)
+				}
 				if nil != err {
 					//HTTP chunked body EOF
 					if err == io.EOF && req.ContentLength < 0 {
@@ -292,20 +309,6 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 					}
 					break
 				}
-				buffer = buffer[0:n]
-				var chunk event.TCPChunkEvent
-				chunk.SetId(sid)
-				if req.ContentLength > 0 {
-					chunk.Content = buffer
-				} else {
-					//HTTP chunked body
-					var chunkBuffer bytes.Buffer
-					fmt.Fprintf(&chunkBuffer, "%x\r\n", len(buffer))
-					chunkBuffer.Write(buffer)
-					chunkBuffer.WriteString("\r\n")
-					chunk.Content = chunkBuffer.Bytes()
-				}
-				p.Serve(session, &chunk)
 			}
 		}
 		if strings.EqualFold(req.Method, "Connect") && (session.SSLHijacked || session.Hijacked) {

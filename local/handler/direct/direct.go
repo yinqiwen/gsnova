@@ -75,7 +75,11 @@ func (tc *directChannel) Write(p []byte) (n int, err error) {
 	if nil == conn {
 		return 0, io.EOF
 	}
-	return conn.Write(p)
+	n, err = conn.Write(p)
+	if n < len(p) {
+		log.Printf("@@@@####less write %d %d", n, len(p))
+	}
+	return
 }
 
 func (d *directChannel) read() {

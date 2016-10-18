@@ -128,7 +128,7 @@ func (req *HTTPRequestEvent) HTTPEncode() []byte {
 	fmt.Fprintf(&buffer, "%s %s HTTP/1.1\r\n", req.Method, req.URL)
 	for hn, hvs := range req.Headers {
 		for _, hv := range hvs {
-			fmt.Fprintf(&buffer, "%s:%s\r\n", hn, hv)
+			fmt.Fprintf(&buffer, "%s: %s\r\n", hn, hv)
 		}
 	}
 	fmt.Fprintf(&buffer, "\r\n")
