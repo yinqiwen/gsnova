@@ -163,6 +163,7 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 				if err != io.EOF && !connClosed {
 					log.Printf("Session:%d read chunk failed from proxy connection:%v", sid, err)
 				}
+				connClosed = true
 				break
 			}
 			chunkContent := buffer[0:n]
@@ -209,6 +210,7 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 					log.Printf("Session:%d read request failed from proxy connection for reason:%v", sid, err)
 				}
 			}
+			connClosed = true
 			break
 		}
 
@@ -264,10 +266,12 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 			for int64(len(ev.Content)) < req.ContentLength {
 				buffer := make([]byte, 8192)
 				n, err := req.Body.Read(buffer)
+				if n > 0 {
+					ev.Content = append(ev.Content, buffer[0:n]...)
+				}
 				if nil != err {
 					break
 				}
-				ev.Content = append(ev.Content, buffer[0:n]...)
 			}
 		}
 
@@ -282,7 +286,7 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 		if maxBody < 0 && req.ContentLength != 0 {
 			for nil != req.Body {
 				buffer := make([]byte, 8192)
-				n, err := req.Body.Read(buffer)
+				n, nerr := req.Body.Read(buffer)
 				if n > 0 {
 					buffer = buffer[0:n]
 					var chunk event.TCPChunkEvent
@@ -299,9 +303,9 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 					}
 					p.Serve(session, &chunk)
 				}
-				if nil != err {
+				if nil != nerr {
 					//HTTP chunked body EOF
-					if err == io.EOF && req.ContentLength < 0 {
+					if nerr == io.EOF && req.ContentLength < 0 {
 						var eofChunk event.TCPChunkEvent
 						eofChunk.SetId(sid)
 						eofChunk.Content = []byte("0\r\n")
@@ -325,6 +329,7 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 				tlscfg, err := fakecert.TLSConfig(req.Host)
 				if nil != err {
 					log.Printf("[ERROR]Failed to generate fake cert for %s:%v", req.Host, err)
+					connClosed = true
 					return
 				}
 				tlsconn = tls.Server(conn, tlscfg)

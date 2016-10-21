@@ -153,6 +153,8 @@ func (pac *PACConfig) matchRules(ip string, req *http.Request) bool {
 				}
 				if nil == err {
 					_, err = cnIPRange.FindCountry(ip)
+				} else {
+					log.Printf("######err:%v", err)
 				}
 				ok = (nil == err)
 				log.Printf("ip:%s is CNIP:%v", ip, ok)

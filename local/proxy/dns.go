@@ -15,11 +15,13 @@ import (
 )
 
 var errNoDNServer = errors.New("No DNS server configured.")
+var errDNSQuryFail = errors.New("DNS query failed.")
 var dnsCache *lru.Cache
 
 type dnsCacheRecord struct {
 	expireAt time.Time
-	res      *dns.Msg
+	ipv4Res  *dns.Msg
+	ipv6Res  *dns.Msg
 }
 
 func pickIP(res *dns.Msg) string {
@@ -31,15 +33,28 @@ func pickIP(res *dns.Msg) string {
 	return ""
 }
 
-func newDNSCacheRecord(res *dns.Msg) *dnsCacheRecord {
-	record := new(dnsCacheRecord)
-	record.res = res
+func newDNSCacheRecord(record *dnsCacheRecord, res *dns.Msg) *dnsCacheRecord {
+	if nil == record {
+		record = new(dnsCacheRecord)
+	}
+	ipv4 := false
 	now := time.Now()
 	for _, answer := range res.Answer {
+		var hdr dns.RR_Header
 		if a, ok := answer.(*dns.A); ok {
-			record.expireAt = now.Add(time.Duration(a.Hdr.Ttl+10) * time.Second)
-			break
+			hdr = a.Hdr
+			ipv4 = true
+		} else if aaaa, ok := answer.(*dns.AAAA); ok {
+			hdr = aaaa.Hdr
+			ipv4 = false
 		}
+		record.expireAt = now.Add(time.Duration(hdr.Ttl+10) * time.Second)
+		break
+	}
+	if ipv4 {
+		record.ipv4Res = res
+	} else {
+		record.ipv6Res = res
 	}
 	return record
 }
@@ -62,7 +77,7 @@ func dnsQuery(r *dns.Msg) (*dns.Msg, error) {
 	var record *dnsCacheRecord
 	var domain string
 	useTrustedDNS := true
-	if len(r.Question) == 1 && r.Question[0].Qtype == dns.TypeA && dns.IsFqdn(r.Question[0].Name) {
+	if len(r.Question) == 1 && dns.IsFqdn(r.Question[0].Name) {
 		domain = r.Question[0].Name
 		domain = domain[0 : len(domain)-1]
 		if nil != dnsCache {
@@ -73,7 +88,11 @@ func dnsQuery(r *dns.Msg) (*dns.Msg, error) {
 					record = nil
 					dnsCache.Remove(domain)
 				} else {
-					return record.res, nil
+					if r.Question[0].Qtype == dns.TypeA && nil != record.ipv4Res {
+						return record.ipv4Res, nil
+					} else if r.Question[0].Qtype == dns.TypeAAAA && nil != record.ipv6Res {
+						return record.ipv6Res, nil
+					}
 				}
 			}
 		}
@@ -85,6 +104,8 @@ func dnsQuery(r *dns.Msg) (*dns.Msg, error) {
 				useTrustedDNS = false
 			}
 		}
+	} else {
+		log.Printf("###DNS with %v", r.Question)
 	}
 	if len(dnsServers) == 0 {
 		dnsServers = GConf.LocalDNS.TrustedDNS
@@ -99,25 +120,30 @@ func dnsQuery(r *dns.Msg) (*dns.Msg, error) {
 	if GConf.LocalDNS.TCPConnect && useTrustedDNS {
 		network = "tcp"
 	}
-	log.Printf("DNS query to %s", server)
-	c, err := netx.DialTimeout(network, server, 2*time.Second)
-	if nil != err {
-		return nil, err
+	log.Printf("DNS query %s to %s", domain, server)
+	for retry := 0; retry < 3; retry++ {
+		c, err := netx.DialTimeout(network, server, 1*time.Second)
+		if nil != err {
+			return nil, err
+		}
+		defer c.Close()
+		dnsConn := new(dns.Conn)
+		if pc, ok := c.(getConnIntf); ok {
+			c = pc.GetConn()
+		}
+		dnsConn.Conn = c
+		dnsConn.WriteMsg(r)
+		dnsConn.SetReadDeadline(time.Now().Add(1 * time.Second))
+		res, err1 := dnsConn.ReadMsg()
+		if nil == err1 && nil != dnsCache && len(domain) > 0 {
+			record = newDNSCacheRecord(record, res)
+			dnsCache.Add(domain, record)
+		}
+		if nil == err1 {
+			return res, nil
+		}
 	}
-	defer c.Close()
-	dnsConn := new(dns.Conn)
-	if pc, ok := c.(getConnIntf); ok {
-		c = pc.GetConn()
-	}
-	dnsConn.Conn = c
-	dnsConn.WriteMsg(r)
-	dnsConn.SetReadDeadline(time.Now().Add(3 * time.Second))
-	res, err1 := dnsConn.ReadMsg()
-	if nil == err1 && nil != dnsCache && len(domain) > 0 {
-		record = newDNSCacheRecord(res)
-		dnsCache.Add(domain, record)
-	}
-	return res, err1
+	return nil, errDNSQuryFail
 }
 
 func dnsQueryRaw(r []byte) ([]byte, error) {
