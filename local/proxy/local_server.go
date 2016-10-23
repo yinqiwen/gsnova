@@ -50,9 +50,6 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 			return
 		}
 		log.Printf("Session:%d select channel:%s for %s", sid, p.Config().Name, remoteHost)
-		// if p.Config().IsDirect() && net.ParseIP(remoteHost) != nil {
-		// 	addr = net.JoinHostPort(remoteHost, remotePort)
-		// }
 		tcpOpen := &event.TCPOpenEvent{}
 		tcpOpen.SetId(sid)
 		tcpOpen.Addr = remoteAddr
@@ -330,7 +327,7 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 				if nil != err {
 					log.Printf("[ERROR]Failed to generate fake cert for %s:%v", req.Host, err)
 					connClosed = true
-					return
+					break
 				}
 				tlsconn = tls.Server(conn, tlscfg)
 				conn = tlsconn

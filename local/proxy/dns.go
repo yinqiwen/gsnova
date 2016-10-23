@@ -126,7 +126,6 @@ func dnsQuery(r *dns.Msg) (*dns.Msg, error) {
 		if nil != err {
 			return nil, err
 		}
-		defer c.Close()
 		dnsConn := new(dns.Conn)
 		if pc, ok := c.(getConnIntf); ok {
 			c = pc.GetConn()
@@ -139,6 +138,7 @@ func dnsQuery(r *dns.Msg) (*dns.Msg, error) {
 			record = newDNSCacheRecord(record, res)
 			dnsCache.Add(domain, record)
 		}
+		c.Close()
 		if nil == err1 {
 			return res, nil
 		}
