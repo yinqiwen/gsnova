@@ -20,6 +20,6 @@ type SocketProtector interface {
 func ProtectConnections(dnsServer string, p SocketProtector) {
 	protector.Configure(p.Protect, dnsServer)
 	//p := New(protector.Protect, dnsServer)
-	netx.OverrideDial(protector.Dial)
+	netx.OverrideDial(protector.DialContext)
 	netx.OverrideResolve(protector.Resolve)
 }

@@ -5,6 +5,7 @@
 package protector
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log"
@@ -95,12 +96,17 @@ func Resolve(network string, addr string) (*net.TCPAddr, error) {
 	return &net.TCPAddr{IP: ipAddr, Port: port}, nil
 }
 
+func Dial(network, addr string, timeout time.Duration) (net.Conn, error) {
+	ctx, _ := context.WithTimeout(context.Background(), timeout)
+	return DialContext(ctx, network, addr)
+}
+
 // Dial creates a new protected connection, it assumes that the address has
 // already been resolved to an IPv4 address.
 // - syscall API calls are used to create and bind to the
 //   specified system device (this is primarily
 //   used for Android VpnService routing functionality)
-func Dial(network, addr string, timeout time.Duration) (net.Conn, error) {
+func DialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 	host, port, err := SplitHostPort(addr)
 	if err != nil {
 		return nil, err
@@ -114,6 +120,12 @@ func Dial(network, addr string, timeout time.Duration) (net.Conn, error) {
 	if IPAddr == nil {
 		log.Printf("Couldn't parse IP address %v while port:%d", host, port)
 		return nil, err
+	}
+
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
 	}
 
 	copy(conn.ip[:], IPAddr.To4())
