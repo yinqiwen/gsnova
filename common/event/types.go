@@ -15,14 +15,14 @@ const (
 	EventPortUnicast     = 10012
 	EventConnTest        = 10013
 
-	NoneCompressor    = 0
-	SnappyCompressor  = 1
-	NoneEncrypter     = 0
-	RC4Encrypter      = 1
-	Salsa20Encrypter  = 2
-	AES256Encrypter   = 3
-	Chacha20Encrypter = 4
-	BlowfishEncrypter = 5
+	NoneCompressor            = 0
+	SnappyCompressor          = 1
+	NoneEncrypter             = 0
+	RC4Encrypter              = 1
+	Salsa20Encrypter          = 2
+	AES256Encrypter           = 3
+	Chacha20Encrypter         = 4
+	Chacha20Poly1305Encrypter = 5
 	//Chacha20Encypter = 3
 )
 

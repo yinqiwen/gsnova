@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	//"github.com/codahale/chacha20"
+	"golang.org/x/crypto/chacha20poly1305"
 	"golang.org/x/crypto/salsa20"
 )
 
@@ -29,6 +30,7 @@ var salsa20Key [32]byte
 
 var defaultEncryptMethod int
 var aes256gcm cipher.AEAD
+var chacha20poly1305gcm cipher.AEAD
 
 type EventFlags uint64
 
@@ -57,6 +59,7 @@ func SetDefaultSecretKey(method string, key string) {
 	copy(salsa20Key[:], secretKey[:32])
 	aesblock, _ := aes.NewCipher(secretKey)
 	aes256gcm, _ = cipher.NewGCM(aesblock)
+	chacha20poly1305gcm, _ = chacha20poly1305.New(secretKey)
 	defaultEncryptMethod = Salsa20Encrypter
 	if strings.EqualFold(method, "rc4") {
 		defaultEncryptMethod = RC4Encrypter
@@ -66,13 +69,15 @@ func SetDefaultSecretKey(method string, key string) {
 		defaultEncryptMethod = AES256Encrypter
 	} else if strings.EqualFold(method, "chacha20") {
 		defaultEncryptMethod = Chacha20Encrypter
+	} else if strings.EqualFold(method, "chacha20poly1305") {
+		defaultEncryptMethod = Chacha20Poly1305Encrypter
 	} else if strings.EqualFold(method, "none") {
 		defaultEncryptMethod = 0
 	} else if strings.EqualFold(method, "auto") {
 		if strings.Contains(runtime.GOARCH, "386") || strings.Contains(runtime.GOARCH, "amd64") {
 			defaultEncryptMethod = AES256Encrypter
 		} else if strings.Contains(runtime.GOARCH, "arm") {
-			defaultEncryptMethod = Chacha20Encrypter
+			defaultEncryptMethod = Chacha20Poly1305Encrypter
 		}
 		//log.Printf("Auto select fastest encrypt method:%d", defaultEncryptMethod)
 	}
@@ -492,6 +497,9 @@ func EncryptEvent(buf *bytes.Buffer, ev Event, ctx *CryptoContext) error {
 	case AES256Encrypter:
 		nonce = make([]byte, 12)
 		elen += uint32(aes256gcm.Overhead())
+	case Chacha20Poly1305Encrypter:
+		nonce = make([]byte, 12)
+		elen += uint32(chacha20poly1305gcm.Overhead())
 	}
 	if len(nonce) > 0 {
 		iv := encryptIV ^ uint64(elen)
@@ -507,6 +515,15 @@ func EncryptEvent(buf *bytes.Buffer, ev Event, ctx *CryptoContext) error {
 	case AES256Encrypter:
 		bb := aes256gcm.Seal(eventContent[:0], nonce, eventContent, nil)
 		if len(bb)-len(eventContent) != aes256gcm.Overhead() {
+			log.Printf("Expected aes bytes %d  after encrypt %d bytes", len(bb), len(eventContent))
+		}
+		copy(eventContent, bb[0:len(eventContent)])
+		if len(bb) > len(eventContent) {
+			buf.Write(bb[len(eventContent):])
+		}
+	case Chacha20Poly1305Encrypter:
+		bb := chacha20poly1305gcm.Seal(eventContent[:0], nonce, eventContent, nil)
+		if len(bb)-len(eventContent) != chacha20poly1305gcm.Overhead() {
 			log.Printf("Expected aes bytes %d  after encrypt %d bytes", len(bb), len(eventContent))
 		}
 		copy(eventContent, bb[0:len(eventContent)])
@@ -562,6 +579,8 @@ func DecryptEvent(buf *bytes.Buffer, ctx *CryptoContext) (err error, ev Event) {
 		nonce = make([]byte, 8)
 	case AES256Encrypter:
 		nonce = make([]byte, 12)
+	case Chacha20Poly1305Encrypter:
+		nonce = make([]byte, 12)
 	}
 	if len(nonce) > 0 {
 		iv := ctx.DecryptIV ^ uint64(elen)
@@ -576,6 +595,12 @@ func DecryptEvent(buf *bytes.Buffer, ctx *CryptoContext) (err error, ev Event) {
 		rc4Cipher.XORKeyStream(body, body)
 	case AES256Encrypter:
 		bb, err := aes256gcm.Open(body[:0], nonce, body, nil)
+		if nil != err {
+			return err, nil
+		}
+		body = bb
+	case Chacha20Poly1305Encrypter:
+		bb, err := chacha20poly1305gcm.Open(body[:0], nonce, body, nil)
 		if nil != err {
 			return err, nil
 		}

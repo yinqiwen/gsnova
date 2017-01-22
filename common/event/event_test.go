@@ -63,6 +63,11 @@ func BenchmarkAES(b *testing.B) {
 	benchamark(b.N)
 }
 
+func BenchmarkChacha20Poly1305(b *testing.B) {
+	SetDefaultSecretKey("chacha20poly1305", "AAAAAAasdadasfafasasdasfasasgagaga")
+	benchamark(b.N)
+}
+
 // func BenchmarkBlowfish(b *testing.B) {
 // 	SetDefaultSecretKey("blowfish", "AAAAAAasdadasfafasasdasfasasgagaga")
 // 	benchamark(b.N)
