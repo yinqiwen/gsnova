@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -71,7 +72,8 @@ func httpInvoke(w http.ResponseWriter, r *http.Request) {
 	ress, err := handleRequestBody(r, ctx)
 	if nil != err {
 		log.Printf("[ERROR]connection %s:%d error:%v with path:%s ", ctx.User, ctx.ConnIndex, err, r.URL.Path)
-		w.WriteHeader(400)
+		//w.WriteHeader(400)
+		http.Error(w, fmt.Sprintf("%v", err), 400)
 	} else {
 		w.WriteHeader(200)
 		if strings.HasSuffix(r.URL.Path, "pull") {

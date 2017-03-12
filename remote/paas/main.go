@@ -37,10 +37,14 @@ func main() {
 	if port == "" {
 		port = os.Getenv("VCAP_APP_PORT")
 	}
-	if port == "" {
-		port = "8080"
-	}
+	listenAddr := ""
 	host := os.Getenv("OPENSHIFT_GO_IP")
+	if port == "" {
+		listenAddr = remote.ServerConf.Listen
+	}
+	if len(listenAddr) == 0 {
+		listenAddr = host + ":" + port
+	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", indexCallback)
@@ -50,8 +54,8 @@ func main() {
 	mux.HandleFunc("/http/pull", httpInvoke)
 	mux.HandleFunc("/http/push", httpInvoke)
 
-	log.Println("Listening on " + host + ":" + port)
-	err := http.ListenAndServe(host+":"+port, mux)
+	log.Println("Listening on " + listenAddr)
+	err := http.ListenAndServe(listenAddr, mux)
 	if nil != err {
 		fmt.Printf("Listen server error:%v", err)
 	}
