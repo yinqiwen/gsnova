@@ -36,5 +36,6 @@ func main() {
 		log.Printf("Failed to start admin server with reason:%v", err)
 		return
 	}
+	go startLocalQUICProxyServer(remote.ServerConf.Listen)
 	startLocalProxyServer(remote.ServerConf.Listen)
 }

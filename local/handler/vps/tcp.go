@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	quic "github.com/lucas-clemente/quic-go"
+
 	"github.com/getlantern/netx"
 	"github.com/yinqiwen/gsnova/common/event"
 	"github.com/yinqiwen/gsnova/common/helper"
@@ -21,7 +23,7 @@ type tcpChannel struct {
 	conf         proxy.ProxyChannelConfig
 	rurl         *url.URL
 	originAddr   string
-	conn         net.Conn
+	conn         helper.ProxyChannelConnection
 	proxyChannel *proxy.RemoteChannel
 	useSNIProxy  bool
 }
@@ -58,6 +60,15 @@ func (tc *tcpChannel) Open() error {
 	var tlscfg *tls.Config
 	hostport := tc.rurl.Host
 	vpsHost, vpsPort, _ := net.SplitHostPort(hostport)
+	if net.ParseIP(vpsHost) == nil {
+		iphost, err := proxy.DnsGetDoaminIP(vpsHost)
+		if nil != err {
+			return err
+		}
+		hostport = net.JoinHostPort(iphost, vpsPort)
+	}
+	var err error
+	var quicSession quic.Session
 	if strings.EqualFold(tc.rurl.Scheme, "tls") {
 		tlscfg = &tls.Config{}
 		tlscfg.ServerName = vpsHost
@@ -67,27 +78,32 @@ func (tc *tcpChannel) Open() error {
 			tc.useSNIProxy = true
 			log.Printf("VPS channel select SNIProxy %s to connect", hostport)
 		}
-	}
-
-	if net.ParseIP(vpsHost) == nil {
-		iphost, err := proxy.DnsGetDoaminIP(vpsHost)
-		if nil != err {
+	} else if strings.EqualFold(tc.rurl.Scheme, "quic") {
+		quicSession, err = quic.DialAddr(hostport, &tls.Config{InsecureSkipVerify: true}, nil)
+		if err != nil {
 			return err
 		}
-		hostport = net.JoinHostPort(iphost, vpsPort)
 	}
+
 	//log.Printf("######%s %s", vpsHost, tc.hostport)
 	timeout := time.Duration(dailTimeout) * time.Second
-	var c net.Conn
-	var err error
-	if len(tc.conf.Proxy) > 0 {
-		c, err = helper.HTTPProxyDial(tc.conf.Proxy, hostport, timeout)
+	var c helper.ProxyChannelConnection
+	if nil == quicSession {
+		var conn net.Conn
+		if len(tc.conf.Proxy) > 0 {
+			conn, err = helper.HTTPProxyDial(tc.conf.Proxy, hostport, timeout)
+		} else {
+			conn, err = netx.DialTimeout("tcp", hostport, timeout)
+		}
+		if nil != tlscfg && nil == err {
+			c = tls.Client(conn, tlscfg)
+		} else {
+			c = conn
+		}
 	} else {
-		c, err = netx.DialTimeout("tcp", hostport, timeout)
+		c, err = quicSession.OpenStreamSync()
 	}
-	if nil != tlscfg && nil == err {
-		c = tls.Client(c, tlscfg)
-	}
+
 	if err != nil {
 		if tc.rurl.String() != tc.originAddr {
 			tc.rurl, _ = url.Parse(tc.originAddr)

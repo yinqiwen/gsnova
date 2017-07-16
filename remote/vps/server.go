@@ -3,13 +3,20 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"crypto/rand"
+	"crypto/rsa"
 	"crypto/tls"
+	"crypto/x509"
+	"encoding/pem"
 	"fmt"
 	"log"
+	"math/big"
 	"net"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	quic "github.com/lucas-clemente/quic-go"
 
 	"github.com/yinqiwen/gsnova/common/event"
 	"github.com/yinqiwen/gsnova/common/helper"
@@ -24,6 +31,7 @@ type vpsServer struct {
 	createTime time.Time
 	retireTime time.Time
 	lp         net.Listener
+	quicLP     quic.Listener
 }
 
 var activeDynamicServers = make(map[*vpsServer]bool)
@@ -103,7 +111,7 @@ func clearExpiredDynamicVPServer() {
 	}
 }
 
-func serveProxyConn(conn net.Conn, vs *vpsServer) {
+func serveProxyConn(conn helper.ProxyChannelConnection, vs *vpsServer) {
 	if nil != vs {
 		atomic.AddInt32(&vs.aliveConns, 1)
 	}
@@ -222,7 +230,7 @@ func listenTCPServer(addr string, vs *vpsServer) (net.Listener, error) {
 	//var lp *net.TCPListener
 	lp, err := net.Listen("tcp", addr)
 	if nil != err {
-		log.Printf("Can NOT listen on address:%s", addr)
+		log.Printf("Can NOT listen on address:%s with reason:%v", addr, err)
 		return nil, err
 	}
 	if len(remote.ServerConf.TLS.Cert) > 0 {
@@ -245,10 +253,35 @@ func listenTCPServer(addr string, vs *vpsServer) (net.Listener, error) {
 	return lp, nil
 }
 
+func listenQUICServer(addr string, vs *vpsServer) (quic.Listener, error) {
+	if len(addr) == 0 {
+		log.Fatalf("Empty listen address.")
+		return nil, nil
+	}
+
+	lp, err := quic.ListenAddr(addr, generateTLSConfig(), nil)
+	if nil != err {
+		return nil, err
+	}
+
+	udpaddr := lp.Addr().(*net.UDPAddr)
+	log.Printf("Listen on address %v", udpaddr)
+	if nil != vs {
+		vs.port = uint32(udpaddr.Port)
+		vs.quicLP = lp
+		vs.createTime = time.Now()
+	}
+	return lp, nil
+}
+
 func startDynamicServer(addr string, vs *vpsServer) error {
 	lp, err := listenTCPServer(addr, vs)
 	if nil != err {
 		return err
+	}
+	quicLP, qerr := listenQUICServer(addr, vs)
+	if nil != qerr {
+		return qerr
 	}
 	go func() {
 		for {
@@ -258,6 +291,20 @@ func startDynamicServer(addr string, vs *vpsServer) error {
 				return
 			}
 			go serveProxyConn(conn, vs)
+		}
+	}()
+	go func() {
+		for {
+			sess, err := quicLP.Accept()
+			if nil != err {
+				continue
+			}
+			stream, err := sess.AcceptStream()
+			if err != nil {
+				log.Printf("Accept %s error:%v", addr, err)
+				return
+			}
+			go serveProxyConn(stream, vs)
 		}
 	}()
 	return nil
@@ -276,4 +323,43 @@ func startLocalProxyServer(addr string) error {
 		go serveProxyConn(conn, nil)
 	}
 	return nil
+}
+
+func startLocalQUICProxyServer(addr string) error {
+	lp, err := quic.ListenAddr(addr, generateTLSConfig(), nil)
+	if nil != err {
+		return err
+	}
+	for {
+		sess, err := lp.Accept()
+		if nil != err {
+			continue
+		}
+		stream, err := sess.AcceptStream()
+		if err != nil {
+			continue
+		}
+		go serveProxyConn(stream, nil)
+	}
+}
+
+// Setup a bare-bones TLS config for the server
+func generateTLSConfig() *tls.Config {
+	key, err := rsa.GenerateKey(rand.Reader, 1024)
+	if err != nil {
+		panic(err)
+	}
+	template := x509.Certificate{SerialNumber: big.NewInt(1)}
+	certDER, err := x509.CreateCertificate(rand.Reader, &template, &template, &key.PublicKey, key)
+	if err != nil {
+		panic(err)
+	}
+	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)})
+	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER})
+
+	tlsCert, err := tls.X509KeyPair(certPEM, keyPEM)
+	if err != nil {
+		panic(err)
+	}
+	return &tls.Config{Certificates: []tls.Certificate{tlsCert}}
 }
