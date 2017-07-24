@@ -17,6 +17,11 @@ type EventQueue struct {
 	queue  chan Event
 }
 
+func (q *EventQueue) Init() error {
+	q.queue = make(chan Event, 10)
+	return nil
+}
+
 func (q *EventQueue) Publish(ev Event, timeout time.Duration) error {
 	//start := time.Now()
 	select {
@@ -120,6 +125,7 @@ func (q *EventQueue) Read(timeout time.Duration) (Event, error) {
 
 func NewEventQueue() *EventQueue {
 	q := new(EventQueue)
-	q.queue = make(chan Event, 10)
+	q.Init()
+	//q.queue = make(chan Event, 10)
 	return q
 }

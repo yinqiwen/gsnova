@@ -113,6 +113,9 @@ func Init(confile string) error {
 		//fmt.Printf("Failed to load hosts config:%s for reason:%v", file, err)
 		return err
 	}
+	mappingMutex.Lock()
+	defer mappingMutex.Unlock()
+	hostMappingTable = make(map[string]*hostMapping)
 	for k, vs := range hs {
 		if len(vs) > 0 {
 			mapping := new(hostMapping)

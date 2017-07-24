@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/fsnotify/fsnotify"
 	"github.com/yinqiwen/gsnova/common/event"
 	"github.com/yinqiwen/gsnova/common/helper"
 	"github.com/yinqiwen/gsnova/common/logger"
@@ -39,6 +40,8 @@ func init() {
 
 var proxyTable = make(map[string]Proxy)
 var proxyTypeTable map[string]reflect.Type = make(map[string]reflect.Type)
+var clientConfName = "client.json"
+var hostsConfName = "hosts.json"
 
 func RegisterProxyType(str string, p Proxy) error {
 	rt := reflect.TypeOf(p)
@@ -58,23 +61,59 @@ func getProxyByName(name string) Proxy {
 	return nil
 }
 
+func loadConf(conf string) error {
+	if strings.HasSuffix(conf, clientConfName) {
+		confdata, err := helper.ReadWithoutComment(conf, "//")
+		if nil != err {
+			log.Println(err)
+		}
+		err = json.Unmarshal(confdata, &GConf)
+		if nil != err {
+			fmt.Printf("Failed to unmarshal json:%s to config for reason:%v", string(confdata), err)
+		}
+		return err
+	} else {
+		err := hosts.Init(conf)
+		if nil != err {
+			log.Printf("Failed to init local hosts with reason:%v.", err)
+		}
+		return err
+	}
+}
+
+func watchConf(watcher *fsnotify.Watcher) {
+	for {
+		select {
+		case event := <-watcher.Events:
+			//log.Println("event:", event)
+			if event.Op&fsnotify.Write == fsnotify.Write {
+				log.Println("modified file:", event.Name)
+				loadConf(event.Name)
+			}
+		case err := <-watcher.Errors:
+			log.Println("error:", err)
+		}
+	}
+}
+
 func Start(home string, monitor InternalEventMonitor) error {
-	clientConf := home + "/client.json"
-	hostsConf := home + "/hosts.json"
-	confdata, err := helper.ReadWithoutComment(clientConf, "//")
+	confWatcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		log.Fatal(err)
+		return err
+	}
+	clientConf := home + "/" + clientConfName
+	hostsConf := home + "/" + hostsConfName
+	confWatcher.Add(clientConf)
+	confWatcher.Add(hostsConf)
+	go watchConf(confWatcher)
+	err = loadConf(clientConf)
 	if nil != err {
 		//log.Println(err)
 		return err
 	}
-	err = json.Unmarshal(confdata, &GConf)
-	if nil != err {
-		fmt.Printf("Failed to unmarshal json:%s to config for reason:%v", string(confdata), err)
-		return err
-	}
-	err = hosts.Init(hostsConf)
-	if nil != err {
-		log.Printf("Failed to init local hosts with reason:%v.", err)
-	}
+	loadConf(hostsConf)
+
 	event.SetDefaultSecretKey(GConf.Encrypt.Method, GConf.Encrypt.Key)
 	proxyHome = home
 	GConf.init()

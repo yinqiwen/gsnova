@@ -75,14 +75,13 @@ func getEventQueue(cid ConnId, createIfMissing bool) *ConnEventQueue {
 	if nil == q {
 		if createIfMissing {
 			q = new(ConnEventQueue)
-			q.EventQueue = *(event.NewEventQueue())
+			q.EventQueue.Init()
 			q.activeTime = time.Now()
 			q.id = cid
 			queueTable[cid] = q
 			return q
-		} else {
-			return nil
 		}
+		return nil
 	}
 	return q
 }
