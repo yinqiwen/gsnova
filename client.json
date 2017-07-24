@@ -124,7 +124,7 @@
 		    //"SNIProxy" : "cn_sni_proxy",
 		    "SNIProxy" : "",
 		    //if u are behind a HTTP proxy
-		    "HTTPProxy":"",
+		    "Proxy":"",
 		    //Max connections per server
 		    "ConnsPerServer":3,
 		    //Unit: second
@@ -144,7 +144,7 @@
 			"Name":"linode",
             "ServerList":["10.10.10.10:8080"],
 	        //if u are behind a HTTP proxy
-	        "HTTPProxy":"",
+	        "Proxy":"",
 		    "ConnsPerServer":3,
 		    //Unit: second
 		    "DialTimeout":5,

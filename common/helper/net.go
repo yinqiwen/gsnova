@@ -233,7 +233,7 @@ func IsPrivateIP(ip string) bool {
 }
 
 func HTTPProxyConnect(proxyURL *url.URL, c net.Conn, addr string) error {
-	connReq, err := http.NewRequest("Connect", addr, nil)
+	connReq, err := http.NewRequest("CONNECT", "//"+addr, nil)
 	if err != nil {
 		return err
 	}
@@ -252,7 +252,7 @@ func HTTPProxyConnect(proxyURL *url.URL, c net.Conn, addr string) error {
 		connRes.Body.Close()
 	}
 	if connRes.StatusCode >= 300 {
-		return fmt.Errorf("Invalid Connect response:%d", connRes.StatusCode)
+		return fmt.Errorf("Invalid Connect response:%d %v %v", connRes.StatusCode, connRes, connReq)
 	}
 	return nil
 }
