@@ -107,10 +107,10 @@ func syncConfigFile(addr string, localDir, remoteDir string, fileName string) er
 func SyncConfig(addr string, localDir string) error {
 	if nil == syncClient {
 		tr := &http.Transport{}
-		tr.ResponseHeaderTimeout = 2 * time.Second
+		tr.ResponseHeaderTimeout = 15 * time.Second
 		tr.Dial = netx.Dial
 		syncClient = &http.Client{}
-		syncClient.Timeout = 5 * time.Second
+		syncClient.Timeout = 15 * time.Second
 		syncClient.Transport = tr
 	}
 	resp, err := syncClient.Get("http://" + addr + "/_conflist")
