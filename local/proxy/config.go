@@ -254,8 +254,9 @@ type LocalDNSConfig struct {
 }
 
 type AdminConfig struct {
-	Listen    string
-	ConfigDir string
+	Listen        string
+	BroadcastAddr string
+	ConfigDir     string
 }
 
 type GFWListConfig struct {
@@ -316,6 +317,7 @@ func (cfg *LocalConfig) init() error {
 	if gfwlistEnable {
 		go func() {
 			hc, _ := NewHTTPClient(&ProxyChannelConfig{Proxy: cfg.GFWList.Proxy})
+			hc.Timeout = 15 * time.Second
 			dst := proxyHome + "/gfwlist.txt"
 			tmp, err := gfwlist.NewGFWList(cfg.GFWList.URL, hc, cfg.GFWList.UserRule, dst, true)
 			if nil == err {
@@ -340,6 +342,7 @@ func (cfg *LocalConfig) init() error {
 				case <-time.After(nextFetchTime):
 					if nil == hc {
 						hc, err = NewHTTPClient(&ProxyChannelConfig{})
+						hc.Timeout = 15 * time.Second
 					}
 					if nil != hc {
 						ipHolder, err = getCNIPRangeHolder(hc)

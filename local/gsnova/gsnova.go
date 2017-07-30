@@ -29,6 +29,6 @@ func StopLocalProxy() error {
 }
 
 //SyncConfig sync config files from running gsnova instance
-func SyncConfig(addr string, localDir string) error {
+func SyncConfig(addr string, localDir string) (bool, error) {
 	return proxy.SyncConfig(addr, localDir)
 }

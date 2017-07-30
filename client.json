@@ -31,7 +31,9 @@
     	//a local http server, do NOT expose this http server to public
     	//listen on private IP instead of the default config 
     	//eg: "Listen": "192.168.1.1:7788",
-    	"Listen": ":7788",
+		"Listen": ":7788",
+		//used to broadcast admin server address.
+		"BroadcastAddr":"224.0.0.1:48100",
     	"ConfigDir":"./android"
     },
 

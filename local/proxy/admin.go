@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"net"
 	"net/http"
 	//_ "net/http/pprof"
 	"os"
@@ -66,6 +67,27 @@ func startAdminServer() {
 		log.Printf("[WARN]The ConfigDir's Dir is empty, use current dir instead")
 		GConf.Admin.ConfigDir = "./"
 	}
+	if len(GConf.Admin.BroadcastAddr) > 0 {
+		ticker := time.NewTicker(3 * time.Second)
+		localIP := helper.GetLocalIPv4()
+		_, adminPort, _ := net.SplitHostPort(GConf.Admin.Listen)
+		go func() {
+			for _ = range ticker.C {
+				addr, err := net.ResolveUDPAddr("udp", GConf.Admin.BroadcastAddr)
+				var c *net.UDPConn
+				if nil == err {
+					c, err = net.DialUDP("udp", nil, addr)
+				}
+				if err != nil {
+					log.Printf("Failed to resolve multicast addr.")
+				} else {
+					for _, ip := range localIP {
+						c.Write([]byte(net.JoinHostPort(ip, adminPort)))
+					}
+				}
+			}
+		}()
+	}
 	mux := http.NewServeMux()
 	fs := http.FileServer(http.Dir(GConf.Admin.ConfigDir))
 	mux.Handle("/", fs)
@@ -83,28 +105,43 @@ func startAdminServer() {
 
 var syncClient *http.Client
 
-func syncConfigFile(addr string, localDir, remoteDir string, fileName string) error {
+func syncConfigFile(addr string, localDir, remoteDir string, fileName string) (bool, error) {
 	filePath := remoteDir + "/" + fileName
-	resp, err := syncClient.Get("http://" + addr + "/" + filePath)
+	localFilePath := localDir + "/" + filePath
+	localInfo, err := os.Stat(localFilePath)
+	fileURL := "http://" + addr + "/" + filePath
+	if err == nil {
+		localFileModTime := localInfo.ModTime()
+		headResp, err := syncClient.Head(fileURL)
+		if nil != err {
+			return false, err
+		}
+		lastModifiedHeader, _ := http.ParseTime(headResp.Header.Get("Last-Modified"))
+		if lastModifiedHeader.Before(localFileModTime) {
+			//log.Printf("Config file:%v is not update.", localFilePath)
+			return false, nil
+		}
+	}
+	resp, err := syncClient.Get(fileURL)
 	if nil != err {
-		return err
+		return false, err
 	}
 	if resp.StatusCode != 200 || nil == resp.Body {
 		if nil != resp.Body {
 			resp.Body.Close()
 		}
-		return fmt.Errorf("Invalid response:%v for %s", resp, filePath)
+		return false, fmt.Errorf("Invalid response:%v for %s", resp, filePath)
 	}
 
 	data, _ := ioutil.ReadAll(resp.Body)
 	resp.Body.Close()
 	os.Mkdir(localDir+"/"+remoteDir, 0775)
-	ioutil.WriteFile(localDir+"/"+filePath, data, 0660)
+	ioutil.WriteFile(localFilePath, data, 0660)
 	log.Printf("Persistent config:%s.", localDir+"/"+filePath)
-	return nil
+	return true, nil
 }
 
-func SyncConfig(addr string, localDir string) error {
+func SyncConfig(addr string, localDir string) (bool, error) {
 	if nil == syncClient {
 		tr := &http.Transport{}
 		tr.ResponseHeaderTimeout = 15 * time.Second
@@ -116,22 +153,32 @@ func SyncConfig(addr string, localDir string) error {
 	resp, err := syncClient.Get("http://" + addr + "/_conflist")
 	if nil != err {
 		log.Printf("Error %v with local ip:%v", err, helper.GetLocalIPv4())
-		return err
+		return false, err
 	}
 	data, _ := ioutil.ReadAll(resp.Body)
 	var confList []string
 	json.Unmarshal(data, &confList)
 
+	update := false
 	for _, conf := range confList {
-		err = syncConfigFile(addr, localDir, conf, "client.json")
+		u := false
+		u, err = syncConfigFile(addr, localDir, conf, "client.json")
 		if nil != err {
-			return err
+			return false, err
 		}
-		err = syncConfigFile(addr, localDir, conf, "hosts.json")
+		if u {
+			update = true
+		}
+		u, err = syncConfigFile(addr, localDir, conf, "hosts.json")
 		if nil != err {
-			return err
+			return false, err
 		}
-		log.Printf("Synced config:%s success", conf)
+		if u {
+			update = true
+		}
+		if u {
+			log.Printf("Synced config:%s success", conf)
+		}
 	}
-	return nil
+	return update, nil
 }
