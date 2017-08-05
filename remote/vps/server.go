@@ -299,12 +299,15 @@ func startDynamicServer(addr string, vs *vpsServer) error {
 			if nil != err {
 				continue
 			}
-			stream, err := sess.AcceptStream()
-			if err != nil {
-				log.Printf("Accept %s error:%v", addr, err)
-				return
-			}
-			go serveProxyConn(stream, vs)
+			go func() {
+				stream, err := sess.AcceptStream()
+				if err != nil {
+					log.Printf("Accept %s error:%v", addr, err)
+					return
+				}
+				go serveProxyConn(stream, vs)
+			}()
+
 		}
 	}()
 	return nil

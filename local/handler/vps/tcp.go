@@ -26,6 +26,7 @@ type tcpChannel struct {
 	conn         helper.ProxyChannelConnection
 	proxyChannel *proxy.RemoteChannel
 	useSNIProxy  bool
+	quicSession  quic.Session
 }
 
 func (tc *tcpChannel) ReadTimeout() time.Duration {
@@ -101,6 +102,7 @@ func (tc *tcpChannel) Open() error {
 			c = conn
 		}
 	} else {
+		tc.quicSession = quicSession
 		c, err = quicSession.OpenStreamSync()
 	}
 
@@ -125,6 +127,9 @@ func (tc *tcpChannel) Close() error {
 	if nil != conn {
 		conn.Close()
 		tc.conn = nil
+	}
+	if nil != tc.quicSession {
+		tc.quicSession.Close(nil)
 	}
 	return nil
 }
