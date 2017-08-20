@@ -17,6 +17,8 @@ import (
 	"github.com/yinqiwen/gsnova/local/proxy"
 )
 
+var directProxy = &DirectProxy{}
+
 type directChannel struct {
 	sid            uint32
 	conn           net.Conn
@@ -26,122 +28,13 @@ type directChannel struct {
 	addr           string
 }
 
-func (tc *directChannel) ReadTimeout() time.Duration {
-	readTimeout := tc.conf.ReadTimeout
-	if 0 == readTimeout {
-		readTimeout = 15
-	}
-	return time.Duration(readTimeout) * time.Second
-}
-
-func (hc *directChannel) HandleCtrlEvent(ev event.Event) {
-
-}
-
-func (hc *directChannel) SetCryptoCtx(ctx *event.CryptoContext) {
-}
-
-func (tc *directChannel) Open() error {
-	return nil
-}
-
-func (tc *directChannel) Request([]byte) ([]byte, error) {
-	return nil, nil
-}
-
-func (tc *directChannel) Closed() bool {
-	return nil == tc.conn
-}
-
-func (tc *directChannel) Close() error {
-	conn := tc.conn
-	if nil != conn {
-		conn.Close()
-		tc.conn = nil
-	}
-	return nil
-}
-
-func (tc *directChannel) Read(p []byte) (int, error) {
-	conn := tc.conn
-	if nil == conn {
-		return 0, io.EOF
-	}
-	return conn.Read(p)
-}
-
-func (tc *directChannel) Write(p []byte) (n int, err error) {
-	conn := tc.conn
-	if nil == conn {
-		return 0, io.EOF
-	}
-	n, err = conn.Write(p)
-	return
-}
-
-func (d *directChannel) read() {
-	defer d.Close()
-	for {
-		c := d.conn
-		if nil == c {
-			return
-		}
-		c.SetReadDeadline(time.Now().Add(d.ReadTimeout()))
-		b := make([]byte, 1500)
-		n, err := c.Read(b)
-		if n > 0 {
-			var ev event.Event
-			if !d.udpProxyConn {
-				ev = &event.TCPChunkEvent{Content: b[0:n]}
-			} else {
-				ev = &event.UDPEvent{Content: b[0:n]}
-			}
-			//log.Printf("######recv %T", ev)
-			ev.SetId(d.sid)
-			proxy.HandleEvent(ev)
-		}
-		if nil != err {
-			if !d.udpProxyConn {
-				closeEv := &event.ConnCloseEvent{}
-				closeEv.SetId(d.sid)
-				proxy.HandleEvent(closeEv)
-			}
-			return
-		}
-	}
-}
-
-func newDirectChannel(ev event.Event, conf *proxy.ProxyChannelConfig) (*directChannel, error) {
+func (tc *directChannel) Connect(network string, addr string) error {
+	host, port, _ := net.SplitHostPort(addr)
 	host := ""
 	port := ""
-	network := "tcp"
-	needHttpsConnect := false
-	switch ev.(type) {
-	case *event.UDPEvent:
-		network = "udp"
-		host = ev.(*event.UDPEvent).Addr
-	case *event.TCPOpenEvent:
-		host = ev.(*event.TCPOpenEvent).Addr
-		needHttpsConnect = true
-	case *event.HTTPRequestEvent:
-		req := ev.(*event.HTTPRequestEvent)
-		host = req.Headers.Get("Host")
-		needHttpsConnect = strings.EqualFold(req.Method, "Connect")
-	default:
-		return nil, fmt.Errorf("Can NOT create direct channel by event:%T", ev)
-	}
 	//log.Printf("Session:%d enter direct with host %s & event:%T", ev.GetId(), host, ev)
 	if len(host) == 0 {
-		return nil, fmt.Errorf("Empty remote addr in event")
-	}
-	if strings.Contains(host, ":") {
-		host, port, _ = net.SplitHostPort(host)
-	} else {
-		if needHttpsConnect {
-			port = "443"
-		} else {
-			port = "80"
-		}
+		return fmt.Errorf("Empty remote addr in event")
 	}
 
 	if len(conf.SNIProxy) > 0 && port == "443" && network == "tcp" && hosts.InHosts(conf.SNIProxy) {
@@ -181,7 +74,7 @@ func newDirectChannel(ev event.Event, conf *proxy.ProxyChannelConfig) (*directCh
 	if net.ParseIP(connectHost) == nil {
 		iphost, err := proxy.DnsGetDoaminIP(connectHost)
 		if nil != err {
-			return nil, err
+			return err
 		}
 		addr = net.JoinHostPort(iphost, connectPort)
 	}
@@ -202,9 +95,14 @@ func newDirectChannel(ev event.Event, conf *proxy.ProxyChannelConfig) (*directCh
 	}
 	if nil != err {
 		log.Printf("Failed to connect %s for %s with error:%v", addr, host, err)
-		return nil, err
+		return err
 	}
-	d := &directChannel{ev.GetId(), c, needHttpsConnect, network == "udp", conf, addr}
+	tc.sid = ev.GetId()
+	tc.conn = c
+	tc.httpsProxyConn = needHttpsConnect
+	tc.udpProxyConn = network == "udp"
+	tc.conf = conf
+	tc.addr = addr
 	//d := &directChannel{ev.GetId(), c, fromHttpsConnect, network == "udp", toReplaceSNI, false, nil}
 	if useTLS {
 		tlcfg := &tls.Config{}
@@ -218,10 +116,95 @@ func newDirectChannel(ev event.Event, conf *proxy.ProxyChannelConfig) (*directCh
 		if nil != err {
 			log.Printf("Failed to handshake with %s", addr)
 		}
-		d.conn = tlsconn
+		tc.conn = tlsconn
 	}
-	go d.read()
-	return d, nil
+	if tc.httpsProxyConn {
+		ctx.Hijacked = true
+		return nil
+	}
+	return nil
+}
+
+func (tc *directChannel) ReadTimeout() time.Duration {
+	readTimeout := tc.conf.ReadTimeout
+	if 0 == readTimeout {
+		readTimeout = 15
+	}
+	return time.Duration(readTimeout) * time.Second
+}
+
+func (tc *directChannel) Read() (event.Event, error) {
+	b := make([]byte, 8192)
+	tc.conn.SetReadDeadline(time.Now().Add(tc.ReadTimeout()))
+	n, err := tc.conn.Read(b)
+	var ev event.Event
+	if n > 0 {
+		if !tc.udpProxyConn {
+			ev = &event.TCPChunkEvent{Content: b[0:n]}
+		} else {
+			ev = &event.UDPEvent{Content: b[0:n]}
+		}
+		ev.SetId(tc.sid)
+	}
+	return ev, err
+}
+func (tc *directChannel) Write(ev event.Event, ctx *helper.ProxyContext) error {
+	switch ev.(type) {
+	case *event.TCPOpenEvent:
+	case *event.HTTPRequestEvent:
+	case *event.UDPEvent:
+	default:
+		tc.Close()
+		return fmt.Errorf("Can NOT create direct channel by event:%T", ev)
+	}
+	if nil == tc.conn {
+		err := tc.initByEvent(ev, &directProxy.conf, ctx)
+		if nil != err {
+			tc.Close()
+			return err
+		}
+	}
+
+	switch ev.(type) {
+	case *event.UDPEvent:
+		tc.conn.Write(ev.(*event.UDPEvent).Content)
+	case *event.ConnCloseEvent:
+		tc.Close()
+	case *event.TCPOpenEvent:
+	case *event.ConnTestEvent:
+		//do nothing
+	case *event.TCPChunkEvent:
+		tc.conn.Write(ev.(*event.TCPChunkEvent).Content)
+	case *event.HTTPRequestEvent:
+		req := ev.(*event.HTTPRequestEvent)
+		content := req.HTTPEncode()
+		_, err := tc.conn.Write(content)
+		if nil != err {
+			// closeEv := &event.ConnCloseEvent{}
+			// closeEv.SetId(ev.GetId())
+			// proxy.HandleEvent(closeEv)
+			return err
+		}
+		return nil
+	default:
+		log.Printf("Invalid event type:%T to process", ev)
+	}
+	return nil
+}
+func (tc *directChannel) SetReadDeadline(t time.Time) error {
+	return nil
+}
+func (tc *directChannel) SetWriteDeadline(t time.Time) error {
+	return nil
+}
+
+func (tc *directChannel) Close() error {
+	conn := tc.conn
+	if nil != conn {
+		conn.Close()
+		tc.conn = nil
+	}
+	return nil
 }
 
 type DirectProxy struct {
@@ -231,79 +214,10 @@ type DirectProxy struct {
 func (p *DirectProxy) PrintStat(w io.Writer) {
 }
 
-func (p *DirectProxy) Config() *proxy.ProxyChannelConfig {
-	return &p.conf
-}
-
-func (p *DirectProxy) Init(conf proxy.ProxyChannelConfig) error {
-	p.conf = conf
+func (p *DirectProxy) CreateMuxSession(server string) (MuxSession, error) {
 	return nil
-}
-func (p *DirectProxy) Destory() error {
-	return nil
-}
-func (p *DirectProxy) Features() proxy.Feature {
-	var f proxy.Feature
-	f.MaxRequestBody = -1
-	return f
-}
-
-func (p *DirectProxy) Serve(session *proxy.ProxySession, ev event.Event) error {
-	if nil == session.Remote || session.Remote.C.Closed() {
-		switch ev.(type) {
-		case *event.TCPOpenEvent:
-		case *event.HTTPRequestEvent:
-		case *event.UDPEvent:
-		default:
-			session.Close()
-			return fmt.Errorf("Can NOT create direct channel by event:%T", ev)
-		}
-		c, err := newDirectChannel(ev, &p.conf)
-		if nil != err {
-			session.Close()
-			return err
-		}
-		session.Remote = &proxy.RemoteChannel{
-			Addr:     c.addr,
-			DirectIO: true,
-		}
-		session.Remote.C = c
-		if c.httpsProxyConn {
-			session.Hijacked = true
-			return nil
-		}
-	}
-	if nil == session.Remote {
-		return fmt.Errorf("No remote connected.")
-	}
-	switch ev.(type) {
-	case *event.UDPEvent:
-		session.Remote.WriteRaw(ev.(*event.UDPEvent).Content)
-	case *event.ConnCloseEvent:
-		session.Remote.Close()
-	case *event.TCPOpenEvent:
-	case *event.ConnTestEvent:
-		//do nothing
-	case *event.TCPChunkEvent:
-		session.Remote.WriteRaw(ev.(*event.TCPChunkEvent).Content)
-	case *event.HTTPRequestEvent:
-		req := ev.(*event.HTTPRequestEvent)
-		content := req.HTTPEncode()
-		_, err := session.Remote.WriteRaw(content)
-		if nil != err {
-			closeEv := &event.ConnCloseEvent{}
-			closeEv.SetId(ev.GetId())
-			proxy.HandleEvent(closeEv)
-			return err
-		}
-		return nil
-	default:
-		log.Printf("Invalid event type:%T to process", ev)
-	}
-	return nil
-
 }
 
 func init() {
-	proxy.RegisterProxyType("DIRECT", &DirectProxy{})
+	proxy2.RegisterProxyType("DIRECT", directProxy)
 }

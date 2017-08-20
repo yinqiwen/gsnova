@@ -27,15 +27,6 @@ func (p *PaasProxy) Config() *proxy.ProxyChannelConfig {
 	return &p.conf
 }
 
-// func newRemoteChannel(server string, idx int, paasClient *http.Client, conf proxy.ProxyChannelConfig) (*proxy.RemoteChannel, error) {
-// 	if strings.HasPrefix(server, "ws://") || strings.HasPrefix(server, "wss://") {
-// 		return newWebsocketChannel(server, idx, conf)
-// 	} else if strings.HasPrefix(server, "http://") || strings.HasPrefix(server, "https://") {
-// 		return newHTTPChannel(server, idx, paasClient, conf)
-// 	}
-// 	return nil, fmt.Errorf("Not supported url:%s", server)
-// }
-
 func (p *PaasProxy) Destory() error {
 	if nil != p.cs {
 		p.cs.StopAll()

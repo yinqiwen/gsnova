@@ -16,17 +16,39 @@ import (
 	"time"
 
 	"github.com/getlantern/netx"
+	"github.com/yinqiwen/gsnova/common/event"
 )
 
 var ErrTLSIncomplete = errors.New("TLS header incomplete")
 var ErrNoSNI = errors.New("No SNI in protocol")
 var ErrTLSClientHello = errors.New("Invalid tls client hello")
 
+type ProxyContext struct {
+	Hijacked    bool
+	SSLHijacked bool
+}
+
 type ProxyChannelConnection interface {
 	io.ReadWriteCloser
 	SetReadDeadline(t time.Time) error
 	SetWriteDeadline(t time.Time) error
 	SetDeadline(t time.Time) error
+}
+
+type ProxyDataStream interface {
+	Read() (event.Event, error)
+	Write(ev event.Event, ctx *ProxyContext) error
+	SetReadDeadline(t time.Time) error
+	SetWriteDeadline(t time.Time) error
+	ReadTimeout() time.Duration
+	Close() error
+}
+
+type ProxyControlStream interface {
+	ProxyDataStream
+	Open() error
+	Closed() bool
+	SetCryptoCtx(ctx *event.CryptoContext)
 }
 
 func TLSReplaceSNI(data []byte, sni string) ([]byte, string, error) {

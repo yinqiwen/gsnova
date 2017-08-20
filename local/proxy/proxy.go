@@ -3,10 +3,10 @@ package proxy
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"reflect"
 	"strings"
+	"time"
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/yinqiwen/gsnova/common/event"
@@ -20,18 +20,12 @@ var proxyHome string
 
 type InternalEventMonitor func(code int, desc string) error
 
-type Feature struct {
-	MaxRequestBody int
-}
-
 type Proxy interface {
-	Init(conf ProxyChannelConfig) error
-	//Type() string
+	//Init(conf ProxyChannelConfig) error
+	//PrintStat(w io.Writer)
+	CreateMuxSession(server string) (MuxSession, error)
 	Config() *ProxyChannelConfig
-	Destory() error
-	Features() Feature
-	PrintStat(w io.Writer)
-	Serve(session *ProxySession, ev event.Event) error
+	//Serve(session *ProxySession, ev event.Event) error
 }
 
 func init() {
@@ -43,6 +37,15 @@ var proxyTypeTable map[string]reflect.Type = make(map[string]reflect.Type)
 var clientConfName = "client.json"
 var hostsConfName = "hosts.json"
 
+type muxSessionHolder struct {
+	creatTime  time.Time
+	expireTime time.Time
+	muxSession MuxSession
+	server     string
+}
+
+var proxyMuxSessionTable = make(map[Proxy]map[*muxSessionHolder]bool)
+
 func RegisterProxyType(str string, p Proxy) error {
 	rt := reflect.TypeOf(p)
 	if rt.Kind() == reflect.Ptr {
@@ -51,6 +54,64 @@ func RegisterProxyType(str string, p Proxy) error {
 	proxyTypeTable[str] = rt
 	//proxyTable[p.Name()] = p
 	return nil
+}
+
+func createMuxSessionByProxy(p Proxy, server string) (MuxSession, error) {
+	smap, exist := proxyMuxSessionTable[p]
+	if !exist {
+		smap = make(map[*muxSessionHolder]bool)
+		proxyMuxSessionTable[p] = smap
+	}
+	session, err := p.CreateMuxSession(server)
+	if nil == err {
+		authStream, err := session.OpenStream()
+		if nil != err {
+			return nil, err
+		}
+		err = authStream.Auth(GConf.Auth)
+		if nil != err {
+			authStream.Close()
+			return nil, err
+		}
+		authStream.Close()
+
+		holder := &muxSessionHolder{
+			creatTime:  time.Now(),
+			expireTime: time.Now().Add(30 * time.Minute),
+			muxSession: session,
+			server:     server,
+		}
+		smap[holder] = true
+	}
+	return session, err
+}
+
+func getMuxSessionByProxy(p Proxy) (MuxSession, error) {
+	smap, exist := proxyMuxSessionTable[p]
+	if !exist {
+		return nil, fmt.Errorf("No proxy found to get mux session")
+	}
+	var session MuxSession
+	minStreamNum := -1
+	var proxyServer string
+	for holder := range smap {
+		proxyServer = holder.server
+		if !holder.expireTime.IsZero() && holder.expireTime.Before(time.Now()) {
+			if holder.muxSession.NumStreams() == 0 {
+				holder.muxSession.Close()
+				delete(smap, holder)
+			}
+			continue
+		}
+		if minStreamNum < 0 || holder.muxSession.NumStreams() < minStreamNum {
+			minStreamNum = holder.muxSession.NumStreams()
+			session = holder.muxSession
+		}
+	}
+	if nil == session {
+		return createMuxSessionByProxy(p, proxyServer)
+	}
+	return session, nil
 }
 
 func getProxyByName(name string) Proxy {
@@ -72,13 +133,12 @@ func loadConf(conf string) error {
 			fmt.Printf("Failed to unmarshal json:%s to config for reason:%v", string(confdata), err)
 		}
 		return err
-	} else {
-		err := hosts.Init(conf)
-		if nil != err {
-			log.Printf("Failed to init local hosts with reason:%v.", err)
-		}
-		return err
 	}
+	err := hosts.Init(conf)
+	if nil != err {
+		log.Printf("Failed to init local hosts with reason:%v.", err)
+	}
+	return err
 }
 
 func watchConf(watcher *fsnotify.Watcher) {
@@ -131,9 +191,16 @@ func Start(home string, monitor InternalEventMonitor) error {
 			if 0 == conf.ConnsPerServer {
 				conf.ConnsPerServer = 1
 			}
-			err = p.Init(conf)
-			if nil != err {
-				log.Printf("Proxy channel(%s):%s init failed with reason:%v", conf.Type, conf.Name, err)
+			for _, server := range conf.ServerList {
+				for i := 0; i < conf.ConnsPerServer; i++ {
+					sess, err := createMuxSessionByProxy(p, server)
+					if nil != err {
+						log.Printf("[ERROR]Failed to create mux session for %s:%d", server, i)
+					}
+				}
+			}
+			if len(proxyMuxSessionTable[p]) == 0 {
+				log.Printf("Proxy channel(%s):%s init failed", conf.Type, conf.Name)
 			} else {
 				log.Printf("Proxy channel(%s):%s init success", conf.Type, conf.Name)
 				proxyTable[conf.Name] = p

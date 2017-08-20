@@ -219,6 +219,11 @@ type ProxyConfig struct {
 	SNISniff bool
 }
 
+func (cfg *ProxyConfig) getProxyByHostPort(proto string, hostPort string) Proxy {
+	creq, _ := http.NewRequest("Connect", "https://"+hostPort, nil)
+	return cfg.findProxyByRequest(proto, hostPort, creq)
+}
+
 func (cfg *ProxyConfig) findProxyByRequest(proto string, ip string, req *http.Request) Proxy {
 	var p Proxy
 	if len(ip) > 0 && helper.IsPrivateIP(ip) {

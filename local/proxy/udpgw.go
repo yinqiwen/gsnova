@@ -44,6 +44,18 @@ type udpSession struct {
 	session    *ProxySession
 }
 
+func (u *udpSession) Write(content []byte) error {
+	var packet udpgwPacket
+	packet.content = content
+	packet.addr = u.addr
+	packet.conid = u.udpSessionId.id
+	if len(u.addr.ip) == 16 {
+		packet.flags = flagIPv6
+	}
+	return packet.write(u.session.LocalConn)
+
+}
+
 type udpgwAddr struct {
 	ip   net.IP
 	port uint16
@@ -178,14 +190,14 @@ func updateUdpSession(u *udpSession) {
 	udpSessionIdSet.ReplaceOrInsert(&u.udpSessionId)
 }
 
-func getUDPSession(id uint16, queue *event.EventQueue, createIfMissing bool) *udpSession {
+func getUDPSession(id uint16, session *ProxySession, createIfMissing bool) *udpSession {
 	udpSessionMutex.Lock()
 	defer udpSessionMutex.Unlock()
-	session, exist := udpSessionTable[id]
+	usession, exist := udpSessionTable[id]
 	if !exist {
 		if createIfMissing {
 			s := new(udpSession)
-			s.session = newProxySession(getSessionId(), queue)
+			s.session = session
 			s.id = id
 			udpSessionTable[id] = s
 			cidTable[s.session.id] = id
@@ -193,7 +205,7 @@ func getUDPSession(id uint16, queue *event.EventQueue, createIfMissing bool) *ud
 		}
 		return nil
 	}
-	return session
+	return usession
 }
 func getCid(sid uint32) (uint16, bool) {
 	udpSessionMutex.Lock()
@@ -202,51 +214,9 @@ func getCid(sid uint32) (uint16, bool) {
 	return cid, exist
 }
 
-func handleUDPGatewayConn(conn net.Conn, proxy ProxyConfig) {
-	queue := event.NewEventQueue()
-	connClosed := false
-	go func() {
-		for !connClosed {
-			ev, err := queue.Read(1 * time.Second)
-			if err != nil {
-				if err != io.EOF {
-					continue
-				}
-				return
-			}
-			switch ev.(type) {
-			case *event.UDPEvent:
-				cid, exist := getCid(ev.GetId())
-				if exist {
-					usession := getUDPSession(cid, nil, false)
-					if nil != usession {
-						var packet udpgwPacket
-						packet.content = ev.(*event.UDPEvent).Content
-						packet.addr = usession.addr
-						packet.conid = cid
-						if len(usession.addr.ip) == 16 {
-							packet.flags = flagIPv6
-						}
-						err = packet.write(conn)
-						if nil != err {
-							//log.Printf("###write udp error %v", err)
-							connClosed = true
-							conn.Close()
-						} else {
-							//log.Printf("###UDP Recv for %d(%d)", usession.session.id, usession.id)
-							updateUdpSession(usession)
-						}
-						continue
-					}
-				}
-				log.Printf("No udp session found for %d", ev.GetId())
-			default:
-				log.Printf("Invalid event type:%T to process", ev)
-			}
-		}
-	}()
-
-	bufconn := bufio.NewReader(conn)
+func handleUDPGatewayConn(session *ProxySession, proxy ProxyConfig) {
+	var p Proxy
+	bufconn := bufio.NewReader(session.LocalConn)
 	for {
 		var packet udpgwPacket
 		err := packet.read(bufconn)
@@ -255,8 +225,7 @@ func handleUDPGatewayConn(conn net.Conn, proxy ProxyConfig) {
 				continue
 			} else {
 				log.Printf("Failed to read udpgw packet:%v", err)
-				conn.Close()
-				connClosed = true
+				session.Close()
 				return
 			}
 		}
@@ -265,48 +234,67 @@ func handleUDPGatewayConn(conn net.Conn, proxy ProxyConfig) {
 			//log.Printf("###Recv udpgw packet to %s:%d", packet.addr.ip.String(), packet.addr.port)
 		}
 
-		usession := getUDPSession(packet.conid, queue, true)
+		usession := getUDPSession(packet.conid, session, true)
 		usession.addr = packet.addr
 		updateUdpSession(usession)
-		usession.activeTime = time.Now()
 
-		ev := &event.UDPEvent{Content: packet.content, Addr: packet.address()}
-		ev.SetId(usession.session.id)
-		var p Proxy
 		if packet.addr.port == 53 {
-			p = proxy.findProxyByRequest("dns", packet.addr.ip.String(), nil)
-			if p.Config().IsDirect() {
+			selectProxy := proxy.findProxyByRequest("dns", packet.addr.ip.String(), nil)
+			if nil != selectProxy && selectProxy.Config().IsDirect() {
 				go func() {
 					res, err := dnsQueryRaw(packet.content)
 					if nil == err {
-						resev := &event.UDPEvent{}
-						resev.Content = res
-						resev.SetId(usession.session.id)
-						HandleEvent(resev)
-					} else {
+						err = usession.Write(res)
+					}
+					if nil != err {
 						log.Printf("[ERROR]Failed to query dns with reason:%v", err)
+						return
 					}
 				}()
 				continue
-				//ev.Addr = selectDNSServer()
-				//dnsQueryRaw(packet.content)
 			}
-		} else {
-			//log.Printf("###Recv non dns udp to %s:%d", packet.addr.ip.String(), packet.addr.port)
-			p = proxy.findProxyByRequest("udp", packet.addr.ip.String(), nil)
+			p = selectProxy
 		}
-		if len(usession.targetAddr) > 0 {
-			if usession.targetAddr != ev.Addr {
-				closeEv := &event.ConnCloseEvent{}
-				closeEv.SetId(usession.session.id)
-				p.Serve(usession.session, closeEv)
-			}
-		}
-		usession.targetAddr = ev.Addr
 
-		if nil != p {
-			//log.Printf("Session:%d(%d) request udp:%s", usession.session.id, usession.id, ev.Addr)
-			p.Serve(usession.session, ev)
+		if len(usession.targetAddr) > 0 {
+			if usession.targetAddr != packet.address() {
+				if nil != session.RemoteStream {
+					session.RemoteStream.Close()
+					session.RemoteStream = nil
+				}
+			}
+		}
+
+		if nil == session.RemoteStream {
+			p = proxy.findProxyByRequest("udp", packet.addr.ip.String(), nil)
+			if nil == p {
+				log.Printf("[ERROR]No proxy found for udp to %s", packet.addr.ip.String())
+				return
+			}
+			mux, err := getMuxSessionByProxy(p)
+			if nil == err {
+				session.RemoteStream, err = mux.OpenStream()
+			}
+			if nil != err {
+				log.Printf("[ERROR]Failed to create mux stream:%v", err)
+				return
+			}
+			session.RemoteStream.Connect("udp", packet.address())
+			go func() {
+				b := make([]byte, 8192)
+				for {
+					n, err := session.RemoteStream.Read(b)
+					if n > 0 {
+						err = usession.Write(b[0:n])
+					}
+					if nil != err {
+						session.RemoteStream.Close()
+						return
+					}
+				}
+			}()
+		} else {
+			session.RemoteStream.Write(packet.content)
 		}
 	}
 }
