@@ -6,6 +6,7 @@ import (
 	"log"
 	"reflect"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
@@ -21,11 +22,24 @@ var proxyHome string
 type InternalEventMonitor func(code int, desc string) error
 
 type Proxy interface {
-	//Init(conf ProxyChannelConfig) error
+	Init(conf ProxyChannelConfig) error
 	//PrintStat(w io.Writer)
 	CreateMuxSession(server string) (MuxSession, error)
 	Config() *ProxyChannelConfig
 	//Serve(session *ProxySession, ev event.Event) error
+}
+
+type BaseProxy struct {
+	Conf ProxyChannelConfig
+}
+
+func (p *BaseProxy) Init(conf ProxyChannelConfig) error {
+	p.Conf = conf
+	return nil
+}
+
+func (p *BaseProxy) Config() *ProxyChannelConfig {
+	return &p.Conf
 }
 
 func init() {
@@ -45,6 +59,7 @@ type muxSessionHolder struct {
 }
 
 var proxyMuxSessionTable = make(map[Proxy]map[*muxSessionHolder]bool)
+var proxyMuxSessionMutex sync.Mutex
 
 func RegisterProxyType(str string, p Proxy) error {
 	rt := reflect.TypeOf(p)
@@ -57,11 +72,13 @@ func RegisterProxyType(str string, p Proxy) error {
 }
 
 func createMuxSessionByProxy(p Proxy, server string) (MuxSession, error) {
+	proxyMuxSessionMutex.Lock()
 	smap, exist := proxyMuxSessionTable[p]
 	if !exist {
 		smap = make(map[*muxSessionHolder]bool)
 		proxyMuxSessionTable[p] = smap
 	}
+	proxyMuxSessionMutex.Unlock()
 	session, err := p.CreateMuxSession(server)
 	if nil == err {
 		authStream, err := session.OpenStream()
@@ -81,14 +98,18 @@ func createMuxSessionByProxy(p Proxy, server string) (MuxSession, error) {
 			muxSession: session,
 			server:     server,
 		}
+		proxyMuxSessionMutex.Lock()
 		smap[holder] = true
+		proxyMuxSessionMutex.Unlock()
 	}
 	return session, err
 }
 
 func getMuxSessionByProxy(p Proxy) (MuxSession, error) {
+	proxyMuxSessionMutex.Lock()
 	smap, exist := proxyMuxSessionTable[p]
 	if !exist {
+		proxyMuxSessionMutex.Unlock()
 		return nil, fmt.Errorf("No proxy found to get mux session")
 	}
 	var session MuxSession
@@ -108,6 +129,7 @@ func getMuxSessionByProxy(p Proxy) (MuxSession, error) {
 			session = holder.muxSession
 		}
 	}
+	proxyMuxSessionMutex.Unlock()
 	if nil == session {
 		return createMuxSessionByProxy(p, proxyServer)
 	}
@@ -191,20 +213,21 @@ func Start(home string, monitor InternalEventMonitor) error {
 			if 0 == conf.ConnsPerServer {
 				conf.ConnsPerServer = 1
 			}
+
 			for _, server := range conf.ServerList {
 				for i := 0; i < conf.ConnsPerServer; i++ {
-					sess, err := createMuxSessionByProxy(p, server)
+					_, err := createMuxSessionByProxy(p, server)
 					if nil != err {
 						log.Printf("[ERROR]Failed to create mux session for %s:%d", server, i)
 					}
 				}
 			}
-			if len(proxyMuxSessionTable[p]) == 0 {
+			if len(proxyMuxSessionTable[p]) == 0 && !conf.IsDirect() {
 				log.Printf("Proxy channel(%s):%s init failed", conf.Type, conf.Name)
-			} else {
-				log.Printf("Proxy channel(%s):%s init success", conf.Type, conf.Name)
-				proxyTable[conf.Name] = p
+				continue
 			}
+			log.Printf("Proxy channel(%s):%s init success", conf.Type, conf.Name)
+			proxyTable[conf.Name] = p
 		}
 	}
 
@@ -218,14 +241,16 @@ func Start(home string, monitor InternalEventMonitor) error {
 
 func Stop() error {
 	stopLocalServers()
-	for name, p := range proxyTable {
-		err := p.Destory()
-		if nil != err {
-			log.Printf("Failed to destroy proxy:%s with error:%v", name, err)
-		} else {
-			log.Printf("Proxy:%s destroy success.", name)
+	proxyMuxSessionMutex.Lock()
+	for _, pmap := range proxyMuxSessionTable {
+		for holder := range pmap {
+			if nil != holder {
+				holder.muxSession.Close()
+			}
 		}
 	}
+	proxyMuxSessionTable = make(map[Proxy]map[*muxSessionHolder]bool)
+	proxyMuxSessionMutex.Unlock()
 	hosts.Clear()
 	if nil != cnIPRange {
 		cnIPRange.Clear()

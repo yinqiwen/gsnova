@@ -22,6 +22,8 @@ import (
 var ErrTLSIncomplete = errors.New("TLS header incomplete")
 var ErrNoSNI = errors.New("No SNI in protocol")
 var ErrTLSClientHello = errors.New("Invalid tls client hello")
+var ErrWriteTimeout = errors.New("write timeout")
+var ErrReadTimeout = errors.New("read timeout")
 
 type ProxyContext struct {
 	Hijacked    bool

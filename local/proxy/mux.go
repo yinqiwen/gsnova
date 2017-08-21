@@ -4,6 +4,7 @@ import (
 	"io"
 
 	"github.com/vmihailenco/msgpack"
+	"github.com/yinqiwen/pmux"
 )
 
 type ConnectRequest struct {
@@ -57,6 +58,29 @@ type MuxSession interface {
 	OpenStream() (MuxStream, error)
 	NumStreams() int
 	Close() error
+}
+
+type ProxyMuxStream struct {
+	io.ReadWriteCloser
+}
+
+func (s *ProxyMuxStream) Connect(network string, addr string) error {
+	return nil
+}
+func (s *ProxyMuxStream) Auth(user string) error {
+	return nil
+}
+
+type ProxyMuxSession struct {
+	*pmux.Session
+}
+
+func (s *ProxyMuxSession) OpenStream() (MuxStream, error) {
+	ss, err := s.Session.OpenStream()
+	if nil != err {
+		return nil, err
+	}
+	return &ProxyMuxStream{ss}, nil
 }
 
 func init() {

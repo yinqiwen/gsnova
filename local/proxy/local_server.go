@@ -25,7 +25,6 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 	var p Proxy
 	protocol := "tcp"
 	sid := getSessionId()
-	connClosed := false
 	session := newProxySession(sid, conn)
 	defer closeProxySession(sid)
 
@@ -144,6 +143,10 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 				remoteHost, remotePort, _ = net.SplitHostPort(initialHTTPReq.Host)
 			} else {
 				remoteHost = initialHTTPReq.Host
+				remotePort = "80"
+				if strings.EqualFold(initialHTTPReq.Method, "CONNECT") {
+					remotePort = "443"
+				}
 			}
 			if strings.EqualFold(initialHTTPReq.Method, "CONNECT") {
 				protocol = "https"
@@ -195,11 +198,12 @@ START:
 		io.Copy(conn, stream)
 	}()
 	if isSocksProxy || isHttpsProxy {
+		wait := make(chan int)
 		go func() {
 			io.Copy(stream, conn)
-			stream.Close()
-			conn.Close()
+			wait <- 1
 		}()
+		<-wait
 	} else {
 		proxyReq := initialHTTPReq
 		initialHTTPReq = nil

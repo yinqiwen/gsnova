@@ -24,8 +24,12 @@ type ProxySession struct {
 func (s *ProxySession) Close() error {
 	if nil != s.RemoteStream {
 		s.RemoteStream.Close()
+		s.RemoteStream = nil
 	}
-	s.LocalConn.Close()
+	if nil != s.LocalConn {
+		s.LocalConn.Close()
+		s.LocalConn = nil
+	}
 	return nil
 }
 

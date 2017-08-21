@@ -38,9 +38,9 @@ func statCallback(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "DNSCacheSize: %d\n", dnsCache.Len())
 	}
 	ots.Handle("stat", w)
-	for _, p := range proxyTable {
-		p.PrintStat(w)
-	}
+	// for _, p := range proxyTable {
+	// 	p.PrintStat(w)
+	// }
 	dumpProxySessions(w)
 }
 func stackdumpCallback(w http.ResponseWriter, req *http.Request) {

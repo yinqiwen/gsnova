@@ -31,7 +31,7 @@ func NewAuthEvent(secureTransport bool) *event.AuthEvent {
 	return auth
 }
 
-func NewHTTPClient(conf *ProxyChannelConfig) (*http.Client, error) {
+func NewDialByConf(conf *ProxyChannelConfig) func(network, addr string) (net.Conn, error) {
 	localDial := func(network, addr string) (net.Conn, error) {
 		host, port, _ := net.SplitHostPort(addr)
 		if port == "443" && len(conf.SNIProxy) > 0 && hosts.InHosts(conf.SNIProxy) {
@@ -52,12 +52,16 @@ func NewHTTPClient(conf *ProxyChannelConfig) (*http.Client, error) {
 		log.Printf("[Proxy]Connect %s", addr)
 		return netx.DialTimeout(network, addr, time.Duration(dailTimeout)*time.Second)
 	}
+	return localDial
+}
+
+func NewHTTPClient(conf *ProxyChannelConfig) (*http.Client, error) {
 	readTimeout := conf.ReadTimeout
 	if 0 == readTimeout {
 		readTimeout = 30
 	}
 	tr := &http.Transport{
-		Dial:                  localDial,
+		Dial:                  NewDialByConf(conf),
 		DisableCompression:    true,
 		MaxIdleConnsPerHost:   2 * int(conf.ConnsPerServer),
 		ResponseHeaderTimeout: time.Duration(readTimeout) * time.Second,
