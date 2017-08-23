@@ -8,9 +8,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/yinqiwen/gsnova/common/event"
 	"github.com/yinqiwen/gsnova/common/helper"
 	"github.com/yinqiwen/gsnova/common/logger"
+	"github.com/yinqiwen/gsnova/common/mux"
+	"github.com/yinqiwen/pmux"
 )
 
 type EncryptConfig struct {
@@ -19,12 +20,41 @@ type EncryptConfig struct {
 }
 
 type TLServerConfig struct {
-	Cert string
-	Key  string
+	Cert   string
+	Key    string
+	Listen string
+}
+
+// Config for server
+type KCPServerConfig struct {
+	Listen       string `json:"listen"`
+	Target       string `json:"target"`
+	Key          string `json:"key"`
+	Crypt        string `json:"crypt"`
+	Mode         string `json:"mode"`
+	MTU          int    `json:"mtu"`
+	SndWnd       int    `json:"sndwnd"`
+	RcvWnd       int    `json:"rcvwnd"`
+	DataShard    int    `json:"datashard"`
+	ParityShard  int    `json:"parityshard"`
+	DSCP         int    `json:"dscp"`
+	NoComp       bool   `json:"nocomp"`
+	AckNodelay   bool   `json:"acknodelay"`
+	NoDelay      int    `json:"nodelay"`
+	Interval     int    `json:"interval"`
+	Resend       int    `json:"resend"`
+	NoCongestion int    `json:"nc"`
+	SockBuf      int    `json:"sockbuf"`
+	KeepAlive    int    `json:"keepalive"`
+	Log          string `json:"log"`
+	SnmpLog      string `json:"snmplog"`
+	SnmpPeriod   int    `json:"snmpperiod"`
+	Pprof        bool   `json:"pprof"`
 }
 
 type ServerConfig struct {
 	Listen               string
+	QUICListen           string
 	AdminListen          string
 	MaxDynamicPort       int
 	DynamicPortLifeCycle int
@@ -33,6 +63,7 @@ type ServerConfig struct {
 	Encrypt              EncryptConfig
 	Log                  []string
 	TLS                  TLServerConfig
+	KCP                  KCPServerConfig
 }
 
 func (conf *ServerConfig) VerifyUser(user string) bool {
@@ -50,6 +81,14 @@ func (conf *ServerConfig) VerifyUser(user string) bool {
 }
 
 var ServerConf ServerConfig
+
+func InitialPMuxConfig() *pmux.Config {
+	cfg := pmux.DefaultConfig()
+	cfg.CipherKey = []byte(ServerConf.Encrypt.Key)
+	cfg.CipherMethod = mux.DefaultMuxCipherMethod
+	cfg.CipherInitialCounter = mux.DefaultMuxInitialCipherCounter
+	return cfg
+}
 
 func init() {
 	key := flag.String("key", "", "Crypto key setting")
@@ -93,5 +132,4 @@ func init() {
 	logger.InitLogger(ServerConf.Log)
 	log.Printf("Load server conf success.")
 	log.Printf("ServerConf:%v", &ServerConf)
-	event.SetDefaultSecretKey(ServerConf.Encrypt.Method, ServerConf.Encrypt.Key)
 }

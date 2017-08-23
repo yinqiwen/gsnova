@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -50,10 +51,38 @@ func matchHostnames(pattern, host string) bool {
 	return true
 }
 
+// Config for client
+type KCPConfig struct {
+	LocalAddr    string `json:"localaddr"`
+	RemoteAddr   string `json:"remoteaddr"`
+	Key          string `json:"key"`
+	Crypt        string `json:"crypt"`
+	Mode         string `json:"mode"`
+	Conn         int    `json:"conn"`
+	AutoExpire   int    `json:"autoexpire"`
+	ScavengeTTL  int    `json:"scavengettl"`
+	MTU          int    `json:"mtu"`
+	SndWnd       int    `json:"sndwnd"`
+	RcvWnd       int    `json:"rcvwnd"`
+	DataShard    int    `json:"datashard"`
+	ParityShard  int    `json:"parityshard"`
+	DSCP         int    `json:"dscp"`
+	NoComp       bool   `json:"nocomp"`
+	AckNodelay   bool   `json:"acknodelay"`
+	NoDelay      int    `json:"nodelay"`
+	Interval     int    `json:"interval"`
+	Resend       int    `json:"resend"`
+	NoCongestion int    `json:"nc"`
+	SockBuf      int    `json:"sockbuf"`
+	KeepAlive    int    `json:"keepalive"`
+	Log          string `json:"log"`
+	SnmpLog      string `json:"snmplog"`
+	SnmpPeriod   int    `json:"snmpperiod"`
+}
+
 type ProxyChannelConfig struct {
 	Enable              bool
 	Name                string
-	Type                string
 	ServerList          []string
 	ConnsPerServer      int
 	SNI                 []string
@@ -65,13 +94,9 @@ type ProxyChannelConfig struct {
 	HeartBeatPeriod     int
 	RCPRandomAdjustment int
 	HTTPChunkPushEnable bool
-	ForceTLS            bool
+	KCP                 KCPConfig
 
 	proxyURL *url.URL
-}
-
-func (c *ProxyChannelConfig) IsDirect() bool {
-	return c.Type == "DIRECT"
 }
 
 func (c *ProxyChannelConfig) ProxyURL() *url.URL {
@@ -219,30 +244,27 @@ type ProxyConfig struct {
 	SNISniff bool
 }
 
-func (cfg *ProxyConfig) getProxyByHostPort(proto string, hostPort string) Proxy {
+func (cfg *ProxyConfig) getProxyChannelByHostPort(proto string, hostPort string) string {
 	creq, _ := http.NewRequest("Connect", "https://"+hostPort, nil)
-	return cfg.findProxyByRequest(proto, hostPort, creq)
+	return cfg.findProxyChannelByRequest(proto, hostPort, creq)
 }
 
-func (cfg *ProxyConfig) findProxyByRequest(proto string, ip string, req *http.Request) Proxy {
-	var p Proxy
+func (cfg *ProxyConfig) findProxyChannelByRequest(proto string, ip string, req *http.Request) string {
+	var channel string
 	if len(ip) > 0 && helper.IsPrivateIP(ip) {
-		p = getProxyByName("Direct")
-		if nil != p {
-			return p
-		}
+		//channel = "direct"
+		return DirectProxyChannelName
 	}
 	for _, pac := range cfg.PAC {
 		if pac.Match(proto, ip, req) {
-			p = getProxyByName(pac.Remote)
+			channel = pac.Remote
 			break
 		}
-
 	}
-	if nil == p {
-		log.Printf("No proxy found.")
+	if len(channel) == 0 {
+		log.Printf("No proxy channel found.")
 	}
-	return p
+	return channel
 }
 
 type EncryptConfig struct {
@@ -285,24 +307,6 @@ type LocalConfig struct {
 }
 
 func (cfg *LocalConfig) init() error {
-	forwardProxies := make(map[string]bool)
-	for _, pcfg := range cfg.Proxy {
-		for _, pac := range pcfg.PAC {
-			if strings.Contains(pac.Remote, "://") {
-				forwardProxies[pac.Remote] = true
-			}
-		}
-	}
-	for forwardProxy, _ := range forwardProxies {
-		forwardChannel := ProxyChannelConfig{
-			Enable: true,
-			Name:   forwardProxy,
-			Type:   "direct",
-			Proxy:  forwardProxy,
-		}
-		cfg.Channel = append(cfg.Channel, forwardChannel)
-	}
-
 	gfwlistEnable := false
 	cnIPEnable := false
 	for i, _ := range cfg.Proxy {
@@ -362,6 +366,21 @@ func (cfg *LocalConfig) init() error {
 				}
 			}
 		}()
+	}
+
+	switch GConf.Encrypt.Method {
+	case "auto":
+		if strings.Contains(runtime.GOARCH, "386") || strings.Contains(runtime.GOARCH, "amd64") {
+			GConf.Encrypt.Method = "aes256-gcm"
+		} else if strings.Contains(runtime.GOARCH, "arm") {
+			GConf.Encrypt.Method = "chacha20poly1305"
+		}
+	case "chacha20poly1305":
+	case "aes256-gcm":
+	case "none":
+	default:
+		log.Printf("Invalid encrypt method:%s, use 'chacha20poly1305' instead.", GConf.Encrypt.Method)
+		GConf.Encrypt.Method = "chacha20poly1305"
 	}
 	return nil
 }

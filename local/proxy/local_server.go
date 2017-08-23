@@ -22,7 +22,7 @@ func getSessionId() uint32 {
 }
 
 func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
-	var p Proxy
+	var proxyChannelName string
 	protocol := "tcp"
 	sid := getSessionId()
 	session := newProxySession(sid, conn)
@@ -31,7 +31,7 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 	remoteHost := ""
 	remotePort := ""
 	//indicate that if remote opened by event
-	tryResolveHost := false
+	trySNISniff := false
 	isSocksProxy := false
 	isHttpsProxy := false
 	isHttp11Proto := false
@@ -58,7 +58,7 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 		}
 		if net.ParseIP(remoteHost) != nil && !helper.IsPrivateIP(remoteHost) && proxy.SNISniff {
 			//this is a ip from local dns query
-			tryResolveHost = true
+			trySNISniff = true
 		}
 	} else {
 		if nil == bufconn {
@@ -73,7 +73,7 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 	defer conn.Close()
 
 	//1. sniff SNI first
-	if tryResolveHost {
+	if trySNISniff {
 		sniChunkPeekSize := 1024
 		for {
 			conn.SetReadDeadline(time.Now().Add(60 * time.Second))
@@ -89,8 +89,6 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 				} else {
 					log.Printf("Sniffed SNI:%s:%s for IP:%s:%s", sni, remotePort, remoteHost, remotePort)
 					remoteHost = sni
-					//p = proxy.getProxyByHostPort(protocol, net.JoinHostPort(remoteHost, remotePort))
-					tryResolveHost = false
 				}
 			} else {
 				//try next round
@@ -100,10 +98,15 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 	}
 
 	//2. try read http
-	if tryResolveHost {
-		headChunk, _ := bufconn.Peek(7)
+	if len(remoteHost) == 0 {
+		conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+		headChunk, err := bufconn.Peek(7)
 		if len(headChunk) != 7 {
-			goto START
+			if err != io.EOF {
+				log.Printf("[%d]]Peek:%s %d %v", sid, string(headChunk), len(headChunk), err)
+			}
+			return
+			//goto START
 		}
 		method := string(headChunk)
 		if tmp := strings.Fields(method); len(tmp) > 0 {
@@ -132,13 +135,14 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 		default:
 			isHttp11Proto = false
 		}
-
+		log.Printf("[%d]]Method:%s", sid, method)
 		if isHttp11Proto {
 			initialHTTPReq, err = http.ReadRequest(bufconn)
 			if nil != err {
 				log.Printf("Session:%d read first request failed from proxy connection for reason:%v", sid, err)
 				return
 			}
+			log.Printf("[%d]]Host:%s %v", sid, initialHTTPReq.Host, initialHTTPReq.URL)
 			if strings.Contains(initialHTTPReq.Host, ":") {
 				remoteHost, remotePort, _ = net.SplitHostPort(initialHTTPReq.Host)
 			} else {
@@ -172,12 +176,17 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 	}
 
 START:
-	p = proxy.getProxyByHostPort(protocol, net.JoinHostPort(remoteHost, remotePort))
-	if nil == p {
+	if len(remoteHost) == 0 || len(remotePort) == 0 {
+		log.Printf("[%d]Can NOT resolve remote host or port %s:%s", sid, remoteHost, remotePort)
+		return
+	}
+	proxyChannelName = proxy.getProxyChannelByHostPort(protocol, net.JoinHostPort(remoteHost, remotePort))
+	log.Printf("[Proxy]%s to %s:%s", proxyChannelName, remoteHost, remotePort)
+	if len(proxyChannelName) == 0 {
 		log.Printf("[ERROR]No proxy found for %s:%s", remoteHost, remotePort)
 		return
 	}
-	muxSession, err := getMuxSessionByProxy(p)
+	muxSession, err := getMuxSessionByChannel(proxyChannelName)
 	if nil != err {
 		log.Printf("Session:%d failed to get mux session for reason:%v", sid, err)
 		return
@@ -216,9 +225,12 @@ START:
 				}
 			}
 			prevReq := proxyReq
+			conn.SetReadDeadline(time.Now().Add(60 * time.Second))
 			proxyReq, err = http.ReadRequest(bufconn)
 			if nil != err {
-				log.Printf("Session:%d failed to read proxy http request for reason:%v", sid, err)
+				if err != io.EOF {
+					log.Printf("Session:%d failed to read proxy http request for reason:%v", sid, err)
+				}
 				return
 			}
 			if nil != prevReq && prevReq.Host != proxyReq.Host {

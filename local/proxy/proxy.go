@@ -4,17 +4,19 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net/url"
 	"reflect"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
-	"github.com/yinqiwen/gsnova/common/event"
 	"github.com/yinqiwen/gsnova/common/helper"
 	"github.com/yinqiwen/gsnova/common/logger"
+	"github.com/yinqiwen/gsnova/common/mux"
 	"github.com/yinqiwen/gsnova/local"
 	"github.com/yinqiwen/gsnova/local/hosts"
+	"github.com/yinqiwen/pmux"
 )
 
 var proxyHome string
@@ -22,75 +24,64 @@ var proxyHome string
 type InternalEventMonitor func(code int, desc string) error
 
 type Proxy interface {
-	Init(conf ProxyChannelConfig) error
+	//Init(conf ProxyChannelConfig) error
 	//PrintStat(w io.Writer)
-	CreateMuxSession(server string) (MuxSession, error)
-	Config() *ProxyChannelConfig
+	CreateMuxSession(server string, conf *ProxyChannelConfig) (mux.MuxSession, error)
+	//Config() *ProxyChannelConfig
 	//Serve(session *ProxySession, ev event.Event) error
-}
-
-type BaseProxy struct {
-	Conf ProxyChannelConfig
-}
-
-func (p *BaseProxy) Init(conf ProxyChannelConfig) error {
-	p.Conf = conf
-	return nil
-}
-
-func (p *BaseProxy) Config() *ProxyChannelConfig {
-	return &p.Conf
 }
 
 func init() {
 	proxyHome = "."
 }
 
-var proxyTable = make(map[string]Proxy)
 var proxyTypeTable map[string]reflect.Type = make(map[string]reflect.Type)
 var clientConfName = "client.json"
 var hostsConfName = "hosts.json"
 
+func InitialPMuxConfig() *pmux.Config {
+	cfg := pmux.DefaultConfig()
+	cfg.CipherKey = []byte(GConf.Encrypt.Key)
+	cfg.CipherMethod = mux.DefaultMuxCipherMethod
+	cfg.CipherInitialCounter = mux.DefaultMuxInitialCipherCounter
+	return cfg
+}
+
 type muxSessionHolder struct {
 	creatTime  time.Time
 	expireTime time.Time
-	muxSession MuxSession
+	muxSession mux.MuxSession
 	server     string
+	p          Proxy
 }
 
-var proxyMuxSessionTable = make(map[Proxy]map[*muxSessionHolder]bool)
-var proxyMuxSessionMutex sync.Mutex
-
-func RegisterProxyType(str string, p Proxy) error {
-	rt := reflect.TypeOf(p)
-	if rt.Kind() == reflect.Ptr {
-		rt = rt.Elem()
-	}
-	proxyTypeTable[str] = rt
-	//proxyTable[p.Name()] = p
-	return nil
+type proxyChannel struct {
+	Conf         ProxyChannelConfig
+	sessionMutex sync.Mutex
+	sessions     map[*muxSessionHolder]bool
+	proxies      map[Proxy]bool
 }
 
-func createMuxSessionByProxy(p Proxy, server string) (MuxSession, error) {
-	proxyMuxSessionMutex.Lock()
-	smap, exist := proxyMuxSessionTable[p]
-	if !exist {
-		smap = make(map[*muxSessionHolder]bool)
-		proxyMuxSessionTable[p] = smap
-	}
-	proxyMuxSessionMutex.Unlock()
-	session, err := p.CreateMuxSession(server)
+func (ch *proxyChannel) createMuxSessionByProxy(p Proxy, server string) (mux.MuxSession, error) {
+	session, err := p.CreateMuxSession(server, &ch.Conf)
 	if nil == err {
 		authStream, err := session.OpenStream()
 		if nil != err {
 			return nil, err
 		}
-		err = authStream.Auth(GConf.Auth)
+		counter := uint64(helper.RandBetween(0, 100000))
+		err = authStream.Auth(GConf.Auth, GConf.Encrypt.Method, counter)
 		if nil != err {
-			authStream.Close()
+			//authStream.Close()
 			return nil, err
 		}
-		authStream.Close()
+		if psession, ok := session.(*mux.ProxyMuxSession); ok {
+			err = psession.Session.ResetCryptoContext(GConf.Encrypt.Method, counter)
+			if nil != err {
+				log.Printf("[ERROR]Failed to reset cipher context with reason:%v", err)
+				return nil, err
+			}
+		}
 
 		holder := &muxSessionHolder{
 			creatTime:  time.Now(),
@@ -98,29 +89,28 @@ func createMuxSessionByProxy(p Proxy, server string) (MuxSession, error) {
 			muxSession: session,
 			server:     server,
 		}
-		proxyMuxSessionMutex.Lock()
-		smap[holder] = true
-		proxyMuxSessionMutex.Unlock()
+		ch.sessionMutex.Lock()
+		ch.sessions[holder] = true
+		ch.sessionMutex.Unlock()
 	}
 	return session, err
 }
 
-func getMuxSessionByProxy(p Proxy) (MuxSession, error) {
-	proxyMuxSessionMutex.Lock()
-	smap, exist := proxyMuxSessionTable[p]
-	if !exist {
-		proxyMuxSessionMutex.Unlock()
-		return nil, fmt.Errorf("No proxy found to get mux session")
-	}
-	var session MuxSession
+func (ch *proxyChannel) getMuxSession() (mux.MuxSession, error) {
+	var session mux.MuxSession
 	minStreamNum := -1
 	var proxyServer string
-	for holder := range smap {
-		proxyServer = holder.server
+	var p Proxy
+	ch.sessionMutex.Lock()
+	for holder := range ch.sessions {
+		if len(proxyServer) == 0 {
+			proxyServer = holder.server
+			p = holder.p
+		}
 		if !holder.expireTime.IsZero() && holder.expireTime.Before(time.Now()) {
 			if holder.muxSession.NumStreams() == 0 {
 				holder.muxSession.Close()
-				delete(smap, holder)
+				delete(ch.sessions, holder)
 			}
 			continue
 		}
@@ -129,19 +119,34 @@ func getMuxSessionByProxy(p Proxy) (MuxSession, error) {
 			session = holder.muxSession
 		}
 	}
-	proxyMuxSessionMutex.Unlock()
+	ch.sessionMutex.Unlock()
 	if nil == session {
-		return createMuxSessionByProxy(p, proxyServer)
+		return ch.createMuxSessionByProxy(p, proxyServer)
 	}
 	return session, nil
 }
 
-func getProxyByName(name string) Proxy {
-	p, exist := proxyTable[name]
-	if exist {
-		return p
+var proxyChannelTable = make(map[string]*proxyChannel)
+var proxyChannelMutex sync.Mutex
+
+func RegisterProxyType(str string, p Proxy) error {
+	rt := reflect.TypeOf(p)
+	if rt.Kind() == reflect.Ptr {
+		rt = rt.Elem()
 	}
+	proxyTypeTable[str] = rt
 	return nil
+}
+
+func getMuxSessionByChannel(name string) (mux.MuxSession, error) {
+	proxyChannelMutex.Lock()
+	pch, exist := proxyChannelTable[name]
+	proxyChannelMutex.Unlock()
+	if !exist {
+		return nil, fmt.Errorf("No proxy found to get mux session")
+	}
+
+	return pch.getMuxSession()
 }
 
 func loadConf(conf string) error {
@@ -196,38 +201,49 @@ func Start(home string, monitor InternalEventMonitor) error {
 	}
 	loadConf(hostsConf)
 
-	event.SetDefaultSecretKey(GConf.Encrypt.Method, GConf.Encrypt.Key)
 	proxyHome = home
 	GConf.init()
+
 	for _, conf := range GConf.Channel {
-		conf.Type = strings.ToUpper(conf.Type)
-		if t, ok := proxyTypeTable[conf.Type]; !ok {
-			log.Printf("[ERROR]No registe proxy channel type for %s", conf.Type)
+		if !conf.Enable {
 			continue
-		} else {
-			v := reflect.New(t)
-			p := v.Interface().(Proxy)
-			if !conf.Enable {
+		}
+		channel := &proxyChannel{}
+		channel.Conf = conf
+		channel.sessions = make(map[*muxSessionHolder]bool)
+		channel.proxies = make(map[Proxy]bool)
+		success := false
+
+		for _, server := range conf.ServerList {
+			u, err := url.Parse(server)
+			if nil != err {
+				log.Printf("Invalid server url:%s with reason:%v", server, err)
 				continue
 			}
-			if 0 == conf.ConnsPerServer {
-				conf.ConnsPerServer = 1
-			}
-
-			for _, server := range conf.ServerList {
+			schema := strings.ToLower(u.Scheme)
+			if t, ok := proxyTypeTable[schema]; !ok {
+				log.Printf("[ERROR]No registe proxy type for schema:%s", schema)
+				continue
+			} else {
+				v := reflect.New(t)
+				p := v.Interface().(Proxy)
+				channel.proxies[p] = true
 				for i := 0; i < conf.ConnsPerServer; i++ {
-					_, err := createMuxSessionByProxy(p, server)
+					_, err := channel.createMuxSessionByProxy(p, server)
 					if nil != err {
-						log.Printf("[ERROR]Failed to create mux session for %s:%d", server, i)
+						log.Printf("[ERROR]Failed to create mux session for %s:%d with reason:%v", server, i, err)
+						break
+					} else {
+						success = true
 					}
 				}
 			}
-			if len(proxyMuxSessionTable[p]) == 0 && !conf.IsDirect() {
-				log.Printf("Proxy channel(%s):%s init failed", conf.Type, conf.Name)
-				continue
-			}
-			log.Printf("Proxy channel(%s):%s init success", conf.Type, conf.Name)
-			proxyTable[conf.Name] = p
+		}
+		if success {
+			log.Printf("Proxy channel:%s init success", conf.Name)
+			proxyChannelTable[conf.Name] = channel
+		} else {
+			log.Printf("Proxy channel:%s init failed", conf.Name)
 		}
 	}
 
@@ -241,16 +257,16 @@ func Start(home string, monitor InternalEventMonitor) error {
 
 func Stop() error {
 	stopLocalServers()
-	proxyMuxSessionMutex.Lock()
-	for _, pmap := range proxyMuxSessionTable {
-		for holder := range pmap {
+	proxyChannelMutex.Lock()
+	for _, pch := range proxyChannelTable {
+		for holder := range pch.sessions {
 			if nil != holder {
 				holder.muxSession.Close()
 			}
 		}
 	}
-	proxyMuxSessionTable = make(map[Proxy]map[*muxSessionHolder]bool)
-	proxyMuxSessionMutex.Unlock()
+	proxyChannelTable = make(map[string]*proxyChannel)
+	proxyChannelMutex.Unlock()
 	hosts.Clear()
 	if nil != cnIPRange {
 		cnIPRange.Clear()

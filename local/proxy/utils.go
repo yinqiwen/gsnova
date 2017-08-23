@@ -3,33 +3,29 @@ package proxy
 import (
 	"crypto/tls"
 	"log"
-	"math/rand"
 	"net"
 	"net/http"
 	"net/url"
-	"strings"
 	"time"
 
 	"github.com/getlantern/netx"
-	"github.com/yinqiwen/gsnova/common/event"
-	"github.com/yinqiwen/gsnova/common/helper"
 	"github.com/yinqiwen/gsnova/local/hosts"
 )
 
-func NewAuthEvent(secureTransport bool) *event.AuthEvent {
-	auth := &event.AuthEvent{}
-	auth.User = GConf.Auth
-	//auth.Mac = getDeviceId()
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-	auth.SetId(uint32(r.Int31()))
-	auth.Rand = []byte(helper.RandAsciiString(int(r.Int31n(128))))
-	if secureTransport && strings.EqualFold(GConf.Encrypt.Method, "auto") {
-		auth.EncryptMethod = uint8(event.NoneEncrypter)
-	} else {
-		auth.EncryptMethod = event.GetDefaultCryptoMethod()
-	}
-	return auth
-}
+// func NewAuthEvent(secureTransport bool) *event.AuthEvent {
+// 	auth := &event.AuthEvent{}
+// 	auth.User = GConf.Auth
+// 	//auth.Mac = getDeviceId()
+// 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+// 	auth.SetId(uint32(r.Int31()))
+// 	auth.Rand = []byte(helper.RandAsciiString(int(r.Int31n(128))))
+// 	if secureTransport && strings.EqualFold(GConf.Encrypt.Method, "auto") {
+// 		auth.EncryptMethod = uint8(event.NoneEncrypter)
+// 	} else {
+// 		auth.EncryptMethod = event.GetDefaultCryptoMethod()
+// 	}
+// 	return auth
+// }
 
 func NewDialByConf(conf *ProxyChannelConfig) func(network, addr string) (net.Conn, error) {
 	localDial := func(network, addr string) (net.Conn, error) {

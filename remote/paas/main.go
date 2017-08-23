@@ -10,6 +10,8 @@ import (
 
 	"github.com/yinqiwen/gotoolkit/ots"
 	"github.com/yinqiwen/gsnova/remote"
+	http11 "github.com/yinqiwen/gsnova/remote/channel/http"
+	"github.com/yinqiwen/gsnova/remote/channel/websocket"
 )
 
 // hello world, the web server
@@ -20,7 +22,6 @@ func indexCallback(w http.ResponseWriter, req *http.Request) {
 func statCallback(w http.ResponseWriter, req *http.Request) {
 	w.WriteHeader(200)
 	fmt.Fprintf(w, "Version:    %s\n", remote.Version)
-	fmt.Fprintf(w, "NumSession: %d\n", remote.GetSessionTableSize())
 	ots.Handle("stat", w)
 }
 
@@ -50,9 +51,9 @@ func main() {
 	mux.HandleFunc("/", indexCallback)
 	mux.HandleFunc("/stat", statCallback)
 	mux.HandleFunc("/stackdump", stackdumpCallback)
-	mux.HandleFunc("/ws", websocketInvoke)
-	mux.HandleFunc("/http/pull", httpInvoke)
-	mux.HandleFunc("/http/push", httpInvoke)
+	mux.HandleFunc("/ws", websocket.WebsocketInvoke)
+	mux.HandleFunc("/http/pull", http11.HTTPInvoke)
+	mux.HandleFunc("/http/push", http11.HTTPInvoke)
 
 	log.Println("Listening on " + listenAddr)
 	err := http.ListenAndServe(listenAddr, mux)

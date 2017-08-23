@@ -6,6 +6,8 @@ import (
 	"net"
 	"sync"
 	"time"
+
+	"github.com/yinqiwen/gsnova/common/mux"
 )
 
 var sessions map[uint32]*ProxySession = make(map[uint32]*ProxySession)
@@ -15,7 +17,7 @@ var sessionNotExist error
 type ProxySession struct {
 	id           uint32
 	LocalConn    net.Conn
-	RemoteStream MuxStream
+	RemoteStream mux.MuxStream
 	Addr         string
 	Proxy        Proxy
 	createTime   time.Time

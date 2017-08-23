@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/google/btree"
-	"github.com/yinqiwen/gsnova/common/event"
 )
 
 const (
@@ -215,19 +214,15 @@ func getCid(sid uint32) (uint16, bool) {
 }
 
 func handleUDPGatewayConn(session *ProxySession, proxy ProxyConfig) {
-	var p Proxy
+	var proxyChannelName string
 	bufconn := bufio.NewReader(session.LocalConn)
 	for {
 		var packet udpgwPacket
 		err := packet.read(bufconn)
 		if nil != err {
-			if err == event.EBNR {
-				continue
-			} else {
-				log.Printf("Failed to read udpgw packet:%v", err)
-				session.Close()
-				return
-			}
+			log.Printf("Failed to read udpgw packet:%v", err)
+			session.Close()
+			return
 		}
 		if len(packet.content) == 0 {
 			continue
@@ -239,8 +234,8 @@ func handleUDPGatewayConn(session *ProxySession, proxy ProxyConfig) {
 		updateUdpSession(usession)
 
 		if packet.addr.port == 53 {
-			selectProxy := proxy.findProxyByRequest("dns", packet.addr.ip.String(), nil)
-			if nil != selectProxy && selectProxy.Config().IsDirect() {
+			selectProxy := proxy.findProxyChannelByRequest("dns", packet.addr.ip.String(), nil)
+			if selectProxy == DirectProxyChannelName {
 				go func() {
 					res, err := dnsQueryRaw(packet.content)
 					if nil == err {
@@ -253,7 +248,7 @@ func handleUDPGatewayConn(session *ProxySession, proxy ProxyConfig) {
 				}()
 				continue
 			}
-			p = selectProxy
+			proxyChannelName = selectProxy
 		}
 
 		if len(usession.targetAddr) > 0 {
@@ -266,12 +261,12 @@ func handleUDPGatewayConn(session *ProxySession, proxy ProxyConfig) {
 		}
 
 		if nil == session.RemoteStream {
-			p = proxy.findProxyByRequest("udp", packet.addr.ip.String(), nil)
-			if nil == p {
+			proxyChannelName = proxy.findProxyChannelByRequest("udp", packet.addr.ip.String(), nil)
+			if len(proxyChannelName) == 0 {
 				log.Printf("[ERROR]No proxy found for udp to %s", packet.addr.ip.String())
 				return
 			}
-			mux, err := getMuxSessionByProxy(p)
+			mux, err := getMuxSessionByChannel(proxyChannelName)
 			if nil == err {
 				session.RemoteStream, err = mux.OpenStream()
 			}
