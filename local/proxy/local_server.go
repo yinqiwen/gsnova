@@ -11,7 +11,9 @@ import (
 	"time"
 
 	"github.com/yinqiwen/gsnova/common/helper"
+	"github.com/yinqiwen/gsnova/common/mux"
 	"github.com/yinqiwen/gsnova/local/socks"
+	"github.com/yinqiwen/pmux"
 )
 
 var sidSeed uint32 = 0
@@ -24,10 +26,9 @@ func getSessionId() uint32 {
 func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 	var proxyChannelName string
 	protocol := "tcp"
-	sid := getSessionId()
-	session := newProxySession(sid, conn)
-	defer closeProxySession(sid)
+	defer conn.Close()
 
+	localConn := conn
 	remoteHost := ""
 	remotePort := ""
 	//indicate that if remote opened by event
@@ -43,13 +44,12 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 		log.Printf("Local proxy recv %s proxy conn to %s", socksConn.Version(), socksConn.Req.Target)
 		socksConn.Grant(&net.TCPAddr{
 			IP: net.ParseIP("0.0.0.0"), Port: 0})
-		session.LocalConn = socksConn
+		localConn = socksConn
 		if socksConn.Req.Target == GConf.UDPGWAddr {
 			log.Printf("Handle udpgw conn for %v", socksConn.Req.Target)
-			handleUDPGatewayConn(session, proxy)
+			handleUDPGatewayConn(localConn, proxy)
 			return
 		}
-		conn = socksConn
 
 		remoteHost, remotePort, err = net.SplitHostPort(socksConn.Req.Target)
 		if nil != err {
@@ -62,15 +62,15 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 		}
 	} else {
 		if nil == bufconn {
-			conn.Close()
+			localConn.Close()
 			return
 		}
 	}
 
 	if nil == bufconn {
-		bufconn = bufio.NewReader(conn)
+		bufconn = bufio.NewReader(localConn)
 	}
-	defer conn.Close()
+	defer localConn.Close()
 
 	//1. sniff SNI first
 	if trySNISniff {
@@ -99,11 +99,11 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 
 	//2. try read http
 	if len(remoteHost) == 0 {
-		conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+		localConn.SetReadDeadline(time.Now().Add(60 * time.Second))
 		headChunk, err := bufconn.Peek(7)
 		if len(headChunk) != 7 {
 			if err != io.EOF {
-				log.Printf("[%d]]Peek:%s %d %v", sid, string(headChunk), len(headChunk), err)
+				log.Printf("Peek:%s %d %v", string(headChunk), len(headChunk), err)
 			}
 			return
 			//goto START
@@ -135,14 +135,14 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 		default:
 			isHttp11Proto = false
 		}
-		log.Printf("[%d]]Method:%s", sid, method)
+		//log.Printf("[%d]]Method:%s", sid, method)
 		if isHttp11Proto {
 			initialHTTPReq, err = http.ReadRequest(bufconn)
 			if nil != err {
-				log.Printf("Session:%d read first request failed from proxy connection for reason:%v", sid, err)
+				log.Printf("Read first request failed from proxy connection for reason:%v", err)
 				return
 			}
-			log.Printf("[%d]]Host:%s %v", sid, initialHTTPReq.Host, initialHTTPReq.URL)
+			log.Printf("Host:%s %v", initialHTTPReq.Host, initialHTTPReq.URL)
 			if strings.Contains(initialHTTPReq.Host, ":") {
 				remoteHost, remotePort, _ = net.SplitHostPort(initialHTTPReq.Host)
 			} else {
@@ -158,7 +158,7 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 					remotePort = "443"
 				}
 				if !isSocksProxy {
-					conn.Write([]byte("HTTP/1.0 200 Connection established\r\n\r\n"))
+					localConn.Write([]byte("HTTP/1.0 200 Connection established\r\n\r\n"))
 					isHttpsProxy = true
 				}
 			} else {
@@ -177,7 +177,7 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 
 START:
 	if len(remoteHost) == 0 || len(remotePort) == 0 {
-		log.Printf("[%d]Can NOT resolve remote host or port %s:%s", sid, remoteHost, remotePort)
+		log.Printf("Can NOT resolve remote host or port %s:%s", remoteHost, remotePort)
 		return
 	}
 	proxyChannelName = proxy.getProxyChannelByHostPort(protocol, net.JoinHostPort(remoteHost, remotePort))
@@ -188,31 +188,29 @@ START:
 	}
 	muxSession, err := getMuxSessionByChannel(proxyChannelName)
 	if nil != err {
-		log.Printf("Session:%d failed to get mux session for reason:%v", sid, err)
+		log.Printf("Failed to get mux session for reason:%v", err)
 		return
 	}
 	stream, err := muxSession.OpenStream()
 	if nil != err {
-		log.Printf("Session:%d failed to open stream for reason:%v", sid, err)
+		log.Printf("Failed to open stream for reason:%v", err)
 		return
 	}
-	session.RemoteStream = stream
+	defer stream.Close()
+	ssid := stream.(*mux.ProxyMuxStream).ReadWriteCloser.(*pmux.Stream).ID()
+	log.Printf("Stream id:%d", ssid)
 	//defer stream.Close()
 	err = stream.Connect("tcp", net.JoinHostPort(remoteHost, remotePort))
 	if nil != err {
-		log.Printf("Session:%d connect failed from proxy connection for reason:%v", sid, err)
+		log.Printf("Connect failed from proxy connection for reason:%v", err)
 		return
 	}
 	go func() {
-		io.Copy(conn, stream)
+		io.Copy(localConn, stream)
+		localConn.Close()
 	}()
 	if isSocksProxy || isHttpsProxy {
-		wait := make(chan int)
-		go func() {
-			io.Copy(stream, conn)
-			wait <- 1
-		}()
-		<-wait
+		io.Copy(stream, localConn)
 	} else {
 		proxyReq := initialHTTPReq
 		initialHTTPReq = nil
@@ -220,21 +218,22 @@ START:
 			if nil != proxyReq {
 				err = proxyReq.Write(stream)
 				if nil != err {
-					log.Printf("Session:%d failed to write http request for reason:%v", sid, err)
+					log.Printf("Failed to write http request for reason:%v", err)
 					return
 				}
 			}
 			prevReq := proxyReq
-			conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+			localConn.SetReadDeadline(time.Now().Add(60 * time.Second))
 			proxyReq, err = http.ReadRequest(bufconn)
 			if nil != err {
 				if err != io.EOF {
-					log.Printf("Session:%d failed to read proxy http request for reason:%v", sid, err)
+					log.Printf("Failed to read proxy http request for reason:%v", err)
 				}
+
 				return
 			}
 			if nil != prevReq && prevReq.Host != proxyReq.Host {
-				log.Printf("Session:%d switch to next stream since target host change from %s to %s", sid, prevReq.Host, proxyReq.Host)
+				log.Printf("Switch to next stream since target host change from %s to %s", prevReq.Host, proxyReq.Host)
 				stream.Close()
 				goto START
 			}
@@ -287,6 +286,6 @@ func stopLocalServers() {
 	for _, l := range runningServers {
 		l.Close()
 	}
-	closeAllProxySession()
+	//closeAllProxySession()
 	closeAllUDPSession()
 }

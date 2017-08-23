@@ -7,37 +7,31 @@ import (
 
 	"github.com/yinqiwen/gsnova/common/mux"
 	"github.com/yinqiwen/gsnova/remote"
+	"github.com/yinqiwen/pmux"
 )
 
 func handleProxyStream(stream mux.MuxStream) {
 	creq, err := mux.ReadConnectRequest(stream)
+	defer stream.Close()
 	if nil != err {
 		stream.Close()
 		log.Printf("[ERROR]:Failed to read connect request:%v", err)
 		return
 	}
-	log.Printf("Start handle stream:%v", creq)
+	log.Printf("[%d]Start handle stream:%v", stream.(*mux.ProxyMuxStream).ReadWriteCloser.(*pmux.Stream).ID(), creq)
 	c, err := net.Dial(creq.Network, creq.Addr)
 	if nil != err {
 		log.Printf("[ERROR]:Failed to connect %s:%v for reason:%v", creq.Network, creq.Addr, err)
+		stream.Close()
 		return
 	}
+	defer c.Close()
 	go func() {
-		b := make([]byte, 8192)
-		for {
-			n, err := stream.Read(b)
-			if n > 0 {
-				//log.Printf("####Recv %s", string(b[0:n]))
-				c.Write(b[0:n])
-			}
-			if nil != err {
-				return
-			}
-		}
-		//io.Copy(c, stream)
+		io.Copy(c, stream)
 	}()
-
 	io.Copy(stream, c)
+	//n, err := io.Copy(stream, c)
+
 }
 
 func ServProxyMuxSession(session mux.MuxSession) {

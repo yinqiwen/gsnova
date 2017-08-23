@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/google/btree"
+	"github.com/yinqiwen/gsnova/common/mux"
 )
 
 const (
@@ -40,7 +41,7 @@ type udpSession struct {
 	udpSessionId
 	addr       udpgwAddr
 	targetAddr string
-	session    *ProxySession
+	localConn  net.Conn
 }
 
 func (u *udpSession) Write(content []byte) error {
@@ -51,7 +52,7 @@ func (u *udpSession) Write(content []byte) error {
 	if len(u.addr.ip) == 16 {
 		packet.flags = flagIPv6
 	}
-	return packet.write(u.session.LocalConn)
+	return packet.write(u.localConn)
 
 }
 
@@ -143,10 +144,8 @@ func closeAllUDPSession() {
 func removeUdpSession(id *udpSessionId) {
 	s, exist := udpSessionTable[id.id]
 	if exist {
-		log.Printf("Delete %d(%d) udpsession", id.id, s.session.id)
-		delete(cidTable, s.session.id)
+		log.Printf("Delete %d udpsession", id.id)
 		delete(udpSessionTable, s.id)
-		closeProxySession(s.session.id)
 	}
 }
 
@@ -189,17 +188,17 @@ func updateUdpSession(u *udpSession) {
 	udpSessionIdSet.ReplaceOrInsert(&u.udpSessionId)
 }
 
-func getUDPSession(id uint16, session *ProxySession, createIfMissing bool) *udpSession {
+func getUDPSession(id uint16, conn net.Conn, createIfMissing bool) *udpSession {
 	udpSessionMutex.Lock()
 	defer udpSessionMutex.Unlock()
 	usession, exist := udpSessionTable[id]
 	if !exist {
 		if createIfMissing {
 			s := new(udpSession)
-			s.session = session
+			s.localConn = conn
 			s.id = id
 			udpSessionTable[id] = s
-			cidTable[s.session.id] = id
+			//cidTable[s.session.id] = id
 			return s
 		}
 		return nil
@@ -213,15 +212,23 @@ func getCid(sid uint32) (uint16, bool) {
 	return cid, exist
 }
 
-func handleUDPGatewayConn(session *ProxySession, proxy ProxyConfig) {
+func handleUDPGatewayConn(localConn net.Conn, proxy ProxyConfig) {
 	var proxyChannelName string
-	bufconn := bufio.NewReader(session.LocalConn)
+	bufconn := bufio.NewReader(localConn)
+	var stream mux.MuxStream
+
+	defer func() {
+		localConn.Close()
+		if nil != stream {
+			stream.Close()
+		}
+	}()
 	for {
 		var packet udpgwPacket
 		err := packet.read(bufconn)
 		if nil != err {
 			log.Printf("Failed to read udpgw packet:%v", err)
-			session.Close()
+			localConn.Close()
 			return
 		}
 		if len(packet.content) == 0 {
@@ -229,7 +236,7 @@ func handleUDPGatewayConn(session *ProxySession, proxy ProxyConfig) {
 			//log.Printf("###Recv udpgw packet to %s:%d", packet.addr.ip.String(), packet.addr.port)
 		}
 
-		usession := getUDPSession(packet.conid, session, true)
+		usession := getUDPSession(packet.conid, localConn, true)
 		usession.addr = packet.addr
 		updateUdpSession(usession)
 
@@ -253,14 +260,14 @@ func handleUDPGatewayConn(session *ProxySession, proxy ProxyConfig) {
 
 		if len(usession.targetAddr) > 0 {
 			if usession.targetAddr != packet.address() {
-				if nil != session.RemoteStream {
-					session.RemoteStream.Close()
-					session.RemoteStream = nil
+				if nil != stream {
+					stream.Close()
+					stream = nil
 				}
 			}
 		}
 
-		if nil == session.RemoteStream {
+		if nil == stream {
 			proxyChannelName = proxy.findProxyChannelByRequest("udp", packet.addr.ip.String(), nil)
 			if len(proxyChannelName) == 0 {
 				log.Printf("[ERROR]No proxy found for udp to %s", packet.addr.ip.String())
@@ -268,28 +275,28 @@ func handleUDPGatewayConn(session *ProxySession, proxy ProxyConfig) {
 			}
 			mux, err := getMuxSessionByChannel(proxyChannelName)
 			if nil == err {
-				session.RemoteStream, err = mux.OpenStream()
+				stream, err = mux.OpenStream()
 			}
 			if nil != err {
 				log.Printf("[ERROR]Failed to create mux stream:%v", err)
 				return
 			}
-			session.RemoteStream.Connect("udp", packet.address())
+			stream.Connect("udp", packet.address())
 			go func() {
 				b := make([]byte, 8192)
 				for {
-					n, err := session.RemoteStream.Read(b)
+					n, err := stream.Read(b)
 					if n > 0 {
 						err = usession.Write(b[0:n])
 					}
 					if nil != err {
-						session.RemoteStream.Close()
+						stream.Close()
 						return
 					}
 				}
 			}()
 		} else {
-			session.RemoteStream.Write(packet.content)
+			stream.Write(packet.content)
 		}
 	}
 }
