@@ -11,7 +11,7 @@ import (
 
 	quic "github.com/lucas-clemente/quic-go"
 	"github.com/yinqiwen/gsnova/common/mux"
-	"github.com/yinqiwen/gsnova/remote/channel"
+	"github.com/yinqiwen/gsnova/remote"
 )
 
 // Setup a bare-bones TLS config for the server
@@ -42,7 +42,7 @@ func servQUIC(lp quic.Listener) {
 			continue
 		}
 		muxSession := &mux.QUICMuxSession{Session: sess}
-		go channel.ServProxyMuxSession(muxSession)
+		go remote.ServProxyMuxSession(muxSession)
 	}
 	//ws.WriteMessage(websocket.CloseMessage, []byte{})
 }
@@ -50,7 +50,7 @@ func servQUIC(lp quic.Listener) {
 func StartQuicProxyServer(addr string) error {
 	lp, err := quic.ListenAddr(addr, generateTLSConfig(), nil)
 	if nil != err {
-		log.Printf("[ERROR]Failed to listen QUIC address:%s with reason:%b", addr, err)
+		log.Printf("[ERROR]Failed to listen QUIC address:%s with reason:%v", addr, err)
 		return err
 	}
 	log.Printf("Listen on QUIC address:%s", addr)

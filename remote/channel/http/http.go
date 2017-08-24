@@ -13,7 +13,6 @@ import (
 	"github.com/yinqiwen/gsnova/common/helper"
 	"github.com/yinqiwen/gsnova/common/mux"
 	"github.com/yinqiwen/gsnova/remote"
-	"github.com/yinqiwen/gsnova/remote/channel"
 	"github.com/yinqiwen/pmux"
 )
 
@@ -170,6 +169,11 @@ func removetHttpDuplexServConnByID(id string) {
 	delete(httpDuplexServConnTable, id)
 }
 
+func httpTest(w http.ResponseWriter, r *http.Request) {
+	log.Printf("###Test req:%v", r)
+	w.Write([]byte("OK"))
+}
+
 func HTTPInvoke(w http.ResponseWriter, r *http.Request) {
 	id := r.Header.Get("X-Session-ID")
 	if len(id) == 0 {
@@ -184,21 +188,22 @@ func HTTPInvoke(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		muxSession := &mux.ProxyMuxSession{Session: session}
-		go channel.ServProxyMuxSession(muxSession)
+		go remote.ServProxyMuxSession(muxSession)
 	}
 	if strings.HasSuffix(r.URL.Path, "pull") {
 		c.setWriter(w)
+		w.WriteHeader(200)
 		period, _ := strconv.Atoi(r.Header.Get("X-PullPeriod"))
 		if period <= 0 {
-			period = 15
+			period = 30
 		}
 		select {
 		case <-time.After(time.Duration(period) * time.Second):
 			c.closeWrite()
+			log.Printf("HTTP server close pull for id:%s", id)
 			return
 		}
 	} else {
 		c.setReader(r)
 	}
-
 }

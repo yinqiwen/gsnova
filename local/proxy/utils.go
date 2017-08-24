@@ -45,7 +45,7 @@ func NewDialByConf(conf *ProxyChannelConfig) func(network, addr string) (net.Con
 		if 0 == dailTimeout {
 			dailTimeout = 5
 		}
-		log.Printf("[Proxy]Connect %s", addr)
+		//log.Printf("Connect %s", addr)
 		return netx.DialTimeout(network, addr, time.Duration(dailTimeout)*time.Second)
 	}
 	return localDial

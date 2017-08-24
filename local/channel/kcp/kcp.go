@@ -30,7 +30,7 @@ func (tc *KCPProxy) CreateMuxSession(server string, conf *proxy.ProxyChannelConf
 		hostport = net.JoinHostPort(iphost, tcpPort)
 	}
 	block, _ := kcp.NewNoneBlockCrypt(nil)
-	kcpconn, err := kcp.DialWithOptions(hostport, block, tc.Conf.KCP.DataShard, tc.Conf.KCP.ParityShard)
+	kcpconn, err := kcp.DialWithOptions(hostport, block, conf.KCP.DataShard, conf.KCP.ParityShard)
 	if err != nil {
 		return nil, err
 	}

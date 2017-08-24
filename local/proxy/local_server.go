@@ -11,9 +11,7 @@ import (
 	"time"
 
 	"github.com/yinqiwen/gsnova/common/helper"
-	"github.com/yinqiwen/gsnova/common/mux"
 	"github.com/yinqiwen/gsnova/local/socks"
-	"github.com/yinqiwen/pmux"
 )
 
 var sidSeed uint32 = 0
@@ -142,7 +140,7 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 				log.Printf("Read first request failed from proxy connection for reason:%v", err)
 				return
 			}
-			log.Printf("Host:%s %v", initialHTTPReq.Host, initialHTTPReq.URL)
+			//log.Printf("Host:%s %v", initialHTTPReq.Host, initialHTTPReq.URL)
 			if strings.Contains(initialHTTPReq.Host, ":") {
 				remoteHost, remotePort, _ = net.SplitHostPort(initialHTTPReq.Host)
 			} else {
@@ -181,25 +179,19 @@ START:
 		return
 	}
 	proxyChannelName = proxy.getProxyChannelByHostPort(protocol, net.JoinHostPort(remoteHost, remotePort))
-	log.Printf("[Proxy]%s to %s:%s", proxyChannelName, remoteHost, remotePort)
+
 	if len(proxyChannelName) == 0 {
 		log.Printf("[ERROR]No proxy found for %s:%s", remoteHost, remotePort)
 		return
 	}
-	muxSession, err := getMuxSessionByChannel(proxyChannelName)
-	if nil != err {
-		log.Printf("Failed to get mux session for reason:%v", err)
-		return
-	}
-	stream, err := muxSession.OpenStream()
+	stream, err := getMuxStreamByChannel(proxyChannelName)
 	if nil != err {
 		log.Printf("Failed to open stream for reason:%v", err)
 		return
 	}
 	defer stream.Close()
-	ssid := stream.(*mux.ProxyMuxStream).ReadWriteCloser.(*pmux.Stream).ID()
-	log.Printf("Stream id:%d", ssid)
-	//defer stream.Close()
+	ssid := stream.StreamID()
+	log.Printf("Stream[%d] select %s for proxy to %s:%s", ssid, proxyChannelName, remoteHost, remotePort)
 	err = stream.Connect("tcp", net.JoinHostPort(remoteHost, remotePort))
 	if nil != err {
 		log.Printf("Connect failed from proxy connection for reason:%v", err)
@@ -226,10 +218,9 @@ START:
 			localConn.SetReadDeadline(time.Now().Add(60 * time.Second))
 			proxyReq, err = http.ReadRequest(bufconn)
 			if nil != err {
-				if err != io.EOF {
+				if err != io.EOF && !strings.Contains(err.Error(), "use of closed network connection") {
 					log.Printf("Failed to read proxy http request for reason:%v", err)
 				}
-
 				return
 			}
 			if nil != prevReq && prevReq.Host != proxyReq.Host {

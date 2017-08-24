@@ -8,6 +8,7 @@ import (
 	"math/rand"
 	"time"
 
+	quic "github.com/lucas-clemente/quic-go"
 	"github.com/vmihailenco/msgpack"
 	"github.com/yinqiwen/gsnova/common/helper"
 	"github.com/yinqiwen/pmux"
@@ -80,10 +81,12 @@ type MuxStream interface {
 	io.ReadWriteCloser
 	Connect(network string, addr string) error
 	Auth(user string, cipherMethod string, cipherCounter uint64) error
+	StreamID() uint32
 }
 
 type MuxSession interface {
 	OpenStream() (MuxStream, error)
+	CloseStream(stream MuxStream) error
 	AcceptStream() (MuxStream, error)
 	NumStreams() int
 	Close() error
@@ -91,6 +94,23 @@ type MuxSession interface {
 
 type ProxyMuxStream struct {
 	io.ReadWriteCloser
+	session MuxSession
+}
+
+func (s *ProxyMuxStream) StreamID() uint32 {
+	if ps, ok := s.ReadWriteCloser.(*pmux.Stream); ok {
+		return ps.ID()
+	} else if qs, ok := s.ReadWriteCloser.(quic.Stream); ok {
+		return uint32(qs.StreamID())
+	}
+	return 0
+}
+
+func (s *ProxyMuxStream) Close() error {
+	if nil != s.session {
+		s.session.CloseStream(s)
+	}
+	return s.ReadWriteCloser.Close()
 }
 
 func (s *ProxyMuxStream) Connect(network string, addr string) error {
@@ -128,12 +148,16 @@ type ProxyMuxSession struct {
 	*pmux.Session
 }
 
+func (s *ProxyMuxSession) CloseStream(stream MuxStream) error {
+	return nil
+}
+
 func (s *ProxyMuxSession) OpenStream() (MuxStream, error) {
 	ss, err := s.Session.OpenStream()
 	if nil != err {
 		return nil, err
 	}
-	return &ProxyMuxStream{ss}, nil
+	return &ProxyMuxStream{ReadWriteCloser: ss}, nil
 }
 
 func (s *ProxyMuxSession) AcceptStream() (MuxStream, error) {
@@ -141,7 +165,7 @@ func (s *ProxyMuxSession) AcceptStream() (MuxStream, error) {
 	if nil != err {
 		return nil, err
 	}
-	return &ProxyMuxStream{ss}, nil
+	return &ProxyMuxStream{ReadWriteCloser: ss}, nil
 }
 
 func init() {

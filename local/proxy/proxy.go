@@ -41,7 +41,7 @@ var hostsConfName = "hosts.json"
 
 func InitialPMuxConfig() *pmux.Config {
 	cfg := pmux.DefaultConfig()
-	cfg.CipherKey = []byte(GConf.Encrypt.Key)
+	cfg.CipherKey = []byte(GConf.Cipher.Key)
 	cfg.CipherMethod = mux.DefaultMuxCipherMethod
 	cfg.CipherInitialCounter = mux.DefaultMuxInitialCipherCounter
 	return cfg
@@ -59,24 +59,24 @@ type proxyChannel struct {
 	Conf         ProxyChannelConfig
 	sessionMutex sync.Mutex
 	sessions     map[*muxSessionHolder]bool
-	proxies      map[Proxy]bool
+	proxies      map[Proxy]map[string]bool
 }
 
-func (ch *proxyChannel) createMuxSessionByProxy(p Proxy, server string) (mux.MuxSession, error) {
+func (ch *proxyChannel) createMuxSessionByProxy(p Proxy, server string) (*muxSessionHolder, error) {
 	session, err := p.CreateMuxSession(server, &ch.Conf)
 	if nil == err {
 		authStream, err := session.OpenStream()
 		if nil != err {
 			return nil, err
 		}
-		counter := uint64(helper.RandBetween(0, 100000))
-		err = authStream.Auth(GConf.Auth, GConf.Encrypt.Method, counter)
+		counter := uint64(helper.RandBetween(0, 10000000000))
+		err = authStream.Auth(GConf.User, GConf.Cipher.Method, counter)
 		if nil != err {
 			//authStream.Close()
 			return nil, err
 		}
 		if psession, ok := session.(*mux.ProxyMuxSession); ok {
-			err = psession.Session.ResetCryptoContext(GConf.Encrypt.Method, counter)
+			err = psession.Session.ResetCryptoContext(GConf.Cipher.Method, counter)
 			if nil != err {
 				log.Printf("[ERROR]Failed to reset cipher context with reason:%v", err)
 				return nil, err
@@ -92,21 +92,16 @@ func (ch *proxyChannel) createMuxSessionByProxy(p Proxy, server string) (mux.Mux
 		ch.sessionMutex.Lock()
 		ch.sessions[holder] = true
 		ch.sessionMutex.Unlock()
+		return holder, nil
 	}
-	return session, err
+	return nil, err
 }
 
-func (ch *proxyChannel) getMuxSession() (mux.MuxSession, error) {
-	var session mux.MuxSession
+func (ch *proxyChannel) getMuxSession() (*muxSessionHolder, error) {
+	var session *muxSessionHolder
 	minStreamNum := -1
-	var proxyServer string
-	var p Proxy
 	ch.sessionMutex.Lock()
 	for holder := range ch.sessions {
-		if len(proxyServer) == 0 {
-			proxyServer = holder.server
-			p = holder.p
-		}
 		if !holder.expireTime.IsZero() && holder.expireTime.Before(time.Now()) {
 			if holder.muxSession.NumStreams() == 0 {
 				holder.muxSession.Close()
@@ -116,14 +111,40 @@ func (ch *proxyChannel) getMuxSession() (mux.MuxSession, error) {
 		}
 		if minStreamNum < 0 || holder.muxSession.NumStreams() < minStreamNum {
 			minStreamNum = holder.muxSession.NumStreams()
-			session = holder.muxSession
+			session = holder
 		}
 	}
 	ch.sessionMutex.Unlock()
 	if nil == session {
-		return ch.createMuxSessionByProxy(p, proxyServer)
+		for p := range ch.proxies {
+			for server := range ch.proxies[p] {
+				return ch.createMuxSessionByProxy(p, server)
+			}
+		}
 	}
 	return session, nil
+}
+
+func (ch *proxyChannel) getMuxStream() (mux.MuxStream, error) {
+	session, err := ch.getMuxSession()
+	if nil != err {
+		return nil, err
+	}
+	var stream mux.MuxStream
+	for i := 0; i < 3; i++ {
+		stream, err = session.muxSession.OpenStream()
+		if nil != err {
+			session.muxSession.Close()
+			ch.sessionMutex.Lock()
+			delete(ch.sessions, session)
+			ch.sessionMutex.Unlock()
+			session, err = ch.getMuxSession()
+			continue
+		} else {
+			return stream, nil
+		}
+	}
+	return nil, err
 }
 
 var proxyChannelTable = make(map[string]*proxyChannel)
@@ -138,7 +159,7 @@ func RegisterProxyType(str string, p Proxy) error {
 	return nil
 }
 
-func getMuxSessionByChannel(name string) (mux.MuxSession, error) {
+func getMuxStreamByChannel(name string) (mux.MuxStream, error) {
 	proxyChannelMutex.Lock()
 	pch, exist := proxyChannelTable[name]
 	proxyChannelMutex.Unlock()
@@ -146,7 +167,7 @@ func getMuxSessionByChannel(name string) (mux.MuxSession, error) {
 		return nil, fmt.Errorf("No proxy found to get mux session")
 	}
 
-	return pch.getMuxSession()
+	return pch.getMuxStream()
 }
 
 func loadConf(conf string) error {
@@ -203,6 +224,7 @@ func Start(home string, monitor InternalEventMonitor) error {
 
 	proxyHome = home
 	GConf.init()
+	logger.InitLogger(GConf.Log)
 
 	for _, conf := range GConf.Channel {
 		if !conf.Enable {
@@ -211,7 +233,7 @@ func Start(home string, monitor InternalEventMonitor) error {
 		channel := &proxyChannel{}
 		channel.Conf = conf
 		channel.sessions = make(map[*muxSessionHolder]bool)
-		channel.proxies = make(map[Proxy]bool)
+		channel.proxies = make(map[Proxy]map[string]bool)
 		success := false
 
 		for _, server := range conf.ServerList {
@@ -227,7 +249,10 @@ func Start(home string, monitor InternalEventMonitor) error {
 			} else {
 				v := reflect.New(t)
 				p := v.Interface().(Proxy)
-				channel.proxies[p] = true
+				if nil == channel.proxies[p] {
+					channel.proxies[p] = make(map[string]bool)
+				}
+				channel.proxies[p][server] = true
 				for i := 0; i < conf.ConnsPerServer; i++ {
 					_, err := channel.createMuxSessionByProxy(p, server)
 					if nil != err {
@@ -247,7 +272,6 @@ func Start(home string, monitor InternalEventMonitor) error {
 		}
 	}
 
-	logger.InitLogger(GConf.Log)
 	log.Printf("Starting GSnova %s.", local.Version)
 	go initDNS()
 	go startAdminServer()

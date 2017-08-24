@@ -7,7 +7,6 @@ import (
 
 	"github.com/yinqiwen/gsnova/common/mux"
 	"github.com/yinqiwen/gsnova/remote"
-	"github.com/yinqiwen/gsnova/remote/channel"
 	"github.com/yinqiwen/pmux"
 )
 
@@ -25,7 +24,7 @@ func servTCP(lp net.Listener) {
 		}
 
 		muxSession := &mux.ProxyMuxSession{Session: session}
-		go channel.ServProxyMuxSession(muxSession)
+		go remote.ServProxyMuxSession(muxSession)
 	}
 	//ws.WriteMessage(websocket.CloseMessage, []byte{})
 }

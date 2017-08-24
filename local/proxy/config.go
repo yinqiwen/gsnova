@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"encoding/json"
 	"log"
 	"net"
 	"net/http"
@@ -52,32 +53,64 @@ func matchHostnames(pattern, host string) bool {
 }
 
 // Config for client
+type KCPBaseConfig struct {
+	Mode         string
+	Conn         int
+	AutoExpire   int
+	ScavengeTTL  int
+	MTU          int
+	SndWnd       int
+	RcvWnd       int
+	DataShard    int
+	ParityShard  int
+	DSCP         int
+	AckNodelay   bool
+	NoDelay      int
+	Interval     int
+	Resend       int
+	NoCongestion int
+	SockBuf      int
+}
+
 type KCPConfig struct {
-	LocalAddr    string `json:"localaddr"`
-	RemoteAddr   string `json:"remoteaddr"`
-	Key          string `json:"key"`
-	Crypt        string `json:"crypt"`
-	Mode         string `json:"mode"`
-	Conn         int    `json:"conn"`
-	AutoExpire   int    `json:"autoexpire"`
-	ScavengeTTL  int    `json:"scavengettl"`
-	MTU          int    `json:"mtu"`
-	SndWnd       int    `json:"sndwnd"`
-	RcvWnd       int    `json:"rcvwnd"`
-	DataShard    int    `json:"datashard"`
-	ParityShard  int    `json:"parityshard"`
-	DSCP         int    `json:"dscp"`
-	NoComp       bool   `json:"nocomp"`
-	AckNodelay   bool   `json:"acknodelay"`
-	NoDelay      int    `json:"nodelay"`
-	Interval     int    `json:"interval"`
-	Resend       int    `json:"resend"`
-	NoCongestion int    `json:"nc"`
-	SockBuf      int    `json:"sockbuf"`
-	KeepAlive    int    `json:"keepalive"`
-	Log          string `json:"log"`
-	SnmpLog      string `json:"snmplog"`
-	SnmpPeriod   int    `json:"snmpperiod"`
+	KCPBaseConfig
+}
+
+func (kcfg *KCPConfig) initDefaultConf() {
+	kcfg.Mode = "fast"
+	kcfg.Conn = 1
+	kcfg.AutoExpire = 0
+	kcfg.ScavengeTTL = 600
+	kcfg.MTU = 1350
+	kcfg.SndWnd = 128
+	kcfg.RcvWnd = 512
+	kcfg.DataShard = 10
+	kcfg.ParityShard = 3
+	kcfg.DSCP = 30
+	kcfg.AckNodelay = true
+	kcfg.NoDelay = 0
+	kcfg.Interval = 50
+	kcfg.Resend = 0
+	kcfg.Interval = 50
+	kcfg.NoCongestion = 0
+	kcfg.SockBuf = 4194304
+}
+func (kcfg *KCPConfig) UnmarshalJSON(data []byte) error {
+	kcfg.initDefaultConf()
+	return json.Unmarshal(data, &kcfg.KCPBaseConfig)
+}
+
+func (config *KCPConfig) adjustByMode() {
+	switch config.Mode {
+	case "normal":
+		config.NoDelay, config.Interval, config.Resend, config.NoCongestion = 0, 40, 2, 1
+	case "fast":
+		config.NoDelay, config.Interval, config.Resend, config.NoCongestion = 0, 30, 2, 1
+	case "fast2":
+		config.NoDelay, config.Interval, config.Resend, config.NoCongestion = 1, 20, 2, 1
+	case "fast3":
+		config.NoDelay, config.Interval, config.Resend, config.NoCongestion = 1, 10, 2, 1
+	}
 }
 
 type ProxyChannelConfig struct {
@@ -267,7 +300,7 @@ func (cfg *ProxyConfig) findProxyChannelByRequest(proto string, ip string, req *
 	return channel
 }
 
-type EncryptConfig struct {
+type CipherConfig struct {
 	Method string
 	Key    string
 }
@@ -294,9 +327,9 @@ type GFWListConfig struct {
 
 type LocalConfig struct {
 	Log              []string
-	Encrypt          EncryptConfig
+	Cipher           CipherConfig
 	UserAgent        string
-	Auth             string
+	User             string
 	LocalDNS         LocalDNSConfig
 	UDPGWAddr        string
 	ChannelKeepAlive bool
@@ -368,19 +401,24 @@ func (cfg *LocalConfig) init() error {
 		}()
 	}
 
-	switch GConf.Encrypt.Method {
+	switch GConf.Cipher.Method {
 	case "auto":
 		if strings.Contains(runtime.GOARCH, "386") || strings.Contains(runtime.GOARCH, "amd64") {
-			GConf.Encrypt.Method = "aes256-gcm"
+			GConf.Cipher.Method = "aes256-gcm"
 		} else if strings.Contains(runtime.GOARCH, "arm") {
-			GConf.Encrypt.Method = "chacha20poly1305"
+			GConf.Cipher.Method = "chacha20poly1305"
 		}
 	case "chacha20poly1305":
 	case "aes256-gcm":
 	case "none":
 	default:
-		log.Printf("Invalid encrypt method:%s, use 'chacha20poly1305' instead.", GConf.Encrypt.Method)
-		GConf.Encrypt.Method = "chacha20poly1305"
+		log.Printf("Invalid encrypt method:%s, use 'chacha20poly1305' instead.", GConf.Cipher.Method)
+		GConf.Cipher.Method = "chacha20poly1305"
+	}
+
+	for _, channel := range GConf.Channel {
+		//channel.KCP.initDefaultConf()
+		channel.KCP.adjustByMode()
 	}
 	return nil
 }

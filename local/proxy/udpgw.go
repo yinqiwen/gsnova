@@ -273,10 +273,7 @@ func handleUDPGatewayConn(localConn net.Conn, proxy ProxyConfig) {
 				log.Printf("[ERROR]No proxy found for udp to %s", packet.addr.ip.String())
 				return
 			}
-			mux, err := getMuxSessionByChannel(proxyChannelName)
-			if nil == err {
-				stream, err = mux.OpenStream()
-			}
+			stream, err = getMuxStreamByChannel(proxyChannelName)
 			if nil != err {
 				log.Printf("[ERROR]Failed to create mux stream:%v", err)
 				return

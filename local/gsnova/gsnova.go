@@ -4,6 +4,7 @@ import (
 	"github.com/getlantern/netx"
 	_ "github.com/yinqiwen/gsnova/local/channel/direct"
 	_ "github.com/yinqiwen/gsnova/local/channel/http"
+	_ "github.com/yinqiwen/gsnova/local/channel/kcp"
 	_ "github.com/yinqiwen/gsnova/local/channel/quic"
 	_ "github.com/yinqiwen/gsnova/local/channel/tcp"
 	_ "github.com/yinqiwen/gsnova/local/channel/websocket"

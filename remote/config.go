@@ -14,9 +14,9 @@ import (
 	"github.com/yinqiwen/pmux"
 )
 
-type EncryptConfig struct {
-	Method string
-	Key    string
+type CipherConfig struct {
+	//Method string
+	Key string
 }
 
 type TLServerConfig struct {
@@ -27,50 +27,55 @@ type TLServerConfig struct {
 
 // Config for server
 type KCPServerConfig struct {
-	Listen       string `json:"listen"`
-	Target       string `json:"target"`
-	Key          string `json:"key"`
-	Crypt        string `json:"crypt"`
-	Mode         string `json:"mode"`
-	MTU          int    `json:"mtu"`
-	SndWnd       int    `json:"sndwnd"`
-	RcvWnd       int    `json:"rcvwnd"`
-	DataShard    int    `json:"datashard"`
-	ParityShard  int    `json:"parityshard"`
-	DSCP         int    `json:"dscp"`
-	NoComp       bool   `json:"nocomp"`
-	AckNodelay   bool   `json:"acknodelay"`
-	NoDelay      int    `json:"nodelay"`
-	Interval     int    `json:"interval"`
-	Resend       int    `json:"resend"`
-	NoCongestion int    `json:"nc"`
-	SockBuf      int    `json:"sockbuf"`
-	KeepAlive    int    `json:"keepalive"`
-	Log          string `json:"log"`
-	SnmpLog      string `json:"snmplog"`
-	SnmpPeriod   int    `json:"snmpperiod"`
-	Pprof        bool   `json:"pprof"`
+	Listen       string
+	Mode         string
+	MTU          int
+	SndWnd       int
+	RcvWnd       int
+	DataShard    int
+	ParityShard  int
+	DSCP         int
+	AckNodelay   bool
+	NoDelay      int
+	Interval     int
+	Resend       int
+	NoCongestion int
+	SockBuf      int
+}
+
+type QUICServerConfig struct {
+	Listen string
+}
+
+type HTTPServerConfig struct {
+	Listen string
+}
+
+type TCPServerConfig struct {
+	Listen string
 }
 
 type ServerConfig struct {
-	Listen               string
-	QUICListen           string
 	AdminListen          string
+	DialTimeout          int
 	MaxDynamicPort       int
 	DynamicPortLifeCycle int
 	CandidateDynamicPort []int
-	Auth                 []string
-	Encrypt              EncryptConfig
+	AllowedUser          []string
+	Cipher               CipherConfig
 	Log                  []string
 	TLS                  TLServerConfig
 	KCP                  KCPServerConfig
+	QUIC                 QUICServerConfig
+	HTTP                 HTTPServerConfig
+	TCP                  TCPServerConfig
 }
 
 func (conf *ServerConfig) VerifyUser(user string) bool {
-	if len(conf.Auth) == 0 {
+	if len(conf.AllowedUser) == 0 {
 		return true
 	}
-	for _, u := range conf.Auth {
+	for _, u := range conf.AllowedUser {
 		if u == user || u == "*" {
 			//log.Printf("Valid user:%s", user)
 			return true
@@ -82,9 +87,26 @@ func (conf *ServerConfig) VerifyUser(user string) bool {
 
 var ServerConf ServerConfig
 
+func initDefaultConf() {
+	ServerConf.KCP.Mode = "fast"
+	ServerConf.KCP.MTU = 1350
+	ServerConf.KCP.SndWnd = 1024
+	ServerConf.KCP.RcvWnd = 1024
+	ServerConf.KCP.DataShard = 10
+	ServerConf.KCP.ParityShard = 3
+	ServerConf.KCP.DSCP = 30
+	ServerConf.KCP.AckNodelay = true
+	ServerConf.KCP.NoDelay = 0
+	ServerConf.KCP.Interval = 50
+	ServerConf.KCP.Resend = 0
+	ServerConf.KCP.Interval = 50
+	ServerConf.KCP.NoCongestion = 0
+	ServerConf.KCP.SockBuf = 4194304
+}
+
 func InitialPMuxConfig() *pmux.Config {
 	cfg := pmux.DefaultConfig()
-	cfg.CipherKey = []byte(ServerConf.Encrypt.Key)
+	cfg.CipherKey = []byte(ServerConf.Cipher.Key)
 	cfg.CipherMethod = mux.DefaultMuxCipherMethod
 	cfg.CipherInitialCounter = mux.DefaultMuxInitialCipherCounter
 	return cfg
@@ -94,12 +116,14 @@ func init() {
 	key := flag.String("key", "", "Crypto key setting")
 	listen := flag.String("listen", "", "Server listen address")
 	logging := flag.String("log", "stdout", "Server log setting, , split by ','")
-	auth := flag.String("auth", "*", "Auth user setting, split by ','")
+	allow := flag.String("allow", "*", "Allow user setting, split by ','")
 	dps := flag.String("dps", "", "Candidate dynamic ports")
 	ndp := flag.Uint("ndp", 0, "Max dynamic ports")
 	conf := flag.String("conf", "server.json", "Server config file")
+	web := flag.Bool("web", false, "start as web server")
 	flag.Parse()
 
+	initDefaultConf()
 	if _, err := os.Stat(*conf); os.IsNotExist(err) {
 		if len(*key) == 0 || len(*listen) == 0 {
 			flag.PrintDefaults()
@@ -113,9 +137,26 @@ func init() {
 			}
 		}
 		ServerConf.Log = strings.Split(*logging, ",")
-		ServerConf.Auth = strings.Split(*auth, ",")
-		ServerConf.Listen = *listen
-		ServerConf.Encrypt.Key = *key
+		ServerConf.AllowedUser = strings.Split(*allow, ",")
+		if *web {
+			ServerConf.HTTP.Listen = *listen
+			if len(ServerConf.HTTP.Listen) == 0 {
+				port := os.Getenv("PORT")
+				if port == "" {
+					port = os.Getenv("OPENSHIFT_GO_PORT")
+				}
+				if port == "" {
+					port = os.Getenv("VCAP_APP_PORT")
+				}
+				host := os.Getenv("OPENSHIFT_GO_IP")
+				if len(port) > 0 {
+					ServerConf.HTTP.Listen = host + ":" + port
+				}
+			}
+		} else {
+			ServerConf.TCP.Listen = *listen
+		}
+		ServerConf.Cipher.Key = *key
 		ServerConf.MaxDynamicPort = int(*ndp)
 	} else {
 		data, err := helper.ReadWithoutComment(*conf, "//")
@@ -129,7 +170,22 @@ func init() {
 		}
 	}
 
+	if len(ServerConf.KCP.Listen) > 0 {
+		config := &ServerConf.KCP
+		switch config.Mode {
+		case "normal":
+			config.NoDelay, config.Interval, config.Resend, config.NoCongestion = 0, 40, 2, 1
+		case "fast":
+			config.NoDelay, config.Interval, config.Resend, config.NoCongestion = 0, 30, 2, 1
+		case "fast2":
+			config.NoDelay, config.Interval, config.Resend, config.NoCongestion = 1, 20, 2, 1
+		case "fast3":
+			config.NoDelay, config.Interval, config.Resend, config.NoCongestion = 1, 10, 2, 1
+		}
+	}
+
 	logger.InitLogger(ServerConf.Log)
 	log.Printf("Load server conf success.")
-	log.Printf("ServerConf:%v", &ServerConf)
+	confdata, _ := json.MarshalIndent(&ServerConf, "", "    ")
+	log.Printf("Start with config:\n%s", string(confdata))
 }

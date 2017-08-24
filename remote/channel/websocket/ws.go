@@ -6,7 +6,6 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/yinqiwen/gsnova/common/mux"
 	"github.com/yinqiwen/gsnova/remote"
-	"github.com/yinqiwen/gsnova/remote/channel"
 	"github.com/yinqiwen/pmux"
 )
 
@@ -35,6 +34,6 @@ func WebsocketInvoke(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	muxSession := &mux.ProxyMuxSession{Session: session}
-	channel.ServProxyMuxSession(muxSession)
+	remote.ServProxyMuxSession(muxSession)
 	//ws.WriteMessage(websocket.CloseMessage, []byte{})
 }

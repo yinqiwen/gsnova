@@ -1,13 +1,12 @@
-package channel
+package remote
 
 import (
 	"io"
 	"log"
 	"net"
+	"time"
 
 	"github.com/yinqiwen/gsnova/common/mux"
-	"github.com/yinqiwen/gsnova/remote"
-	"github.com/yinqiwen/pmux"
 )
 
 func handleProxyStream(stream mux.MuxStream) {
@@ -18,8 +17,12 @@ func handleProxyStream(stream mux.MuxStream) {
 		log.Printf("[ERROR]:Failed to read connect request:%v", err)
 		return
 	}
-	log.Printf("[%d]Start handle stream:%v", stream.(*mux.ProxyMuxStream).ReadWriteCloser.(*pmux.Stream).ID(), creq)
-	c, err := net.Dial(creq.Network, creq.Addr)
+	log.Printf("[%d]Start handle stream:%v", stream.StreamID(), creq)
+	timeout := ServerConf.DialTimeout
+	if timeout == 0 {
+		timeout = 10
+	}
+	c, err := net.DialTimeout(creq.Network, creq.Addr, time.Duration(timeout)*time.Second)
 	if nil != err {
 		log.Printf("[ERROR]:Failed to connect %s:%v for reason:%v", creq.Network, creq.Addr, err)
 		stream.Close()
@@ -49,7 +52,7 @@ func ServProxyMuxSession(session mux.MuxSession) {
 				continue
 			}
 			log.Printf("###Recv auth:%v", auth)
-			if !remote.ServerConf.VerifyUser(auth.User) {
+			if !ServerConf.VerifyUser(auth.User) {
 				log.Printf("[ERROR]Invalid user:%s", auth.User)
 				session.Close()
 				return

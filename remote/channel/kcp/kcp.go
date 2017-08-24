@@ -6,7 +6,6 @@ import (
 	kcp "github.com/xtaci/kcp-go"
 	"github.com/yinqiwen/gsnova/common/mux"
 	"github.com/yinqiwen/gsnova/remote"
-	"github.com/yinqiwen/gsnova/remote/channel"
 	"github.com/yinqiwen/pmux"
 )
 
@@ -15,23 +14,9 @@ func StartKCPProxyServer(addr string) error {
 	block, _ := kcp.NewNoneBlockCrypt(nil)
 	lis, err := kcp.ListenWithOptions(addr, block, config.DataShard, config.ParityShard)
 	if nil != err {
+		log.Printf("[ERROR]Failed to listen KCP address:%s with reason:%v", addr, err)
 		return err
 	}
-	log.Println("listening on:", lis.Addr())
-	log.Println("target:", config.Target)
-	log.Println("encryption:", config.Crypt)
-	log.Println("nodelay parameters:", config.NoDelay, config.Interval, config.Resend, config.NoCongestion)
-	log.Println("sndwnd:", config.SndWnd, "rcvwnd:", config.RcvWnd)
-	log.Println("compression:", !config.NoComp)
-	log.Println("mtu:", config.MTU)
-	log.Println("datashard:", config.DataShard, "parityshard:", config.ParityShard)
-	log.Println("acknodelay:", config.AckNodelay)
-	log.Println("dscp:", config.DSCP)
-	log.Println("sockbuf:", config.SockBuf)
-	log.Println("keepalive:", config.KeepAlive)
-	log.Println("snmplog:", config.SnmpLog)
-	log.Println("snmpperiod:", config.SnmpPeriod)
-	log.Println("pprof:", config.Pprof)
 
 	if err := lis.SetDSCP(config.DSCP); err != nil {
 		log.Println("SetDSCP:", err)
@@ -66,7 +51,7 @@ func servKCP(lp *kcp.Listener) {
 			continue
 		}
 		muxSession := &mux.ProxyMuxSession{Session: session}
-		go channel.ServProxyMuxSession(muxSession)
+		go remote.ServProxyMuxSession(muxSession)
 	}
 	//ws.WriteMessage(websocket.CloseMessage, []byte{})
 }

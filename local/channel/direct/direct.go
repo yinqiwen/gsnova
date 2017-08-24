@@ -81,6 +81,9 @@ func (tc *directStream) ReadTimeout() time.Duration {
 	}
 	return time.Duration(readTimeout) * time.Second
 }
+func (tc *directStream) StreamID() uint32 {
+	return 0
+}
 
 func (tc *directStream) Read(p []byte) (int, error) {
 	if nil == tc.conn {
@@ -115,6 +118,11 @@ func (tc *directMuxSession) closeStream(s *directStream) {
 	tc.streamsMutex.Lock()
 	defer tc.streamsMutex.Unlock()
 	delete(tc.streams, s)
+}
+
+func (tc *directMuxSession) CloseStream(stream mux.MuxStream) error {
+	stream.Close()
+	return nil
 }
 
 func (tc *directMuxSession) OpenStream() (mux.MuxStream, error) {
@@ -158,5 +166,5 @@ func (p *DirectProxy) CreateMuxSession(server string, conf *proxy.ProxyChannelCo
 }
 
 func init() {
-	proxy.RegisterProxyType("DIRECT", &DirectProxy{})
+	proxy.RegisterProxyType("direct", &DirectProxy{})
 }
