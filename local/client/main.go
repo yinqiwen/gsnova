@@ -3,12 +3,8 @@ package main
 import (
 	"flag"
 	"fmt"
-
-	//"log"
-	//"net"
 	"os"
 	"path/filepath"
-	//"time"
 
 	"github.com/yinqiwen/gsnova/local/gsnova"
 )

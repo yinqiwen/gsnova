@@ -135,6 +135,7 @@ func (ch *proxyChannel) getMuxStream() (mux.MuxStream, error) {
 		return nil, err
 	}
 	var stream mux.MuxStream
+
 	for i := 0; i < 3; i++ {
 		stream, err = session.muxSession.OpenStream()
 		if nil != err {

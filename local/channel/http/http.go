@@ -107,7 +107,7 @@ func (h *httpDuplexConn) testChunkPush() {
 	log.Printf("Server:%s support chunked transfer encoding request.", h.server)
 }
 
-func (h *httpDuplexConn) init(server string) error {
+func (h *httpDuplexConn) init(server string, pushRateLimit int) error {
 	h.server = server
 	_, err := url.Parse(server)
 	if nil != err {
@@ -123,7 +123,7 @@ func (h *httpDuplexConn) init(server string) error {
 	h.recvNotifyCh = make(chan struct{})
 	h.pullNotifyCh = make(chan struct{})
 	h.chunkPushBody.chunkChannel = make(chan []byte)
-	h.pushLimiter = rate.NewLimiter(5, 1)
+	h.pushLimiter = rate.NewLimiter(rate.Limit(pushRateLimit), 1)
 	h.running = true
 	if h.chunkPushSupported {
 		go h.chunkPush()
@@ -312,7 +312,7 @@ func (ws *HTTPProxy) CreateMuxSession(server string, conf *proxy.ProxyChannelCon
 	conn := &httpDuplexConn{}
 	conn.conf = conf
 	conn.client, _ = proxy.NewHTTPClient(conf)
-	err := conn.init(server)
+	err := conn.init(server, conf.HTTP.HTTPPushRateLimitPerSec)
 	if nil != err {
 		return nil, err
 	}

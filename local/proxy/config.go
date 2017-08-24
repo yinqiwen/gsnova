@@ -52,6 +52,19 @@ func matchHostnames(pattern, host string) bool {
 	return true
 }
 
+type HTTPBaseConfig struct {
+	HTTPPushRateLimitPerSec int
+}
+type HTTPConfig struct {
+	HTTPBaseConfig
+}
+
+func (hcfg *HTTPConfig) UnmarshalJSON(data []byte) error {
+	hcfg.HTTPPushRateLimitPerSec = 3
+	err := json.Unmarshal(data, &hcfg.HTTPBaseConfig)
+	return err
+}
+
 type KCPBaseConfig struct {
 	Mode         string
 	Conn         int
@@ -94,11 +107,6 @@ func (kcfg *KCPConfig) initDefaultConf() {
 	kcfg.NoCongestion = 0
 	kcfg.SockBuf = 4194304
 }
-func (kcfg *KCPConfig) UnmarshalJSON(data []byte) error {
-	kcfg.initDefaultConf()
-	return json.Unmarshal(data, &kcfg.KCPBaseConfig)
-}
-
 func (config *KCPConfig) adjustByMode() {
 	switch config.Mode {
 	case "normal":
@@ -110,6 +118,14 @@ func (config *KCPConfig) adjustByMode() {
 	case "fast3":
 		config.NoDelay, config.Interval, config.Resend, config.NoCongestion = 1, 10, 2, 1
 	}
+}
+func (kcfg *KCPConfig) UnmarshalJSON(data []byte) error {
+	kcfg.initDefaultConf()
+	err := json.Unmarshal(data, &kcfg.KCPBaseConfig)
+	if nil == err {
+		kcfg.adjustByMode()
+	}
+	return err
 }
 
 type ProxyChannelConfig struct {
@@ -125,8 +141,8 @@ type ProxyChannelConfig struct {
 	ReconnectPeriod     int
 	HeartBeatPeriod     int
 	RCPRandomAdjustment int
-	HTTPChunkPushEnable bool
 	KCP                 KCPConfig
+	HTTP                HTTPConfig
 
 	proxyURL *url.URL
 }
@@ -276,9 +292,9 @@ type ProxyConfig struct {
 	SNISniff bool
 }
 
-func (cfg *ProxyConfig) getProxyChannelByHostPort(proto string, hostPort string) string {
-	creq, _ := http.NewRequest("Connect", "https://"+hostPort, nil)
-	return cfg.findProxyChannelByRequest(proto, hostPort, creq)
+func (cfg *ProxyConfig) getProxyChannelByHost(proto string, host string) string {
+	creq, _ := http.NewRequest("Connect", "https://"+host, nil)
+	return cfg.findProxyChannelByRequest(proto, host, creq)
 }
 
 func (cfg *ProxyConfig) findProxyChannelByRequest(proto string, ip string, req *http.Request) string {
@@ -416,8 +432,6 @@ func (cfg *LocalConfig) init() error {
 	}
 	haveDirect := false
 	for i := range GConf.Channel {
-		//channel.KCP.initDefaultConf()
-		GConf.Channel[i].KCP.adjustByMode()
 		if GConf.Channel[i].Name == directProxyChannelName && GConf.Channel[i].Enable {
 			haveDirect = true
 			GConf.Channel[i].ServerList = []string{"direct://0.0.0.0:0"}

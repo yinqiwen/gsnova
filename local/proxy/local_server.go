@@ -81,6 +81,7 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 				} else {
 					log.Printf("Sniffed SNI:%s:%s for IP:%s:%s", sni, remotePort, remoteHost, remotePort)
 					remoteHost = sni
+					break
 				}
 			} else {
 				//try next round
@@ -172,7 +173,7 @@ START:
 		log.Printf("Can NOT resolve remote host or port %s:%s", remoteHost, remotePort)
 		return
 	}
-	proxyChannelName = proxy.getProxyChannelByHostPort(protocol, net.JoinHostPort(remoteHost, remotePort))
+	proxyChannelName = proxy.getProxyChannelByHost(protocol, remoteHost)
 
 	if len(proxyChannelName) == 0 {
 		log.Printf("[ERROR]No proxy found for %s:%s", remoteHost, remotePort)
