@@ -1,5 +1,5 @@
 package proxy
 
 const (
-	DirectProxyChannelName = "direct"
+	directProxyChannelName = "direct"
 )

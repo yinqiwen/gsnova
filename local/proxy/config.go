@@ -52,7 +52,6 @@ func matchHostnames(pattern, host string) bool {
 	return true
 }
 
-// Config for client
 type KCPBaseConfig struct {
 	Mode         string
 	Conn         int
@@ -286,7 +285,7 @@ func (cfg *ProxyConfig) findProxyChannelByRequest(proto string, ip string, req *
 	var channel string
 	if len(ip) > 0 && helper.IsPrivateIP(ip) {
 		//channel = "direct"
-		return DirectProxyChannelName
+		return directProxyChannelName
 	}
 	for _, pac := range cfg.PAC {
 		if pac.Match(proto, ip, req) {
@@ -415,10 +414,24 @@ func (cfg *LocalConfig) init() error {
 		log.Printf("Invalid encrypt method:%s, use 'chacha20poly1305' instead.", GConf.Cipher.Method)
 		GConf.Cipher.Method = "chacha20poly1305"
 	}
-
-	for _, channel := range GConf.Channel {
+	haveDirect := false
+	for i := range GConf.Channel {
 		//channel.KCP.initDefaultConf()
-		channel.KCP.adjustByMode()
+		GConf.Channel[i].KCP.adjustByMode()
+		if GConf.Channel[i].Name == directProxyChannelName && GConf.Channel[i].Enable {
+			haveDirect = true
+			GConf.Channel[i].ServerList = []string{"direct://0.0.0.0:0"}
+			GConf.Channel[i].ConnsPerServer = 1
+		}
+	}
+	if !haveDirect {
+		directProxyChannel := make([]ProxyChannelConfig, 1)
+		directProxyChannel[0].Enable = true
+		directProxyChannel[0].ConnsPerServer = 1
+		directProxyChannel[0].DialTimeout = 5
+		directProxyChannel[0].ReadTimeout = 30
+		directProxyChannel[0].ServerList = []string{"direct://0.0.0.0:0"}
+		GConf.Channel = append(directProxyChannel, GConf.Channel...)
 	}
 	return nil
 }

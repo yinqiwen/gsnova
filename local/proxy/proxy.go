@@ -70,13 +70,17 @@ func (ch *proxyChannel) createMuxSessionByProxy(p Proxy, server string) (*muxSes
 			return nil, err
 		}
 		counter := uint64(helper.RandBetween(0, 10000000000))
-		err = authStream.Auth(GConf.User, GConf.Cipher.Method, counter)
+		cipherMethod := GConf.Cipher.Method
+		if strings.HasPrefix(server, "https://") || strings.HasPrefix(server, "wss://") {
+			cipherMethod = "none"
+		}
+		err = authStream.Auth(GConf.User, cipherMethod, counter)
 		if nil != err {
 			//authStream.Close()
 			return nil, err
 		}
 		if psession, ok := session.(*mux.ProxyMuxSession); ok {
-			err = psession.Session.ResetCryptoContext(GConf.Cipher.Method, counter)
+			err = psession.Session.ResetCryptoContext(cipherMethod, counter)
 			if nil != err {
 				log.Printf("[ERROR]Failed to reset cipher context with reason:%v", err)
 				return nil, err
@@ -147,6 +151,13 @@ func (ch *proxyChannel) getMuxStream() (mux.MuxStream, error) {
 	return nil, err
 }
 
+func newProxyChannel() *proxyChannel {
+	channel := &proxyChannel{}
+	channel.sessions = make(map[*muxSessionHolder]bool)
+	channel.proxies = make(map[Proxy]map[string]bool)
+	return channel
+}
+
 var proxyChannelTable = make(map[string]*proxyChannel)
 var proxyChannelMutex sync.Mutex
 
@@ -176,6 +187,7 @@ func loadConf(conf string) error {
 		if nil != err {
 			log.Println(err)
 		}
+		GConf = LocalConfig{}
 		err = json.Unmarshal(confdata, &GConf)
 		if nil != err {
 			fmt.Printf("Failed to unmarshal json:%s to config for reason:%v", string(confdata), err)
@@ -230,10 +242,8 @@ func Start(home string, monitor InternalEventMonitor) error {
 		if !conf.Enable {
 			continue
 		}
-		channel := &proxyChannel{}
+		channel := newProxyChannel()
 		channel.Conf = conf
-		channel.sessions = make(map[*muxSessionHolder]bool)
-		channel.proxies = make(map[Proxy]map[string]bool)
 		success := false
 
 		for _, server := range conf.ServerList {
@@ -271,6 +281,11 @@ func Start(home string, monitor InternalEventMonitor) error {
 			log.Printf("Proxy channel:%s init failed", conf.Name)
 		}
 	}
+
+	//add direct channel
+	channel := newProxyChannel()
+	channel.Conf.Name = directProxyChannelName
+	channel.sessions = make(map[*muxSessionHolder]bool)
 
 	log.Printf("Starting GSnova %s.", local.Version)
 	go initDNS()

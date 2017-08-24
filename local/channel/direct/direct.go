@@ -121,7 +121,7 @@ func (tc *directMuxSession) closeStream(s *directStream) {
 }
 
 func (tc *directMuxSession) CloseStream(stream mux.MuxStream) error {
-	stream.Close()
+	//stream.Close()
 	return nil
 }
 

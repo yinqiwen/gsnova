@@ -7,19 +7,13 @@ import (
 	"net"
 	"net/http"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	"github.com/yinqiwen/gsnova/common/helper"
 	"github.com/yinqiwen/gsnova/local/socks"
 )
 
-var sidSeed uint32 = 0
 var proxyServerRunning = true
-
-func getSessionId() uint32 {
-	return atomic.AddUint32(&sidSeed, 1)
-}
 
 func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 	var proxyChannelName string
