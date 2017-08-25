@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/yinqiwen/gsnova/common/helper"
@@ -17,17 +18,30 @@ import (
 )
 
 type httpDuplexServConn struct {
-	id           string
-	recvBuffer   bytes.Buffer
-	writer       http.ResponseWriter
-	recvLock     sync.Mutex
-	sendLock     sync.Mutex
-	running      bool
-	recvNotifyCh chan struct{}
-	sendNotifyCh chan struct{}
+	id               string
+	ackID            string
+	recvBuffer       bytes.Buffer
+	req              *http.Request
+	writer           http.ResponseWriter
+	writerStopCh     chan struct{}
+	recvLock         sync.Mutex
+	sendLock         sync.Mutex
+	running          int32
+	recvNotifyCh     chan struct{}
+	sendNotifyCh     chan struct{}
+	closeNotifyCh    chan struct{}
+	shutdownErr      error
+	lastActiveIOTime time.Time
+	checkAliveTicker *time.Ticker
+}
+
+func (h *httpDuplexServConn) touch() {
+	h.lastActiveIOTime = time.Now()
 }
 
 func (h *httpDuplexServConn) setReader(req *http.Request) {
+	h.touch()
+	h.req = req
 	b := make([]byte, 8192)
 	for {
 		n, err := req.Body.Read(b)
@@ -35,32 +49,57 @@ func (h *httpDuplexServConn) setReader(req *http.Request) {
 			h.recvLock.Lock()
 			h.recvBuffer.Write(b[0:n])
 			h.recvLock.Unlock()
+			h.touch()
 			helper.AsyncNotify(h.recvNotifyCh)
 		}
 		if nil != err {
 			break
 		}
 	}
+	h.req = nil
 }
 
-func (h *httpDuplexServConn) setWriter(w http.ResponseWriter) {
+func (h *httpDuplexServConn) setWriter(w http.ResponseWriter, ch chan struct{}) {
+	h.touch()
 	h.sendLock.Lock()
+	if nil != h.writerStopCh {
+		helper.AsyncNotify(h.writerStopCh)
+	}
 	h.writer = w
+	h.writerStopCh = ch
 	h.sendLock.Unlock()
 	helper.AsyncNotify(h.sendNotifyCh)
 }
 
 func (h *httpDuplexServConn) init(id string) error {
 	h.id = id
+	h.ackID = helper.RandAsciiString(32)
 	h.recvNotifyCh = make(chan struct{})
 	h.sendNotifyCh = make(chan struct{})
-	h.running = true
+	h.closeNotifyCh = make(chan struct{})
+	h.checkAliveTicker = time.NewTicker(10 * time.Second)
+	h.lastActiveIOTime = time.Now()
+	go func() {
+		for _ = range h.checkAliveTicker.C {
+			if !h.isRunning() {
+				h.checkAliveTicker.Stop()
+				return
+			}
+			if time.Now().Sub(h.lastActiveIOTime) > 2*time.Minute {
+				h.checkAliveTicker.Stop()
+				h.Close()
+				log.Printf("Stop http duplex conn:%s since it's not active since %v ago", h.id, time.Now().Sub(h.lastActiveIOTime))
+				return
+			}
+		}
+	}()
+	h.running = 1
 	return nil
 }
 
 func (h *httpDuplexServConn) Read(b []byte) (n int, err error) {
 START:
-	if !h.running {
+	if !h.isRunning() {
 		return 0, io.EOF
 	}
 	h.recvLock.Lock()
@@ -89,7 +128,7 @@ WAIT:
 
 func (h *httpDuplexServConn) Write(p []byte) (n int, err error) {
 START:
-	if !h.running {
+	if !h.isRunning() {
 		return 0, io.EOF
 	}
 	h.sendLock.Lock()
@@ -97,6 +136,7 @@ START:
 		h.sendLock.Unlock()
 		goto WAIT
 	}
+	h.touch()
 	n, err = h.writer.Write(p)
 	if nil == err {
 		h.writer.(http.Flusher).Flush()
@@ -122,23 +162,42 @@ WAIT:
 }
 
 func (h *httpDuplexServConn) closeWrite() error {
-	if h.running {
+	if h.isRunning() {
 		h.sendLock.Lock()
 		h.writer = nil
+		if nil != h.writerStopCh {
+			helper.AsyncNotify(h.writerStopCh)
+		}
 		h.sendLock.Unlock()
 		helper.AsyncNotify(h.sendNotifyCh)
 	}
 	return nil
 }
 
+func (h *httpDuplexServConn) closeRead() error {
+	req := h.req
+	if nil != req && nil != req.Body {
+		req.Body.Close()
+	}
+	return nil
+}
+
+func (h *httpDuplexServConn) shutdown(err error) {
+	h.shutdownErr = err
+	h.Close()
+	h.closeRead()
+}
+
+func (h *httpDuplexServConn) isRunning() bool {
+	return atomic.LoadInt32(&h.running) > 0
+}
+
 func (h *httpDuplexServConn) Close() error {
-	if h.running {
-		h.running = false
-		h.sendLock.Lock()
-		h.writer = nil
-		h.sendLock.Unlock()
+	if h.isRunning() {
+		h.closeWrite()
 		helper.AsyncNotify(h.recvNotifyCh)
-		helper.AsyncNotify(h.sendNotifyCh)
+		helper.AsyncNotify(h.closeNotifyCh)
+		atomic.StoreInt32(&h.running, 0)
 	}
 	removetHttpDuplexServConnByID(h.id)
 	return nil
@@ -170,40 +229,76 @@ func removetHttpDuplexServConnByID(id string) {
 }
 
 func httpTest(w http.ResponseWriter, r *http.Request) {
-	log.Printf("###Test req:%v", r)
+	//log.Printf("###Test req:%v", r)
 	w.Write([]byte("OK"))
 }
 
 func HTTPInvoke(w http.ResponseWriter, r *http.Request) {
-	id := r.Header.Get("X-Session-ID")
+	id := r.Header.Get(mux.HTTPMuxSessionIDHeader)
 	if len(id) == 0 {
 		log.Printf("Invalid header with no session id:%v", r)
 		return
 	}
 	c, create := getHttpDuplexServConnByID(id, true)
 	if create {
-		//c.setReader()
+		if len(r.Header.Get(mux.HTTPMuxSessionACKIDHeader)) > 0 {
+			w.WriteHeader(401)
+			log.Printf("###ERR1 : %s", r.Header.Get(mux.HTTPMuxSessionACKIDHeader))
+			return
+		}
 		session, err := pmux.Server(c, remote.InitialPMuxConfig())
 		if nil != err {
 			return
 		}
 		muxSession := &mux.ProxyMuxSession{Session: session}
-		go remote.ServProxyMuxSession(muxSession)
+		go func() {
+			err := remote.ServProxyMuxSession(muxSession)
+			if nil != err {
+				c.shutdown(err)
+			}
+		}()
 	}
+	ackID := r.Header.Get(mux.HTTPMuxSessionACKIDHeader)
+	if len(ackID) > 0 && ackID != c.ackID {
+		w.WriteHeader(401)
+		log.Printf("###ERR2 : %s %s", r.Header.Get(mux.HTTPMuxSessionACKIDHeader), c.ackID)
+		return
+	}
+	w.Header().Set(mux.HTTPMuxSessionACKIDHeader, c.ackID)
 	if strings.HasSuffix(r.URL.Path, "pull") {
-		c.setWriter(w)
-		w.WriteHeader(200)
+		log.Printf("HTTP server recv pull for id:%s", id)
 		period, _ := strconv.Atoi(r.Header.Get("X-PullPeriod"))
 		if period <= 0 {
 			period = 30
 		}
+		timer := time.NewTimer(time.Duration(period) * time.Second)
+		timeout := timer.C
+		stopByOther := make(chan struct{})
+		c.setWriter(w, stopByOther)
+		if !c.isRunning() {
+			w.WriteHeader(401)
+			timer.Stop()
+			return
+		}
 		select {
-		case <-time.After(time.Duration(period) * time.Second):
+		case <-timeout:
 			c.closeWrite()
 			log.Printf("HTTP server close pull for id:%s", id)
 			return
+		case <-c.closeNotifyCh:
+			timer.Stop()
+			w.WriteHeader(401)
+			log.Printf("HTTP server close pull for id:%s close ", id)
+		case <-stopByOther:
+			log.Printf("HTTP server recv pull id:%s stop by other pull", id)
+			timer.Stop()
+			return
 		}
 	} else {
+		//counter := r.URL.Query().Get(pmux.HTTPPullCounterKey)
 		c.setReader(r)
+		if nil != c.shutdownErr {
+			w.WriteHeader(401)
+		}
 	}
 }

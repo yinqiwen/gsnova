@@ -74,7 +74,13 @@ func (ch *proxyChannel) createMuxSessionByProxy(p Proxy, server string) (*muxSes
 		if strings.HasPrefix(server, "https://") || strings.HasPrefix(server, "wss://") {
 			cipherMethod = "none"
 		}
-		err = authStream.Auth(GConf.User, cipherMethod, counter)
+		authReq := &mux.AuthRequest{
+			User:           GConf.User,
+			CipherCounter:  counter,
+			CipherMethod:   cipherMethod,
+			CompressMethod: ch.Conf.Compressor,
+		}
+		err = authStream.Auth(authReq)
 		if nil != err {
 			//authStream.Close()
 			return nil, err
@@ -93,9 +99,7 @@ func (ch *proxyChannel) createMuxSessionByProxy(p Proxy, server string) (*muxSes
 			muxSession: session,
 			server:     server,
 		}
-		ch.sessionMutex.Lock()
 		ch.sessions[holder] = true
-		ch.sessionMutex.Unlock()
 		return holder, nil
 	}
 	return nil, err
@@ -104,7 +108,8 @@ func (ch *proxyChannel) createMuxSessionByProxy(p Proxy, server string) (*muxSes
 func (ch *proxyChannel) getMuxSession() (*muxSessionHolder, error) {
 	var session *muxSessionHolder
 	minStreamNum := -1
-	ch.sessionMutex.Lock()
+	//log.Printf("####session count %d", len(ch.sessions))
+	//log.Printf("####session count in lock %d", len(ch.sessions))
 	for holder := range ch.sessions {
 		if !holder.expireTime.IsZero() && holder.expireTime.Before(time.Now()) {
 			if holder.muxSession.NumStreams() == 0 {
@@ -118,10 +123,12 @@ func (ch *proxyChannel) getMuxSession() (*muxSessionHolder, error) {
 			session = holder
 		}
 	}
-	ch.sessionMutex.Unlock()
+
+	//log.Printf("####session null")
 	if nil == session {
 		for p := range ch.proxies {
 			for server := range ch.proxies[p] {
+				log.Printf("Create session by server:%s", server)
 				return ch.createMuxSessionByProxy(p, server)
 			}
 		}
@@ -130,19 +137,27 @@ func (ch *proxyChannel) getMuxSession() (*muxSessionHolder, error) {
 }
 
 func (ch *proxyChannel) getMuxStream() (mux.MuxStream, error) {
+	ch.sessionMutex.Lock()
+	defer ch.sessionMutex.Unlock()
 	session, err := ch.getMuxSession()
+	//log.Printf("####End get getMuxSession")
 	if nil != err {
 		return nil, err
 	}
 	var stream mux.MuxStream
 
 	for i := 0; i < 3; i++ {
-		stream, err = session.muxSession.OpenStream()
-		if nil != err {
-			session.muxSession.Close()
-			ch.sessionMutex.Lock()
-			delete(ch.sessions, session)
-			ch.sessionMutex.Unlock()
+		//log.Printf("####Start Open new stream")
+		if nil != session {
+			stream, err = session.muxSession.OpenStream()
+		}
+		//log.Printf("####Open new stream:%T for session:%v %d", stream, ch.Conf.Name, i)
+		if nil != err || nil == stream {
+			if nil != session {
+				session.muxSession.Close()
+				delete(ch.sessions, session)
+			}
+			log.Printf("Get new session since current session failed to open new stream.")
 			session, err = ch.getMuxSession()
 			continue
 		} else {
@@ -171,15 +186,15 @@ func RegisterProxyType(str string, p Proxy) error {
 	return nil
 }
 
-func getMuxStreamByChannel(name string) (mux.MuxStream, error) {
+func getMuxStreamByChannel(name string) (mux.MuxStream, *ProxyChannelConfig, error) {
 	proxyChannelMutex.Lock()
 	pch, exist := proxyChannelTable[name]
 	proxyChannelMutex.Unlock()
 	if !exist {
-		return nil, fmt.Errorf("No proxy found to get mux session")
+		return nil, nil, fmt.Errorf("No proxy found to get mux session")
 	}
-
-	return pch.getMuxStream()
+	stream, err := pch.getMuxStream()
+	return stream, &pch.Conf, err
 }
 
 func loadConf(conf string) error {

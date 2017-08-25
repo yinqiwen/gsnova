@@ -21,10 +21,11 @@ type ConnectRequest struct {
 }
 
 type AuthRequest struct {
-	Rand          string
-	User          string
-	CipherCounter uint64
-	CipherMethod  string
+	Rand           string
+	User           string
+	CipherCounter  uint64
+	CipherMethod   string
+	CompressMethod string
 }
 type AuthResponse struct {
 	Code int
@@ -80,7 +81,7 @@ func ReadMessage(stream io.Reader, res interface{}) error {
 type MuxStream interface {
 	io.ReadWriteCloser
 	Connect(network string, addr string) error
-	Auth(user string, cipherMethod string, cipherCounter uint64) error
+	Auth(req *AuthRequest) error
 	StreamID() uint32
 }
 
@@ -117,11 +118,7 @@ func (s *ProxyMuxStream) Connect(network string, addr string) error {
 	req := &ConnectRequest{Network: network, Addr: addr}
 	return WriteMessage(s, req)
 }
-func (s *ProxyMuxStream) Auth(user string, cipherMethod string, cipherCounter uint64) error {
-	req := &AuthRequest{}
-	req.CipherCounter = cipherCounter
-	req.CipherMethod = cipherMethod
-	req.User = user
+func (s *ProxyMuxStream) Auth(req *AuthRequest) error {
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	req.Rand = helper.RandAsciiString(int(r.Int31n(128)))
 	err := WriteMessage(s, req)

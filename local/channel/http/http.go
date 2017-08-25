@@ -38,8 +38,13 @@ func (cb *chunkedBody) Read(p []byte) (int, error) {
 func (cb *chunkedBody) Close() error {
 	return nil
 }
-func (cr *chunkedBody) offer(p []byte) {
-	cr.chunkChannel <- p
+func (cr *chunkedBody) offer(p []byte) error {
+	select {
+	case cr.chunkChannel <- p:
+		return nil
+	case <-time.After(10 * time.Second):
+		return pmux.ErrTimeout
+	}
 }
 
 // sendReady is used to either mark a stream as ready
@@ -49,27 +54,9 @@ type sendReady struct {
 	Err  chan error
 }
 
-func buildHTTPReq(u *url.URL, body io.ReadCloser) *http.Request {
-	req := &http.Request{
-		Method:     "POST",
-		URL:        u,
-		ProtoMajor: 1,
-		ProtoMinor: 1,
-		Host:       u.Host,
-		Header:     make(http.Header),
-		Body:       body,
-	}
-	req.Close = false
-	req.Header.Set("Connection", "keep-alive")
-	req.Header.Set("Content-Type", "image/jpeg")
-	if len(proxy.GConf.UserAgent) > 0 {
-		req.Header.Set("User-Agent", proxy.GConf.UserAgent)
-	}
-	return req
-}
-
 type httpDuplexConn struct {
 	id           string
+	ackID        string
 	server       string
 	conf         *proxy.ProxyChannelConfig
 	client       *http.Client
@@ -91,9 +78,32 @@ type httpDuplexConn struct {
 	chunkPushExpireTime time.Time
 }
 
+func (h *httpDuplexConn) buildHTTPReq(u *url.URL, body io.ReadCloser) *http.Request {
+	req := &http.Request{
+		Method:     "POST",
+		URL:        u,
+		ProtoMajor: 1,
+		ProtoMinor: 1,
+		Host:       u.Host,
+		Header:     make(http.Header),
+		Body:       body,
+	}
+	req.Close = false
+	req.Header.Set("Connection", "keep-alive")
+	req.Header.Set("Content-Type", "image/jpeg")
+	if len(proxy.GConf.UserAgent) > 0 {
+		req.Header.Set("User-Agent", proxy.GConf.UserAgent)
+	}
+	req.Header.Set(mux.HTTPMuxSessionIDHeader, h.id)
+	if len(h.ackID) > 0 {
+		req.Header.Set(mux.HTTPMuxSessionACKIDHeader, h.ackID)
+	}
+	return req
+}
+
 func (h *httpDuplexConn) testChunkPush() {
 	var empty bytes.Buffer
-	req := buildHTTPReq(h.testurl, ioutil.NopCloser(&empty))
+	req := h.buildHTTPReq(h.testurl, ioutil.NopCloser(&empty))
 	req.ContentLength = -1
 	response, err := h.client.Do(req)
 	if nil != err || response.StatusCode != 200 {
@@ -117,7 +127,7 @@ func (h *httpDuplexConn) init(server string, pushRateLimit int) error {
 	h.pushurl, _ = url.Parse(server + "/http/push")
 	h.pullurl, _ = url.Parse(server + "/http/pull")
 	h.testurl, _ = url.Parse(server + "/http/test")
-	h.testChunkPush()
+	//h.testChunkPush()
 	h.sendCh = make(chan sendReady, 10)
 	h.closeCh = make(chan struct{})
 	h.recvNotifyCh = make(chan struct{})
@@ -133,15 +143,28 @@ func (h *httpDuplexConn) init(server string, pushRateLimit int) error {
 	return nil
 }
 
+func (h *httpDuplexConn) setAckId(res *http.Response) {
+	if nil != res && res.StatusCode == 200 {
+		if len(h.ackID) == 0 {
+			h.ackID = res.Header.Get(mux.HTTPMuxSessionACKIDHeader)
+		}
+	}
+}
+
 func (h *httpDuplexConn) chunkPush() {
 	for h.running {
 		h.pushLimiter.Wait(context.TODO())
 		log.Printf("HTTP start chunked push for %v with id:%s", h.pushurl, h.id)
-		req := buildHTTPReq(h.pushurl, &h.chunkPushBody)
-		req.Header.Add("X-Session-ID", h.id)
+		req := h.buildHTTPReq(h.pushurl, &h.chunkPushBody)
 		req.ContentLength = -1
 		h.chunkPushExpireTime = time.Now().Add(time.Duration(h.conf.ReconnectPeriod) * time.Second)
-		h.client.Do(req)
+		res, _ := h.client.Do(req)
+		if nil != res && res.StatusCode == 401 {
+			log.Printf("Failed to chunk push to HTTP server for response:%v", res)
+			h.Close()
+			return
+		}
+		h.setAckId(res)
 	}
 }
 
@@ -154,18 +177,24 @@ func (h *httpDuplexConn) pull() {
 			}
 			continue
 		}
-		log.Printf("HTTP start pull for %v with id:%s", h.pullurl, h.id)
-		req := buildHTTPReq(h.pullurl, nil)
-		req.Header.Add("X-Session-ID", h.id)
-		req.Header.Set("X-PullPeriod", strconv.Itoa(h.conf.ReconnectPeriod))
-		//period := hc.getHTTPReconnectPeriod()
-		//req.Header.Set("X-PullPeriod", strconv.Itoa(period))
+		req := h.buildHTTPReq(h.pullurl, nil)
+		req.Header.Set(mux.HTTPMuxPullPeriodHeader, strconv.Itoa(h.conf.ReconnectPeriod))
 		response, err := h.client.Do(req)
-		if nil != err || response.StatusCode != 200 { //try once more
+		if nil != err {
 			log.Printf("Failed to write data to HTTP server for reason:%v", err)
 			time.Sleep(1 * time.Second)
 			continue
 		}
+		if response.StatusCode == 401 { //try once more
+			log.Printf("Failed to pull data from HTTP server for response:%v", response)
+			h.Close()
+			return
+		}
+		if response.StatusCode != 200 {
+			time.Sleep(1 * time.Second)
+			continue
+		}
+		h.setAckId(response)
 		h.recvLock.Lock()
 		h.recvReader = response.Body
 		h.recvLock.Unlock()
@@ -192,14 +221,13 @@ func (h *httpDuplexConn) push() {
 		return frs, nil
 	}
 	var frs []sendReady
-
-	notifySuccess := func() {
+	var err error
+	notifyDone := func() {
 		for _, frame := range frs {
-			helper.AsyncSendErr(frame.Err, nil)
+			helper.AsyncSendErr(frame.Err, err)
 		}
 		frs = make([]sendReady, 0)
 	}
-	var err error
 	for h.running {
 		sendBuffer := &bytes.Buffer{}
 		if len(frs) == 0 {
@@ -220,18 +248,23 @@ func (h *httpDuplexConn) push() {
 				h.chunkPushBody.offer(nil)
 			}
 			if sendBuffer.Len() > 0 {
-				h.chunkPushBody.offer(sendBuffer.Bytes())
+				err = h.chunkPushBody.offer(sendBuffer.Bytes())
 			}
-			notifySuccess()
+			notifyDone()
 		} else {
 			if sendBuffer.Len() > 0 {
-				req := buildHTTPReq(h.pushurl, ioutil.NopCloser(sendBuffer))
-				req.Header.Add("X-Session-ID", h.id)
+				req := h.buildHTTPReq(h.pushurl, ioutil.NopCloser(sendBuffer))
 				response, err := h.client.Do(req)
+				h.setAckId(response)
 				if nil != err || response.StatusCode != 200 { //try once more
 					log.Printf("Failed to write data to HTTP server:%s for reason:%v or res:%v", h.pushurl.String(), err, response)
+					if nil != response && response.StatusCode == 401 {
+						h.Close()
+						return
+					}
 				} else {
-					notifySuccess()
+					err = nil
+					notifyDone()
 				}
 				if nil != response && response.Body != nil {
 					response.Body.Close()
@@ -239,9 +272,7 @@ func (h *httpDuplexConn) push() {
 			}
 		}
 	}
-	for _, frame := range frs {
-		helper.AsyncSendErr(frame.Err, err)
-	}
+	notifyDone()
 }
 
 func (h *httpDuplexConn) Read(b []byte) (n int, err error) {
@@ -299,7 +330,10 @@ func (h *httpDuplexConn) Close() error {
 	if h.running {
 		h.running = false
 		close(h.closeCh)
-		close(h.chunkPushBody.chunkChannel)
+		select {
+		case h.chunkPushBody.chunkChannel <- nil:
+		default:
+		}
 	}
 	return nil
 }

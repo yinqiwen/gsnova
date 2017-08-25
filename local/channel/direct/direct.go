@@ -22,7 +22,7 @@ type directStream struct {
 	session *directMuxSession
 }
 
-func (tc *directStream) Auth(user string, cipherMethod string, cipherCounter uint64) error {
+func (tc *directStream) Auth(req *mux.AuthRequest) error {
 	return nil
 }
 

@@ -9,7 +9,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/golang/snappy"
 	"github.com/yinqiwen/gsnova/common/helper"
+	"github.com/yinqiwen/gsnova/common/mux"
 	"github.com/yinqiwen/gsnova/local/socks"
 )
 
@@ -179,8 +181,8 @@ START:
 		log.Printf("[ERROR]No proxy found for %s:%s", remoteHost, remotePort)
 		return
 	}
-	stream, err := getMuxStreamByChannel(proxyChannelName)
-	if nil != err {
+	stream, conf, err := getMuxStreamByChannel(proxyChannelName)
+	if nil != err || nil == stream {
 		log.Printf("Failed to open stream for reason:%v", err)
 		return
 	}
@@ -192,18 +194,26 @@ START:
 		log.Printf("Connect failed from proxy connection for reason:%v", err)
 		return
 	}
+	var streamReader io.Reader
+	var streamWriter io.Writer
+	streamReader = stream
+	streamWriter = stream
+	if conf.Compressor == mux.SnappyCompressor {
+		streamReader = snappy.NewReader(stream)
+		streamWriter = snappy.NewWriter(stream)
+	}
 	go func() {
-		io.Copy(localConn, stream)
+		io.Copy(localConn, streamReader)
 		localConn.Close()
 	}()
 	if isSocksProxy || isHttpsProxy {
-		io.Copy(stream, localConn)
+		io.Copy(streamWriter, localConn)
 	} else {
 		proxyReq := initialHTTPReq
 		initialHTTPReq = nil
 		for {
 			if nil != proxyReq {
-				err = proxyReq.Write(stream)
+				err = proxyReq.Write(streamWriter)
 				if nil != err {
 					log.Printf("Failed to write http request for reason:%v", err)
 					return

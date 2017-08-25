@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/golang/snappy"
 	"github.com/google/btree"
 	"github.com/yinqiwen/gsnova/common/mux"
 )
@@ -216,7 +217,8 @@ func handleUDPGatewayConn(localConn net.Conn, proxy ProxyConfig) {
 	var proxyChannelName string
 	bufconn := bufio.NewReader(localConn)
 	var stream mux.MuxStream
-
+	var streamReader io.Reader
+	var streamWriter io.Writer
 	defer func() {
 		localConn.Close()
 		if nil != stream {
@@ -273,16 +275,22 @@ func handleUDPGatewayConn(localConn net.Conn, proxy ProxyConfig) {
 				log.Printf("[ERROR]No proxy found for udp to %s", packet.addr.ip.String())
 				return
 			}
-			stream, err = getMuxStreamByChannel(proxyChannelName)
+			stream, conf, err := getMuxStreamByChannel(proxyChannelName)
 			if nil != err {
 				log.Printf("[ERROR]Failed to create mux stream:%v", err)
 				return
 			}
 			stream.Connect("udp", packet.address())
+			streamReader = stream
+			streamWriter = stream
+			if conf.Compressor == mux.SnappyCompressor {
+				streamReader = snappy.NewReader(stream)
+				streamWriter = snappy.NewWriter(stream)
+			}
 			go func() {
 				b := make([]byte, 8192)
 				for {
-					n, err := stream.Read(b)
+					n, err := streamReader.Read(b)
 					if n > 0 {
 						err = usession.Write(b[0:n])
 					}
@@ -293,7 +301,7 @@ func handleUDPGatewayConn(localConn net.Conn, proxy ProxyConfig) {
 				}
 			}()
 		} else {
-			stream.Write(packet.content)
+			streamWriter.Write(packet.content)
 		}
 	}
 }

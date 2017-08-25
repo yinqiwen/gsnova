@@ -6,6 +6,13 @@ const (
 	DefaultMuxCipherMethod         = "chacha20poly1305"
 	DefaultMuxInitialCipherCounter = uint64(47816489)
 	AuthOK                         = 1
+
+	SnappyCompressor = "snappy"
+	NoneCompressor   = "none"
+
+	HTTPMuxSessionIDHeader    = "X-Session-ID"
+	HTTPMuxSessionACKIDHeader = "X-Session-ACK-ID"
+	HTTPMuxPullPeriodHeader   = "X-PullPeriod"
 )
 
 var (

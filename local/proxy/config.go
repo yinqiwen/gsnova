@@ -13,6 +13,7 @@ import (
 
 	"github.com/yinqiwen/gsnova/common/gfwlist"
 	"github.com/yinqiwen/gsnova/common/helper"
+	"github.com/yinqiwen/gsnova/common/mux"
 	"github.com/yinqiwen/gsnova/local/hosts"
 )
 
@@ -141,6 +142,7 @@ type ProxyChannelConfig struct {
 	ReconnectPeriod     int
 	HeartBeatPeriod     int
 	RCPRandomAdjustment int
+	Compressor          string
 	KCP                 KCPConfig
 	HTTP                HTTPConfig
 
@@ -436,6 +438,10 @@ func (cfg *LocalConfig) init() error {
 			haveDirect = true
 			GConf.Channel[i].ServerList = []string{"direct://0.0.0.0:0"}
 			GConf.Channel[i].ConnsPerServer = 1
+		} else {
+			if len(GConf.Channel[i].Compressor) == 0 {
+				GConf.Channel[i].Compressor = mux.SnappyCompressor
+			}
 		}
 	}
 	if !haveDirect {

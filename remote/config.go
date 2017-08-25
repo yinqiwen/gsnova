@@ -120,7 +120,12 @@ func init() {
 	dps := flag.String("dps", "", "Candidate dynamic ports")
 	ndp := flag.Uint("ndp", 0, "Max dynamic ports")
 	conf := flag.String("conf", "server.json", "Server config file")
-	web := flag.Bool("web", false, "start as web server")
+
+	httpServer := flag.String("http", ":48101", "HTTP listen address")
+	tcpServer := flag.String("tcp", ":48100", "TCP listen address")
+	quicServer := flag.String("quic", ":48100", "HTTP listen address")
+	kcpServer := flag.String("kcp", ":48101", "HTTP listen address")
+
 	flag.Parse()
 
 	initDefaultConf()
@@ -138,23 +143,22 @@ func init() {
 		}
 		ServerConf.Log = strings.Split(*logging, ",")
 		ServerConf.AllowedUser = strings.Split(*allow, ",")
-		if *web {
-			ServerConf.HTTP.Listen = *listen
-			if len(ServerConf.HTTP.Listen) == 0 {
-				port := os.Getenv("PORT")
-				if port == "" {
-					port = os.Getenv("OPENSHIFT_GO_PORT")
-				}
-				if port == "" {
-					port = os.Getenv("VCAP_APP_PORT")
-				}
-				host := os.Getenv("OPENSHIFT_GO_IP")
-				if len(port) > 0 {
-					ServerConf.HTTP.Listen = host + ":" + port
-				}
+		ServerConf.TCP.Listen = *tcpServer
+		ServerConf.QUIC.Listen = *quicServer
+		ServerConf.KCP.Listen = *kcpServer
+		ServerConf.HTTP.Listen = *httpServer
+		if len(ServerConf.HTTP.Listen) == 0 {
+			port := os.Getenv("PORT")
+			if port == "" {
+				port = os.Getenv("OPENSHIFT_GO_PORT")
 			}
-		} else {
-			ServerConf.TCP.Listen = *listen
+			if port == "" {
+				port = os.Getenv("VCAP_APP_PORT")
+			}
+			host := os.Getenv("OPENSHIFT_GO_IP")
+			if len(port) > 0 {
+				ServerConf.HTTP.Listen = host + ":" + port
+			}
 		}
 		ServerConf.Cipher.Key = *key
 		ServerConf.MaxDynamicPort = int(*ndp)
