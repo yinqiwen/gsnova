@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/golang/snappy"
 	"github.com/yinqiwen/gsnova/common/helper"
 	"github.com/yinqiwen/gsnova/common/mux"
 	"github.com/yinqiwen/gsnova/local/socks"
@@ -194,14 +193,8 @@ START:
 		log.Printf("Connect failed from proxy connection for reason:%v", err)
 		return
 	}
-	var streamReader io.Reader
-	var streamWriter io.Writer
-	streamReader = stream
-	streamWriter = stream
-	if conf.Compressor == mux.SnappyCompressor {
-		streamReader = snappy.NewReader(stream)
-		streamWriter = snappy.NewWriter(stream)
-	}
+	streamReader, streamWriter := mux.GetCompressStreamReaderWriter(stream, conf.Compressor)
+
 	go func() {
 		io.Copy(localConn, streamReader)
 		localConn.Close()

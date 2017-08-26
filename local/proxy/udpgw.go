@@ -11,7 +11,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/golang/snappy"
 	"github.com/google/btree"
 	"github.com/yinqiwen/gsnova/common/mux"
 )
@@ -281,12 +280,7 @@ func handleUDPGatewayConn(localConn net.Conn, proxy ProxyConfig) {
 				return
 			}
 			stream.Connect("udp", packet.address())
-			streamReader = stream
-			streamWriter = stream
-			if conf.Compressor == mux.SnappyCompressor {
-				streamReader = snappy.NewReader(stream)
-				streamWriter = snappy.NewWriter(stream)
-			}
+			streamReader, streamWriter = mux.GetCompressStreamReaderWriter(stream, conf.Compressor)
 			go func() {
 				b := make([]byte, 8192)
 				for {

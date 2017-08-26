@@ -22,21 +22,28 @@ import (
 type chunkedBody struct {
 	chunkChannel chan []byte
 	readBuffer   pmux.ByteSliceBuffer
+	counter      int
 }
 
 func (cb *chunkedBody) Read(p []byte) (int, error) {
 	if cb.readBuffer.Len() == 0 {
 		b := <-cb.chunkChannel
-		if len(b) == 0 {
+		if nil == b {
 			return 0, io.EOF
 		}
 		cb.readBuffer.Write(b)
 	}
 	n, _ := cb.readBuffer.Read(p)
+	cb.counter += n
 	return n, nil
 }
 func (cb *chunkedBody) Close() error {
-	return nil
+	select {
+	case cb.chunkChannel <- nil:
+		return nil
+	default:
+		return nil
+	}
 }
 func (cr *chunkedBody) offer(p []byte) error {
 	select {
@@ -127,7 +134,7 @@ func (h *httpDuplexConn) init(server string, pushRateLimit int) error {
 	h.pushurl, _ = url.Parse(server + "/http/push")
 	h.pullurl, _ = url.Parse(server + "/http/pull")
 	h.testurl, _ = url.Parse(server + "/http/test")
-	//h.testChunkPush()
+	h.testChunkPush()
 	h.sendCh = make(chan sendReady, 10)
 	h.closeCh = make(chan struct{})
 	h.recvNotifyCh = make(chan struct{})
@@ -229,6 +236,13 @@ func (h *httpDuplexConn) push() {
 		frs = make([]sendReady, 0)
 	}
 	for h.running {
+		if h.chunkPushSupported {
+			if !h.chunkPushExpireTime.IsZero() && h.chunkPushExpireTime.Before(time.Now()) {
+				h.chunkPushExpireTime = time.Time{}
+				h.chunkPushBody.Close()
+				continue
+			}
+		}
 		sendBuffer := &bytes.Buffer{}
 		if len(frs) == 0 {
 			frs, err = readFrames()
@@ -243,10 +257,6 @@ func (h *httpDuplexConn) push() {
 		}
 
 		if h.chunkPushSupported {
-			if !h.chunkPushExpireTime.IsZero() && h.chunkPushExpireTime.Before(time.Now()) {
-				h.chunkPushExpireTime = time.Time{}
-				h.chunkPushBody.offer(nil)
-			}
 			if sendBuffer.Len() > 0 {
 				err = h.chunkPushBody.offer(sendBuffer.Bytes())
 			}

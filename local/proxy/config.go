@@ -439,7 +439,7 @@ func (cfg *LocalConfig) init() error {
 			GConf.Channel[i].ServerList = []string{"direct://0.0.0.0:0"}
 			GConf.Channel[i].ConnsPerServer = 1
 		} else {
-			if len(GConf.Channel[i].Compressor) == 0 {
+			if len(GConf.Channel[i].Compressor) == 0 || !mux.IsValidCompressor(GConf.Channel[i].Compressor) {
 				GConf.Channel[i].Compressor = mux.SnappyCompressor
 			}
 		}
