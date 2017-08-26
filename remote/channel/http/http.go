@@ -43,6 +43,7 @@ func (h *httpDuplexServConn) setReader(req *http.Request) {
 	h.touch()
 	h.req = req
 	b := make([]byte, 8192)
+	counter := 0
 	for {
 		n, err := req.Body.Read(b)
 		if n > 0 {
@@ -52,10 +53,12 @@ func (h *httpDuplexServConn) setReader(req *http.Request) {
 			h.touch()
 			helper.AsyncNotify(h.recvNotifyCh)
 		}
+		counter += n
 		if nil != err {
 			break
 		}
 	}
+	//log.Printf("#####Chunk read %d bytes", counter)
 	h.req = nil
 }
 

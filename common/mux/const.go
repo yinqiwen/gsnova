@@ -7,8 +7,7 @@ const (
 	DefaultMuxInitialCipherCounter = uint64(47816489)
 	AuthOK                         = 1
 
-	SnappyCompressor = "snappy"
-	NoneCompressor   = "none"
+	//GZipCompressor   = "gzip"
 
 	HTTPMuxSessionIDHeader    = "X-Session-ID"
 	HTTPMuxSessionACKIDHeader = "X-Session-ACK-ID"

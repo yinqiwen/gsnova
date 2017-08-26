@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math"
 	"net/url"
 	"reflect"
 	"strings"
@@ -69,7 +70,7 @@ func (ch *proxyChannel) createMuxSessionByProxy(p Proxy, server string) (*muxSes
 		if nil != err {
 			return nil, err
 		}
-		counter := uint64(helper.RandBetween(0, 10000000000))
+		counter := uint64(helper.RandBetween(0, math.MaxInt32))
 		cipherMethod := GConf.Cipher.Method
 		if strings.HasPrefix(server, "https://") || strings.HasPrefix(server, "wss://") {
 			cipherMethod = "none"
@@ -108,8 +109,6 @@ func (ch *proxyChannel) createMuxSessionByProxy(p Proxy, server string) (*muxSes
 func (ch *proxyChannel) getMuxSession() (*muxSessionHolder, error) {
 	var session *muxSessionHolder
 	minStreamNum := -1
-	//log.Printf("####session count %d", len(ch.sessions))
-	//log.Printf("####session count in lock %d", len(ch.sessions))
 	for holder := range ch.sessions {
 		if !holder.expireTime.IsZero() && holder.expireTime.Before(time.Now()) {
 			if holder.muxSession.NumStreams() == 0 {

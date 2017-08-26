@@ -6,7 +6,6 @@ import (
 	"net"
 	"time"
 
-	"github.com/golang/snappy"
 	"github.com/yinqiwen/gsnova/common/mux"
 )
 
@@ -29,14 +28,7 @@ func handleProxyStream(stream mux.MuxStream, compresor string) {
 		stream.Close()
 		return
 	}
-	var streamReader io.Reader
-	var streamWriter io.Writer
-	streamReader = stream
-	streamWriter = stream
-	if compresor == mux.SnappyCompressor {
-		streamReader = snappy.NewReader(stream)
-		streamWriter = snappy.NewWriter(stream)
-	}
+	streamReader, streamWriter := mux.GetCompressStreamReaderWriter(stream, compresor)
 	defer c.Close()
 	go func() {
 		io.Copy(c, streamReader)
@@ -68,10 +60,7 @@ func ServProxyMuxSession(session mux.MuxSession) error {
 				session.Close()
 				return mux.ErrAuthFailed
 			}
-			switch auth.CompressMethod {
-			case mux.SnappyCompressor:
-			case mux.NoneCompressor:
-			default:
+			if !mux.IsValidCompressor(auth.CompressMethod) {
 				log.Printf("[ERROR]Invalid compressor:%s", auth.CompressMethod)
 				session.Close()
 				return mux.ErrAuthFailed

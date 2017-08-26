@@ -182,7 +182,7 @@ func (p *SSHProxy) CreateMuxSession(server string, conf *proxy.ProxyChannelConfi
 			},
 		}
 	} else {
-		if identify := u.Query().Get("identify"); len(identify) > 0 {
+		if identify := u.Query().Get("key"); len(identify) > 0 {
 			if content, err := ioutil.ReadFile(identify); nil != err {
 				log.Printf("Invalid SSH identify path:%s for reason:%v", identify, err)
 				return nil, err

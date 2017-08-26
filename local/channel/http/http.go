@@ -40,10 +40,10 @@ func (cb *chunkedBody) Read(p []byte) (int, error) {
 func (cb *chunkedBody) Close() error {
 	select {
 	case cb.chunkChannel <- nil:
-		return nil
 	default:
 		return nil
 	}
+	return nil
 }
 func (cr *chunkedBody) offer(p []byte) error {
 	select {
@@ -52,6 +52,13 @@ func (cr *chunkedBody) offer(p []byte) error {
 	case <-time.After(10 * time.Second):
 		return pmux.ErrTimeout
 	}
+}
+
+func newChunkedBody(buffer pmux.ByteSliceBuffer) *chunkedBody {
+	cr := new(chunkedBody)
+	cr.chunkChannel = make(chan []byte)
+	cr.readBuffer = buffer
+	return cr
 }
 
 // sendReady is used to either mark a stream as ready
@@ -72,6 +79,7 @@ type httpDuplexConn struct {
 	testurl      *url.URL
 	recvReader   io.ReadCloser
 	recvLock     sync.Mutex
+	writeLock    sync.Mutex
 	running      bool
 	sendCh       chan sendReady
 	closeCh      chan struct{}
@@ -80,9 +88,8 @@ type httpDuplexConn struct {
 
 	pushLimiter *rate.Limiter
 
-	chunkPushBody       chunkedBody
-	chunkPushSupported  bool
-	chunkPushExpireTime time.Time
+	chunkPushBody      *chunkedBody
+	chunkPushSupported bool
 }
 
 func (h *httpDuplexConn) buildHTTPReq(u *url.URL, body io.ReadCloser) *http.Request {
@@ -121,6 +128,7 @@ func (h *httpDuplexConn) testChunkPush() {
 		response.Body.Close()
 	}
 	h.chunkPushSupported = true
+	h.newChunkPushBody()
 	log.Printf("Server:%s support chunked transfer encoding request.", h.server)
 }
 
@@ -139,7 +147,6 @@ func (h *httpDuplexConn) init(server string, pushRateLimit int) error {
 	h.closeCh = make(chan struct{})
 	h.recvNotifyCh = make(chan struct{})
 	h.pullNotifyCh = make(chan struct{})
-	h.chunkPushBody.chunkChannel = make(chan []byte)
 	h.pushLimiter = rate.NewLimiter(rate.Limit(pushRateLimit), 1)
 	h.running = true
 	if h.chunkPushSupported {
@@ -158,20 +165,46 @@ func (h *httpDuplexConn) setAckId(res *http.Response) {
 	}
 }
 
+func (h *httpDuplexConn) newChunkPushBody() {
+	h.writeLock.Lock()
+	if nil == h.chunkPushBody {
+		h.chunkPushBody = newChunkedBody(nil)
+	} else {
+		h.chunkPushBody = newChunkedBody(h.chunkPushBody.readBuffer)
+	}
+	h.writeLock.Unlock()
+}
+
 func (h *httpDuplexConn) chunkPush() {
+	var restartChunkPushTimer *time.Timer
+
 	for h.running {
 		h.pushLimiter.Wait(context.TODO())
 		log.Printf("HTTP start chunked push for %v with id:%s", h.pushurl, h.id)
-		req := h.buildHTTPReq(h.pushurl, &h.chunkPushBody)
+		req := h.buildHTTPReq(h.pushurl, h.chunkPushBody)
 		req.ContentLength = -1
-		h.chunkPushExpireTime = time.Now().Add(time.Duration(h.conf.ReconnectPeriod) * time.Second)
-		res, _ := h.client.Do(req)
+		restartChunkPushTimer = time.NewTimer(time.Duration(h.conf.ReconnectPeriod) * time.Second)
+
+		go func() {
+			select {
+			case <-restartChunkPushTimer.C:
+				h.writeLock.Lock()
+				h.chunkPushBody.Close()
+				h.writeLock.Unlock()
+			}
+		}()
+		res, err := h.client.Do(req)
 		if nil != res && res.StatusCode == 401 {
 			log.Printf("Failed to chunk push to HTTP server for response:%v", res)
 			h.Close()
 			return
 		}
+		h.newChunkPushBody()
+		restartChunkPushTimer.Stop()
 		h.setAckId(res)
+		if nil != err {
+			time.Sleep(1 * time.Second)
+		}
 	}
 }
 
@@ -236,13 +269,6 @@ func (h *httpDuplexConn) push() {
 		frs = make([]sendReady, 0)
 	}
 	for h.running {
-		if h.chunkPushSupported {
-			if !h.chunkPushExpireTime.IsZero() && h.chunkPushExpireTime.Before(time.Now()) {
-				h.chunkPushExpireTime = time.Time{}
-				h.chunkPushBody.Close()
-				continue
-			}
-		}
 		sendBuffer := &bytes.Buffer{}
 		if len(frs) == 0 {
 			frs, err = readFrames()
@@ -257,10 +283,14 @@ func (h *httpDuplexConn) push() {
 		}
 
 		if h.chunkPushSupported {
-			if sendBuffer.Len() > 0 {
-				err = h.chunkPushBody.offer(sendBuffer.Bytes())
+			h.writeLock.Lock()
+			if nil != h.chunkPushBody {
+				if sendBuffer.Len() > 0 {
+					err = h.chunkPushBody.offer(sendBuffer.Bytes())
+				}
+				notifyDone()
 			}
-			notifyDone()
+			h.writeLock.Unlock()
 		} else {
 			if sendBuffer.Len() > 0 {
 				req := h.buildHTTPReq(h.pushurl, ioutil.NopCloser(sendBuffer))
@@ -272,6 +302,7 @@ func (h *httpDuplexConn) push() {
 						h.Close()
 						return
 					}
+					time.Sleep(1 * time.Second)
 				} else {
 					err = nil
 					notifyDone()
@@ -340,9 +371,8 @@ func (h *httpDuplexConn) Close() error {
 	if h.running {
 		h.running = false
 		close(h.closeCh)
-		select {
-		case h.chunkPushBody.chunkChannel <- nil:
-		default:
+		if nil != h.chunkPushBody {
+			h.chunkPushBody.Close()
 		}
 	}
 	return nil
