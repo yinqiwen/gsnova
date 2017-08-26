@@ -146,18 +146,16 @@ func init() {
 		ServerConf.QUIC.Listen = *quicServer
 		ServerConf.KCP.Listen = *kcpServer
 		ServerConf.HTTP.Listen = *httpServer
-		if len(ServerConf.HTTP.Listen) == 0 {
-			port := os.Getenv("PORT")
-			if port == "" {
-				port = os.Getenv("OPENSHIFT_GO_PORT")
-			}
-			if port == "" {
-				port = os.Getenv("VCAP_APP_PORT")
-			}
-			host := os.Getenv("OPENSHIFT_GO_IP")
-			if len(port) > 0 {
-				ServerConf.HTTP.Listen = host + ":" + port
-			}
+		port := os.Getenv("PORT")
+		if port == "" {
+			port = os.Getenv("OPENSHIFT_GO_PORT")
+		}
+		if port == "" {
+			port = os.Getenv("VCAP_APP_PORT")
+		}
+		host := os.Getenv("OPENSHIFT_GO_IP")
+		if len(port) > 0 {
+			ServerConf.HTTP.Listen = host + ":" + port
 		}
 		ServerConf.Cipher.Key = *key
 		//ServerConf.MaxDynamicPort = int(*ndp)
