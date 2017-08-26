@@ -201,6 +201,9 @@ START:
 	}()
 	if isSocksProxy || isHttpsProxy {
 		io.Copy(streamWriter, localConn)
+		if close, ok := streamWriter.(io.Closer); ok {
+			close.Close()
+		}
 	} else {
 		proxyReq := initialHTTPReq
 		initialHTTPReq = nil

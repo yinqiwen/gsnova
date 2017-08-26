@@ -11,7 +11,7 @@ import (
 
 func handleProxyStream(stream mux.MuxStream, compresor string) {
 	creq, err := mux.ReadConnectRequest(stream)
-	defer stream.Close()
+
 	if nil != err {
 		stream.Close()
 		log.Printf("[ERROR]:Failed to read connect request:%v", err)
@@ -34,6 +34,13 @@ func handleProxyStream(stream mux.MuxStream, compresor string) {
 		io.Copy(c, streamReader)
 	}()
 	io.Copy(streamWriter, c)
+
+	if close, ok := streamWriter.(io.Closer); ok {
+		close.Close()
+	}
+	if close, ok := streamReader.(io.Closer); ok {
+		close.Close()
+	}
 	//n, err := io.Copy(stream, c)
 
 }

@@ -5,7 +5,6 @@ import (
 	"flag"
 	"log"
 	"os"
-	"strconv"
 	"strings"
 
 	"github.com/yinqiwen/gsnova/common/helper"
@@ -114,11 +113,11 @@ func InitialPMuxConfig() *pmux.Config {
 
 func init() {
 	key := flag.String("key", "", "Crypto key setting")
-	listen := flag.String("listen", "", "Server listen address")
+	// listen := flag.String("listen", "", "Server listen address")
 	logging := flag.String("log", "stdout", "Server log setting, , split by ','")
 	allow := flag.String("allow", "*", "Allow user setting, split by ','")
-	dps := flag.String("dps", "", "Candidate dynamic ports")
-	ndp := flag.Uint("ndp", 0, "Max dynamic ports")
+	// dps := flag.String("dps", "", "Candidate dynamic ports")
+	// ndp := flag.Uint("ndp", 0, "Max dynamic ports")
 	conf := flag.String("conf", "server.json", "Server config file")
 
 	httpServer := flag.String("http", ":48101", "HTTP listen address")
@@ -130,17 +129,17 @@ func init() {
 
 	initDefaultConf()
 	if _, err := os.Stat(*conf); os.IsNotExist(err) {
-		if len(*key) == 0 || len(*listen) == 0 {
+		if len(*key) == 0 {
 			flag.PrintDefaults()
 			return
 		}
-		dpstrs := strings.Split(*dps, ",")
-		for _, s := range dpstrs {
-			i, err := strconv.Atoi(s)
-			if nil == err && i > 1024 && i < 65535 {
-				ServerConf.CandidateDynamicPort = append(ServerConf.CandidateDynamicPort, i)
-			}
-		}
+		// dpstrs := strings.Split(*dps, ",")
+		// for _, s := range dpstrs {
+		// 	i, err := strconv.Atoi(s)
+		// 	if nil == err && i > 1024 && i < 65535 {
+		// 		ServerConf.CandidateDynamicPort = append(ServerConf.CandidateDynamicPort, i)
+		// 	}
+		// }
 		ServerConf.Log = strings.Split(*logging, ",")
 		ServerConf.AllowedUser = strings.Split(*allow, ",")
 		ServerConf.TCP.Listen = *tcpServer
@@ -161,7 +160,7 @@ func init() {
 			}
 		}
 		ServerConf.Cipher.Key = *key
-		ServerConf.MaxDynamicPort = int(*ndp)
+		//ServerConf.MaxDynamicPort = int(*ndp)
 	} else {
 		data, err := helper.ReadWithoutComment(*conf, "//")
 		//data, err := ioutil.ReadFile(file)

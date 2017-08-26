@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yinqiwen/pmux"
+
 	"github.com/yinqiwen/gsnova/common/gfwlist"
 	"github.com/yinqiwen/gsnova/common/helper"
 	"github.com/yinqiwen/gsnova/common/mux"
@@ -421,16 +423,17 @@ func (cfg *LocalConfig) init() error {
 	switch GConf.Cipher.Method {
 	case "auto":
 		if strings.Contains(runtime.GOARCH, "386") || strings.Contains(runtime.GOARCH, "amd64") {
-			GConf.Cipher.Method = "aes256-gcm"
+			GConf.Cipher.Method = pmux.CipherAES256GCM
 		} else if strings.Contains(runtime.GOARCH, "arm") {
-			GConf.Cipher.Method = "chacha20poly1305"
+			GConf.Cipher.Method = pmux.CipherChacha20Poly1305
 		}
-	case "chacha20poly1305":
-	case "aes256-gcm":
-	case "none":
+	case pmux.CipherChacha20Poly1305:
+	case pmux.CipherSalsa20:
+	case pmux.CipherAES256GCM:
+	case pmux.CipherNone:
 	default:
 		log.Printf("Invalid encrypt method:%s, use 'chacha20poly1305' instead.", GConf.Cipher.Method)
-		GConf.Cipher.Method = "chacha20poly1305"
+		GConf.Cipher.Method = pmux.CipherChacha20Poly1305
 	}
 	haveDirect := false
 	for i := range GConf.Channel {
@@ -440,7 +443,7 @@ func (cfg *LocalConfig) init() error {
 			GConf.Channel[i].ConnsPerServer = 1
 		} else {
 			if len(GConf.Channel[i].Compressor) == 0 || !mux.IsValidCompressor(GConf.Channel[i].Compressor) {
-				GConf.Channel[i].Compressor = mux.SnappyCompressor
+				GConf.Channel[i].Compressor = mux.NoneCompressor
 			}
 		}
 	}
