@@ -2,7 +2,7 @@
     //this is just a example
 	"Log": ["stdout", "gsnova.log"],
 	"UserAgent":"Mozilla/5.0 (Windows NT 6.1; WOW64; rv:15.0) Gecko/20100101 Firefox/15.0.1",
-	//encrypt method can choose from aes/salsa20/chacha20/rc4/none/auto
+	//encrypt method can choose from none/auto/salsa20/chacha20poly1305/aes256-gcm
 	//'auto' method would choose fastest encrypt method for current env
 	"Cipher":{"Method":"auto", "Key":"809240d3a021449f6e67aa73221d42df942a308a"},
 	
@@ -75,15 +75,14 @@
 		}
 	],
 
-    //there is 5 channel types: direct/reject/gae/paas/vps
 	"Channel":[
 		{
 		    "Enable":false,
 			"Name":"heroku-websocket",
-			//"ServerList":["quic://119.28.76.86:48101"],
+			//"ServerList":["quic://1.1.1.1:48101"],
 			"ServerList":["wss://xyz.herokuapp.com"],
 			//"ServerList":["tcp://127.0.0.1:18080"],
-			//"ServerList":["ssh://root@119.28.76.86:22?key=./PPP"],
+			//"ServerList":["ssh://root@1.1.1.1:22?key=./PPP"],
 	        //if u are behind a HTTP proxy
 	        "Proxy":"",
 		    "ConnsPerServer":3,
@@ -102,10 +101,7 @@
 		{
 		    "Enable":false,
 			"Name":"vps-quic",
-			//"ServerList":["quic://119.28.76.86:48101"],
 			"ServerList":["quic://1.1.1.1:8080"],
-			//"ServerList":["tcp://127.0.0.1:18080"],
-			//"ServerList":["ssh://root@119.28.76.86:22?key=./PPP"],
 	        //if u are behind a HTTP proxy
 	        "Proxy":"",
 		    "ConnsPerServer":3,
