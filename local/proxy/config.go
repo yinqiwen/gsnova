@@ -446,6 +446,10 @@ func (cfg *LocalConfig) init() error {
 				GConf.Channel[i].Compressor = mux.NoneCompressor
 			}
 		}
+
+		if GConf.Channel[i].RCPRandomAdjustment > GConf.Channel[i].ReconnectPeriod {
+			GConf.Channel[i].RCPRandomAdjustment = GConf.Channel[i].ReconnectPeriod / 2
+		}
 	}
 	if !haveDirect {
 		directProxyChannel := make([]ProxyChannelConfig, 1)

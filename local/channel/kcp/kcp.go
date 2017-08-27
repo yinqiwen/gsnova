@@ -15,6 +15,12 @@ type KCPProxy struct {
 	//proxy.BaseProxy
 }
 
+func (p *KCPProxy) Features() proxy.ProxyFeatureSet {
+	return proxy.ProxyFeatureSet{
+		AutoExpire: true,
+	}
+}
+
 func (tc *KCPProxy) CreateMuxSession(server string, conf *proxy.ProxyChannelConfig) (mux.MuxSession, error) {
 	rurl, err := url.Parse(server)
 	if nil != err {

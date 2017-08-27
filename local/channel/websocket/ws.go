@@ -15,6 +15,12 @@ import (
 type WebsocketProxy struct {
 }
 
+func (p *WebsocketProxy) Features() proxy.ProxyFeatureSet {
+	return proxy.ProxyFeatureSet{
+		AutoExpire: true,
+	}
+}
+
 func (ws *WebsocketProxy) CreateMuxSession(server string, conf *proxy.ProxyChannelConfig) (mux.MuxSession, error) {
 	u, err := url.Parse(server)
 	if nil != err {

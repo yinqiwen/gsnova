@@ -165,6 +165,12 @@ func (p *DirectProxy) CreateMuxSession(server string, conf *proxy.ProxyChannelCo
 	return session, nil
 }
 
+func (p *DirectProxy) Features() proxy.ProxyFeatureSet {
+	return proxy.ProxyFeatureSet{
+		AutoExpire: false,
+	}
+}
+
 func init() {
 	proxy.RegisterProxyType("direct", &DirectProxy{})
 }

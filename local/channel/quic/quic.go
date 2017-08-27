@@ -15,6 +15,12 @@ type QUICProxy struct {
 	//proxy.BaseProxy
 }
 
+func (p *QUICProxy) Features() proxy.ProxyFeatureSet {
+	return proxy.ProxyFeatureSet{
+		AutoExpire: true,
+	}
+}
+
 func (tc *QUICProxy) CreateMuxSession(server string, conf *proxy.ProxyChannelConfig) (mux.MuxSession, error) {
 	rurl, err := url.Parse(server)
 	if nil != err {

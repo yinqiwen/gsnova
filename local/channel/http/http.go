@@ -383,6 +383,12 @@ type HTTPProxy struct {
 	//proxy.BaseProxy
 }
 
+func (p *HTTPProxy) Features() proxy.ProxyFeatureSet {
+	return proxy.ProxyFeatureSet{
+		AutoExpire: false,
+	}
+}
+
 func (ws *HTTPProxy) CreateMuxSession(server string, conf *proxy.ProxyChannelConfig) (mux.MuxSession, error) {
 	conn := &httpDuplexConn{}
 	conn.conf = conf

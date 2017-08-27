@@ -19,9 +19,9 @@ var proxyServerRunning = true
 func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 	var proxyChannelName string
 	protocol := "tcp"
-	defer conn.Close()
-
 	localConn := conn
+	defer localConn.Close()
+
 	remoteHost := ""
 	remotePort := ""
 	//indicate that if remote opened by event
@@ -63,7 +63,6 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 	if nil == bufconn {
 		bufconn = bufio.NewReader(localConn)
 	}
-	defer localConn.Close()
 
 	//1. sniff SNI first
 	if trySNISniff {
@@ -197,7 +196,7 @@ START:
 
 	go func() {
 		io.Copy(localConn, streamReader)
-		localConn.Close()
+		//localConn.Close()
 	}()
 	if isSocksProxy || isHttpsProxy {
 		io.Copy(streamWriter, localConn)

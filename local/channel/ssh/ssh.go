@@ -139,6 +139,12 @@ func (tc *sshMuxSession) Close() error {
 type SSHProxy struct {
 }
 
+func (p *SSHProxy) Features() proxy.ProxyFeatureSet {
+	return proxy.ProxyFeatureSet{
+		AutoExpire: true,
+	}
+}
+
 func (p *SSHProxy) CreateMuxSession(server string, conf *proxy.ProxyChannelConfig) (mux.MuxSession, error) {
 	u, err := url.Parse(server)
 	if nil != err {

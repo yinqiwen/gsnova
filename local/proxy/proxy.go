@@ -25,12 +25,14 @@ var proxyHome string
 
 type InternalEventMonitor func(code int, desc string) error
 
+type ProxyFeatureSet struct {
+	AutoExpire bool
+}
+
 type Proxy interface {
-	//Init(conf ProxyChannelConfig) error
 	//PrintStat(w io.Writer)
 	CreateMuxSession(server string, conf *ProxyChannelConfig) (mux.MuxSession, error)
-	//Config() *ProxyChannelConfig
-	//Serve(session *ProxySession, ev event.Event) error
+	Features() ProxyFeatureSet
 }
 
 func init() {
@@ -108,10 +110,16 @@ func (ch *proxyChannel) createMuxSessionByProxy(p Proxy, server string) (*muxSes
 
 		holder := &muxSessionHolder{
 			creatTime:  time.Now(),
-			expireTime: time.Now().Add(30 * time.Minute),
 			muxSession: session,
 			server:     server,
 		}
+		features := p.Features()
+		if features.AutoExpire {
+			expireAfter := helper.RandBetween(ch.Conf.ReconnectPeriod-ch.Conf.RCPRandomAdjustment, ch.Conf.ReconnectPeriod+ch.Conf.RCPRandomAdjustment)
+			log.Printf("Mux session woulde expired after %d seconds.", expireAfter)
+			holder.expireTime = time.Now().Add(time.Duration(expireAfter) * time.Second)
+		}
+
 		ch.sessions[holder] = true
 		return holder, nil
 	}

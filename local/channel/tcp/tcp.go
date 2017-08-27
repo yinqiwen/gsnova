@@ -20,6 +20,12 @@ type TcpProxy struct {
 	//proxy.BaseProxy
 }
 
+func (p *TcpProxy) Features() proxy.ProxyFeatureSet {
+	return proxy.ProxyFeatureSet{
+		AutoExpire: true,
+	}
+}
+
 func (tc *TcpProxy) CreateMuxSession(server string, conf *proxy.ProxyChannelConfig) (mux.MuxSession, error) {
 	dailTimeout := conf.DialTimeout
 	if 0 == dailTimeout {
