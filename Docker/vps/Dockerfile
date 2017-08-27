@@ -6,12 +6,12 @@ FROM golang:1.8.3-alpine3.6
 #ADD ./server.json /go/bin
 
 RUN apk add --update git && \
-    go get -t github.com/yinqiwen/gsnova/remote/vps  && \
-    go install github.com/yinqiwen/gsnova/remote/vps 
+    go get -t github.com/yinqiwen/gsnova/remote/server  && \
+    go install github.com/yinqiwen/gsnova/remote/server 
 
 #WORKDIR /go/bin
 # Run the outyet command by default when the container starts.
 #ENTRYPOINT ["/go/bin/vps"]
-CMD ["/go/bin/vps", "-key", "809240d3a021449f6e67aa73221d42df942a308a", "-listen", ":9443"]
+CMD ["/go/bin/server","-key", "809240d3a021449f6e67aa73221d42df942a308a", "-tcp", ":9443", "-quic", ":9443", "-http", ":9444", "-kcp", ":9444"]
 # Document that the service listens on port 9443.
 #EXPOSE 9443
