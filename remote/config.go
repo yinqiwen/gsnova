@@ -5,41 +5,76 @@ import (
 	"flag"
 	"log"
 	"os"
-	"strconv"
 	"strings"
 
-	"github.com/yinqiwen/gsnova/common/event"
 	"github.com/yinqiwen/gsnova/common/helper"
 	"github.com/yinqiwen/gsnova/common/logger"
+	"github.com/yinqiwen/gsnova/common/mux"
+	"github.com/yinqiwen/pmux"
 )
 
-type EncryptConfig struct {
-	Method string
-	Key    string
+type CipherConfig struct {
+	//Method string
+	Key string
 }
 
 type TLServerConfig struct {
-	Cert string
-	Key  string
+	Cert   string
+	Key    string
+	Listen string
+}
+
+// Config for server
+type KCPServerConfig struct {
+	Listen       string
+	Mode         string
+	MTU          int
+	SndWnd       int
+	RcvWnd       int
+	DataShard    int
+	ParityShard  int
+	DSCP         int
+	AckNodelay   bool
+	NoDelay      int
+	Interval     int
+	Resend       int
+	NoCongestion int
+	SockBuf      int
+}
+
+type QUICServerConfig struct {
+	Listen string
+}
+
+type HTTPServerConfig struct {
+	Listen string
+}
+
+type TCPServerConfig struct {
+	Listen string
 }
 
 type ServerConfig struct {
-	Listen               string
 	AdminListen          string
+	DialTimeout          int
 	MaxDynamicPort       int
 	DynamicPortLifeCycle int
 	CandidateDynamicPort []int
-	Auth                 []string
-	Encrypt              EncryptConfig
+	AllowedUser          []string
+	Cipher               CipherConfig
 	Log                  []string
 	TLS                  TLServerConfig
+	KCP                  KCPServerConfig
+	QUIC                 QUICServerConfig
+	HTTP                 HTTPServerConfig
+	TCP                  TCPServerConfig
 }
 
 func (conf *ServerConfig) VerifyUser(user string) bool {
-	if len(conf.Auth) == 0 {
+	if len(conf.AllowedUser) == 0 {
 		return true
 	}
-	for _, u := range conf.Auth {
+	for _, u := range conf.AllowedUser {
 		if u == user || u == "*" {
 			//log.Printf("Valid user:%s", user)
 			return true
@@ -51,33 +86,79 @@ func (conf *ServerConfig) VerifyUser(user string) bool {
 
 var ServerConf ServerConfig
 
+func initDefaultConf() {
+	ServerConf.KCP.Mode = "fast"
+	ServerConf.KCP.MTU = 1350
+	ServerConf.KCP.SndWnd = 1024
+	ServerConf.KCP.RcvWnd = 1024
+	ServerConf.KCP.DataShard = 10
+	ServerConf.KCP.ParityShard = 3
+	ServerConf.KCP.DSCP = 30
+	ServerConf.KCP.AckNodelay = true
+	ServerConf.KCP.NoDelay = 0
+	ServerConf.KCP.Interval = 50
+	ServerConf.KCP.Resend = 0
+	ServerConf.KCP.Interval = 50
+	ServerConf.KCP.NoCongestion = 0
+	ServerConf.KCP.SockBuf = 4194304
+}
+
+func InitialPMuxConfig() *pmux.Config {
+	cfg := pmux.DefaultConfig()
+	cfg.CipherKey = []byte(ServerConf.Cipher.Key)
+	cfg.CipherMethod = mux.DefaultMuxCipherMethod
+	cfg.CipherInitialCounter = mux.DefaultMuxInitialCipherCounter
+	return cfg
+}
+
 func init() {
 	key := flag.String("key", "", "Crypto key setting")
-	listen := flag.String("listen", "", "Server listen address")
+	// listen := flag.String("listen", "", "Server listen address")
 	logging := flag.String("log", "stdout", "Server log setting, , split by ','")
-	auth := flag.String("auth", "*", "Auth user setting, split by ','")
-	dps := flag.String("dps", "", "Candidate dynamic ports")
-	ndp := flag.Uint("ndp", 0, "Max dynamic ports")
+	allow := flag.String("allow", "*", "Allowed users, split by ','")
+	// dps := flag.String("dps", "", "Candidate dynamic ports")
+	// ndp := flag.Uint("ndp", 0, "Max dynamic ports")
 	conf := flag.String("conf", "server.json", "Server config file")
+
+	httpServer := flag.String("http", "", "HTTP/Websocket listen address")
+	tcpServer := flag.String("tcp", "", "TCP listen address")
+	quicServer := flag.String("quic", "", "QUIC listen address")
+	kcpServer := flag.String("kcp", "", "KCP listen address")
+
 	flag.Parse()
 
+	initDefaultConf()
 	if _, err := os.Stat(*conf); os.IsNotExist(err) {
-		if len(*key) == 0 || len(*listen) == 0 {
+		if len(*key) == 0 {
 			flag.PrintDefaults()
 			return
 		}
-		dpstrs := strings.Split(*dps, ",")
-		for _, s := range dpstrs {
-			i, err := strconv.Atoi(s)
-			if nil == err && i > 1024 && i < 65535 {
-				ServerConf.CandidateDynamicPort = append(ServerConf.CandidateDynamicPort, i)
-			}
-		}
+		// dpstrs := strings.Split(*dps, ",")
+		// for _, s := range dpstrs {
+		// 	i, err := strconv.Atoi(s)
+		// 	if nil == err && i > 1024 && i < 65535 {
+		// 		ServerConf.CandidateDynamicPort = append(ServerConf.CandidateDynamicPort, i)
+		// 	}
+		// }
 		ServerConf.Log = strings.Split(*logging, ",")
-		ServerConf.Auth = strings.Split(*auth, ",")
-		ServerConf.Listen = *listen
-		ServerConf.Encrypt.Key = *key
-		ServerConf.MaxDynamicPort = int(*ndp)
+		ServerConf.AllowedUser = strings.Split(*allow, ",")
+		ServerConf.TCP.Listen = *tcpServer
+		ServerConf.QUIC.Listen = *quicServer
+		ServerConf.KCP.Listen = *kcpServer
+		ServerConf.HTTP.Listen = *httpServer
+		port := os.Getenv("PORT")
+		if port == "" {
+			port = os.Getenv("OPENSHIFT_GO_PORT")
+		}
+		if port == "" {
+			port = os.Getenv("VCAP_APP_PORT")
+		}
+		host := os.Getenv("OPENSHIFT_GO_IP")
+		if len(port) > 0 {
+			ServerConf.HTTP.Listen = host + ":" + port
+		}
+		ServerConf.Cipher.Key = *key
+		//ServerConf.MaxDynamicPort = int(*ndp)
 	} else {
 		data, err := helper.ReadWithoutComment(*conf, "//")
 		//data, err := ioutil.ReadFile(file)
@@ -90,8 +171,22 @@ func init() {
 		}
 	}
 
+	if len(ServerConf.KCP.Listen) > 0 {
+		config := &ServerConf.KCP
+		switch config.Mode {
+		case "normal":
+			config.NoDelay, config.Interval, config.Resend, config.NoCongestion = 0, 40, 2, 1
+		case "fast":
+			config.NoDelay, config.Interval, config.Resend, config.NoCongestion = 0, 30, 2, 1
+		case "fast2":
+			config.NoDelay, config.Interval, config.Resend, config.NoCongestion = 1, 20, 2, 1
+		case "fast3":
+			config.NoDelay, config.Interval, config.Resend, config.NoCongestion = 1, 10, 2, 1
+		}
+	}
+
 	logger.InitLogger(ServerConf.Log)
 	log.Printf("Load server conf success.")
-	log.Printf("ServerConf:%v", &ServerConf)
-	event.SetDefaultSecretKey(ServerConf.Encrypt.Method, ServerConf.Encrypt.Key)
+	confdata, _ := json.MarshalIndent(&ServerConf, "", "    ")
+	log.Printf("Start with config:\n%s", string(confdata))
 }

@@ -2,72 +2,47 @@ package proxy
 
 import (
 	"bufio"
-	"bytes"
-	"crypto/tls"
-	"fmt"
 	"io"
 	"log"
 	"net"
 	"net/http"
 	"strings"
-	"sync/atomic"
 	"time"
 
-	"github.com/yinqiwen/gsnova/common/event"
-	"github.com/yinqiwen/gsnova/common/fakecert"
 	"github.com/yinqiwen/gsnova/common/helper"
+	"github.com/yinqiwen/gsnova/common/mux"
 	"github.com/yinqiwen/gsnova/local/socks"
 )
 
-var sidSeed uint32 = 0
 var proxyServerRunning = true
 
-func getSessionId() uint32 {
-	return atomic.AddUint32(&sidSeed, 1)
-}
-
 func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
-	var p Proxy
+	var proxyChannelName string
 	protocol := "tcp"
-	sid := getSessionId()
-	queue := event.NewEventQueue()
-	connClosed := false
-	session := newProxySession(sid, queue)
-	defer closeProxySession(sid)
+	localConn := conn
+	defer localConn.Close()
 
 	remoteHost := ""
 	remotePort := ""
 	//indicate that if remote opened by event
-	tryRemoteResolve := false
+	trySNISniff := false
+	isSocksProxy := false
+	isHttpsProxy := false
+	isHttp11Proto := false
+	var initialHTTPReq *http.Request
 	socksConn, bufconn, err := socks.NewSocksConn(conn)
 
-	socksInitProxy := func() {
-		remoteAddr := net.JoinHostPort(remoteHost, remotePort)
-		creq, _ := http.NewRequest("Connect", "https://"+remoteAddr, nil)
-		p = proxy.findProxyByRequest(protocol, remoteHost, creq)
-		if nil == p {
-			conn.Close()
-			return
-		}
-		log.Printf("Session:%d select channel:%s for %s", sid, p.Config().Name, remoteHost)
-		tcpOpen := &event.TCPOpenEvent{}
-		tcpOpen.SetId(sid)
-		tcpOpen.Addr = remoteAddr
-		p.Serve(session, tcpOpen)
-	}
-
 	if nil == err {
+		isSocksProxy = true
 		log.Printf("Local proxy recv %s proxy conn to %s", socksConn.Version(), socksConn.Req.Target)
 		socksConn.Grant(&net.TCPAddr{
 			IP: net.ParseIP("0.0.0.0"), Port: 0})
-
+		localConn = socksConn
 		if socksConn.Req.Target == GConf.UDPGWAddr {
 			log.Printf("Handle udpgw conn for %v", socksConn.Req.Target)
-			handleUDPGatewayConn(conn, proxy)
+			handleUDPGatewayConn(localConn, proxy)
 			return
 		}
-		conn = socksConn
-		session.Hijacked = true
 
 		remoteHost, remotePort, err = net.SplitHostPort(socksConn.Req.Target)
 		if nil != err {
@@ -76,151 +51,108 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 		}
 		if net.ParseIP(remoteHost) != nil && !helper.IsPrivateIP(remoteHost) && proxy.SNISniff {
 			//this is a ip from local dns query
-			tryRemoteResolve = true
-			if remotePort == "80" {
-				//we can parse http request directly
-				session.Hijacked = false
-			}
-		} else {
-			socksInitProxy()
+			trySNISniff = true
 		}
 	} else {
 		if nil == bufconn {
-			conn.Close()
+			localConn.Close()
 			return
 		}
 	}
 
 	if nil == bufconn {
-		bufconn = bufio.NewReader(conn)
-	}
-	defer conn.Close()
-
-	testConn := func() {
-		if nil != p {
-			var testConnEv event.ConnTestEvent
-			testConnEv.SetId(sid)
-			p.Serve(session, &testConnEv)
-		}
+		bufconn = bufio.NewReader(localConn)
 	}
 
-	go func() {
-		for !connClosed {
-			ev, err := queue.Read(1 * time.Second)
-			if err != nil {
-				if err != io.EOF {
-					continue
-				}
-				return
-			}
-			//log.Printf("Session:%d recv event:%T", sid, ev)
-			switch ev.(type) {
-			case *event.NotifyEvent:
-				//donothing now
-			case *event.ConnCloseEvent:
-				connClosed = true
-				conn.Close()
-				return
-			case *event.TCPChunkEvent:
-				conn.Write(ev.(*event.TCPChunkEvent).Content)
-			case *event.HTTPResponseEvent:
-				ev.(*event.HTTPResponseEvent).Write(conn)
-				code := ev.(*event.HTTPResponseEvent).StatusCode
-				log.Printf("Session:%d response:%d %v", ev.GetId(), code, http.StatusText(int(code)))
-			default:
-				log.Printf("Invalid event type:%T to process", ev)
-			}
-		}
-	}()
-
-	sniSniffed := true
-
-	if tryRemoteResolve && session.Hijacked {
-		sniSniffed = false
-	}
-	sniChunk := make([]byte, 0)
-	for !connClosed {
-		if nil != p {
+	//1. sniff SNI first
+	if trySNISniff {
+		sniChunkPeekSize := 1024
+		for {
 			conn.SetReadDeadline(time.Now().Add(60 * time.Second))
-		} else {
-			conn.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
-		}
-		if session.Hijacked {
-			buffer := make([]byte, 8192)
-			n, err := bufconn.Read(buffer)
-			if nil != err {
-				if helper.IsTimeoutError(err) {
-					if nil != p {
-						testConn()
-					} else {
-						socksInitProxy()
-					}
-					continue
-				}
-				if err != io.EOF && !connClosed {
-					log.Printf("Session:%d read chunk failed from proxy connection:%v", sid, err)
-				}
-				connClosed = true
-				break
-			}
-			chunkContent := buffer[0:n]
-			if !sniSniffed {
-				sniChunk = append(sniChunk, chunkContent...)
+			sniChunk, _ := bufconn.Peek(sniChunkPeekSize)
+			if len(sniChunk) > 0 {
 				sni, err := helper.TLSParseSNI(sniChunk)
 				if err != nil {
 					if err != helper.ErrTLSIncomplete {
-						sniSniffed = true
-						chunkContent = sniChunk
-						//downgrade to use old address
-						tryRemoteResolve = false
-						socksInitProxy()
-					} else {
-						continue
+						break
 					}
+					sniChunkPeekSize = sniChunkPeekSize * 2
+					continue
 				} else {
-					sniSniffed = true
-					chunkContent = sniChunk
 					log.Printf("Sniffed SNI:%s:%s for IP:%s:%s", sni, remotePort, remoteHost, remotePort)
 					remoteHost = sni
-					socksInitProxy()
+					break
 				}
+			} else {
+				//try next round
+				break
 			}
-			if nil == p {
+		}
+	}
+
+	//2. try read http
+	if len(remoteHost) == 0 {
+		localConn.SetReadDeadline(time.Now().Add(60 * time.Second))
+		headChunk, err := bufconn.Peek(7)
+		if len(headChunk) != 7 {
+			if err != io.EOF {
+				log.Printf("Peek:%s %d %v", string(headChunk), len(headChunk), err)
+			}
+			return
+			//goto START
+		}
+		method := string(headChunk)
+		if tmp := strings.Fields(method); len(tmp) > 0 {
+			method = tmp[0]
+		}
+		method = strings.ToUpper(method)
+		switch method {
+		case "GET":
+			fallthrough
+		case "POST":
+			fallthrough
+		case "HEAD":
+			fallthrough
+		case "PUT":
+			fallthrough
+		case "DELETE":
+			fallthrough
+		case "CONNECT":
+			fallthrough
+		case "OPTIONS":
+			fallthrough
+		case "TRACE":
+			fallthrough
+		case "PATCH":
+			isHttp11Proto = true
+		default:
+			isHttp11Proto = false
+		}
+		//log.Printf("[%d]]Method:%s", sid, method)
+		if isHttp11Proto {
+			initialHTTPReq, err = http.ReadRequest(bufconn)
+			if nil != err {
+				log.Printf("Read first request failed from proxy connection for reason:%v", err)
 				return
 			}
-			var chunk event.TCPChunkEvent
-			chunk.SetId(sid)
-			chunk.Content = chunkContent
-			p.Serve(session, &chunk)
-			continue
-		}
-		req, err := http.ReadRequest(bufconn)
-		if nil != err {
-			if helper.IsTimeoutError(err) {
-				testConn()
-				continue
-			}
-			if err != io.EOF && !connClosed {
-				if len(remoteHost) > 0 {
-					log.Printf("Session:%d read request failed from proxy connection to %s:%s for reason:%v", sid, remoteHost, remotePort, err)
-				} else {
-					log.Printf("Session:%d read request failed from proxy connection for reason:%v", sid, err)
+			//log.Printf("Host:%s %v", initialHTTPReq.Host, initialHTTPReq.URL)
+			if strings.Contains(initialHTTPReq.Host, ":") {
+				remoteHost, remotePort, _ = net.SplitHostPort(initialHTTPReq.Host)
+			} else {
+				remoteHost = initialHTTPReq.Host
+				remotePort = "80"
+				if strings.EqualFold(initialHTTPReq.Method, "CONNECT") {
+					remotePort = "443"
 				}
 			}
-			connClosed = true
-			break
-		}
-
-		if nil == p {
-			if strings.Contains(req.Host, ":") {
-				remoteHost, remotePort, _ = net.SplitHostPort(req.Host)
-			} else {
-				remoteHost = req.Host
-			}
-			if strings.EqualFold(req.Method, "CONNECT") {
+			if strings.EqualFold(initialHTTPReq.Method, "CONNECT") {
 				protocol = "https"
 				if len(remotePort) == 0 {
 					remotePort = "443"
+				}
+				if !isSocksProxy {
+					localConn.Write([]byte("HTTP/1.0 200 Connection established\r\n\r\n"))
+					isHttpsProxy = true
 				}
 			} else {
 				protocol = "http"
@@ -228,120 +160,76 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 					remotePort = "80"
 				}
 			}
-			p = proxy.findProxyByRequest(protocol, remoteHost, req)
-			if nil == p {
-				connClosed = true
-				conn.Close()
-				return
-			}
-			log.Printf("Session:%d select channel:%s for %s", sid, p.Config().Name, remoteHost)
-		}
-		reqUrl := req.URL.String()
-		if strings.EqualFold(req.Method, "Connect") {
-			reqUrl = req.URL.Host
 		} else {
-			if !strings.HasPrefix(reqUrl, "http://") && !strings.HasPrefix(reqUrl, "https://") {
-				if session.SSLHijacked {
-					reqUrl = "https://" + req.Host + reqUrl
-				} else {
-					reqUrl = "http://" + req.Host + reqUrl
-				}
-			}
-		}
-		//log.Printf("Session:%d request:%s %v %v %v", sid, req.Method, reqUrl, req.Header, req.TransferEncoding)
-
-		req.Header.Del("Proxy-Connection")
-		ev := event.NewHTTPRequestEvent(req)
-		ev.SetId(sid)
-		maxBody := p.Features().MaxRequestBody
-		if maxBody > 0 && req.ContentLength > 0 {
-			if int64(maxBody) < req.ContentLength {
-				log.Printf("[ERROR]Too large request:%d for limit:%d", req.ContentLength, maxBody)
+			if !isHttp11Proto {
+				log.Printf("[ERROR]Can NOT handle non HTTP1.1 proto in non socks proxy mode.")
 				return
 			}
-			ev.Headers.Del("Transfer-Encoding")
-			for int64(len(ev.Content)) < req.ContentLength {
-				buffer := make([]byte, 8192)
-				n, err := req.Body.Read(buffer)
-				if n > 0 {
-					ev.Content = append(ev.Content, buffer[0:n]...)
-				}
+		}
+	}
+
+START:
+	if len(remoteHost) == 0 || len(remotePort) == 0 {
+		log.Printf("Can NOT resolve remote host or port %s:%s", remoteHost, remotePort)
+		return
+	}
+	proxyChannelName = proxy.getProxyChannelByHost(protocol, remoteHost)
+
+	if len(proxyChannelName) == 0 {
+		log.Printf("[ERROR]No proxy found for %s:%s", remoteHost, remotePort)
+		return
+	}
+	stream, conf, err := getMuxStreamByChannel(proxyChannelName)
+	if nil != err || nil == stream {
+		log.Printf("Failed to open stream for reason:%v", err)
+		return
+	}
+	defer stream.Close()
+	ssid := stream.StreamID()
+	log.Printf("Stream[%d] select %s for proxy to %s:%s", ssid, proxyChannelName, remoteHost, remotePort)
+	err = stream.Connect("tcp", net.JoinHostPort(remoteHost, remotePort))
+	if nil != err {
+		log.Printf("Connect failed from proxy connection for reason:%v", err)
+		return
+	}
+	streamReader, streamWriter := mux.GetCompressStreamReaderWriter(stream, conf.Compressor)
+
+	go func() {
+		io.Copy(localConn, streamReader)
+		//localConn.Close()
+	}()
+	if isSocksProxy || isHttpsProxy {
+		io.Copy(streamWriter, localConn)
+		if close, ok := streamWriter.(io.Closer); ok {
+			close.Close()
+		}
+	} else {
+		proxyReq := initialHTTPReq
+		initialHTTPReq = nil
+		for {
+			if nil != proxyReq {
+				err = proxyReq.Write(streamWriter)
 				if nil != err {
-					break
+					log.Printf("Failed to write http request for reason:%v", err)
+					return
 				}
 			}
-		}
-
-		if tryRemoteResolve && p.Config().IsDirect() && net.ParseIP(remoteHost) != nil && session.Remote == nil {
-			tcpOpen := &event.TCPOpenEvent{}
-			tcpOpen.SetId(sid)
-			tcpOpen.Addr = net.JoinHostPort(remoteHost, remotePort)
-			p.Serve(session, tcpOpen)
-		}
-
-		p.Serve(session, ev)
-		if maxBody < 0 && req.ContentLength != 0 {
-			for nil != req.Body {
-				buffer := make([]byte, 8192)
-				n, nerr := req.Body.Read(buffer)
-				if n > 0 {
-					buffer = buffer[0:n]
-					var chunk event.TCPChunkEvent
-					chunk.SetId(sid)
-					if req.ContentLength > 0 {
-						chunk.Content = buffer
-					} else {
-						//HTTP chunked body
-						var chunkBuffer bytes.Buffer
-						fmt.Fprintf(&chunkBuffer, "%x\r\n", len(buffer))
-						chunkBuffer.Write(buffer)
-						chunkBuffer.WriteString("\r\n")
-						chunk.Content = chunkBuffer.Bytes()
-					}
-					p.Serve(session, &chunk)
+			prevReq := proxyReq
+			localConn.SetReadDeadline(time.Now().Add(60 * time.Second))
+			proxyReq, err = http.ReadRequest(bufconn)
+			if nil != err {
+				if err != io.EOF && !strings.Contains(err.Error(), "use of closed network connection") {
+					log.Printf("Failed to read proxy http request for reason:%v", err)
 				}
-				if nil != nerr {
-					//HTTP chunked body EOF
-					if nerr == io.EOF && req.ContentLength < 0 {
-						var eofChunk event.TCPChunkEvent
-						eofChunk.SetId(sid)
-						eofChunk.Content = []byte("0\r\n")
-						p.Serve(session, &eofChunk)
-					}
-					break
-				}
+				return
 			}
-		}
-		if strings.EqualFold(req.Method, "Connect") && (session.SSLHijacked || session.Hijacked) {
-			conn.Write([]byte("HTTP/1.0 200 Connection established\r\n\r\n"))
-		}
-
-		//do not parse http rquest next process,since it would upgrade to websocket/spdy/http2
-		if len(req.Header.Get("Upgrade")) > 0 {
-			log.Printf("Session:%d upgrade protocol to %s", sid, req.Header.Get("Upgrade"))
-			session.Hijacked = true
-		}
-		if session.SSLHijacked {
-			if tlsconn, ok := conn.(*tls.Conn); !ok {
-				tlscfg, err := fakecert.TLSConfig(req.Host)
-				if nil != err {
-					log.Printf("[ERROR]Failed to generate fake cert for %s:%v", req.Host, err)
-					connClosed = true
-					break
-				}
-				tlsconn = tls.Server(conn, tlscfg)
-				conn = tlsconn
-				bufconn = bufio.NewReader(conn)
+			if nil != prevReq && prevReq.Host != proxyReq.Host {
+				log.Printf("Switch to next stream since target host change from %s to %s", prevReq.Host, proxyReq.Host)
+				stream.Close()
+				goto START
 			}
 		}
 	}
-	if nil != p {
-		tcpclose := &event.ConnCloseEvent{}
-		tcpclose.SetId(sid)
-		p.Serve(session, tcpclose)
-	}
-	connClosed = true
-	conn.Close()
 }
 
 func startLocalProxyServer(proxy ProxyConfig) (*net.TCPListener, error) {
@@ -389,6 +277,6 @@ func stopLocalServers() {
 	for _, l := range runningServers {
 		l.Close()
 	}
-	closeAllProxySession()
+	//closeAllProxySession()
 	closeAllUDPSession()
 }

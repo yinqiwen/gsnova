@@ -21,13 +21,9 @@ import (
 var ErrTLSIncomplete = errors.New("TLS header incomplete")
 var ErrNoSNI = errors.New("No SNI in protocol")
 var ErrTLSClientHello = errors.New("Invalid tls client hello")
-
-type ProxyChannelConnection interface {
-	io.ReadWriteCloser
-	SetReadDeadline(t time.Time) error
-	SetWriteDeadline(t time.Time) error
-	SetDeadline(t time.Time) error
-}
+var ErrWriteTimeout = errors.New("write timeout")
+var ErrReadTimeout = errors.New("read timeout")
+var ErrConnReset = errors.New("Conn reset")
 
 func TLSReplaceSNI(data []byte, sni string) ([]byte, string, error) {
 	name, offset, err := tlsParseSNI(data)
