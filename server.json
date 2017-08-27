@@ -1,34 +1,28 @@
 {
-	//Set this positive value to enable dynamic server port support 
-	"MaxDynamicPort": 0,
-	//DynamicPort life time, default 30minutes(1800s)
-	"DynamicPortLifeCycle": 1800,
-	//If the server can ONLY export fixed ports, define them here
-	"CandidateDynamicPort":[],
 	"AdminListen": "127.0.0.1:60000",
 	//user name auth
 	"AllowedUser":["*", "gsnova"],
 	"Cipher":{"Key":"809240d3a021449f6e67aa73221d42df942a308a"},
 	"TCP":{
-		"Listen":":8080"
+		"Listen":":48100"
+	},
+	"QUIC":{
+		"Listen":":48100"
 	},
 	"HTTP":{
-		"Listen":":28080"
+		"Listen":":48101"
+	},
+	"KCP":{
+		"Listen":":48101",
+		"Mode":"fast"
 	},
 	//If u want to listen with TLS, add the key/cert configuration
     "TLS":{
        //"Key":"/etc/letsencrypt/live/testdomain.tk/privkey.pem",
 	   //"Cert":"/etc/letsencrypt/live/testdomain.tk/fullchain.pem"
-	   "Listen":":8080",
+	   "Listen":"",
        "Key": "",
        "Cert":""
-	},
-	"QUIC":{
-		"Listen":":8080"
-	},
-	"KCP":{
-		"Listen":":18080",
-		"Mode":"fast"
 	},
 	"Log": ["stdout", "server.log"]
 }
