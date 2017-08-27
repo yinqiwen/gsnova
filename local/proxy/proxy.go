@@ -7,6 +7,7 @@ import (
 	"math"
 	"net/url"
 	"reflect"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -40,6 +41,17 @@ var proxyTypeTable map[string]reflect.Type = make(map[string]reflect.Type)
 var clientConfName = "client.json"
 var hostsConfName = "hosts.json"
 
+func allowedSchema() []string {
+	schames := []string{}
+	for schema := range proxyTypeTable {
+		if schema != directProxyChannelName {
+			schames = append(schames, schema)
+		}
+	}
+	sort.Strings(schames)
+	return schames
+}
+
 func InitialPMuxConfig() *pmux.Config {
 	cfg := pmux.DefaultConfig()
 	cfg.CipherKey = []byte(GConf.Cipher.Key)
@@ -72,7 +84,7 @@ func (ch *proxyChannel) createMuxSessionByProxy(p Proxy, server string) (*muxSes
 		}
 		counter := uint64(helper.RandBetween(0, math.MaxInt32))
 		cipherMethod := GConf.Cipher.Method
-		if strings.HasPrefix(server, "https://") || strings.HasPrefix(server, "wss://") {
+		if strings.HasPrefix(server, "https://") || strings.HasPrefix(server, "wss://") || strings.HasPrefix(server, "tls://") {
 			cipherMethod = "none"
 		}
 		authReq := &mux.AuthRequest{
@@ -253,6 +265,7 @@ func Start(home string, monitor InternalEventMonitor) error {
 	GConf.init()
 	logger.InitLogger(GConf.Log)
 
+	log.Printf("Allowed proxy channel with type:%v", allowedSchema())
 	for _, conf := range GConf.Channel {
 		if !conf.Enable {
 			continue

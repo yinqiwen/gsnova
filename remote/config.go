@@ -115,15 +115,15 @@ func init() {
 	key := flag.String("key", "", "Crypto key setting")
 	// listen := flag.String("listen", "", "Server listen address")
 	logging := flag.String("log", "stdout", "Server log setting, , split by ','")
-	allow := flag.String("allow", "*", "Allow user setting, split by ','")
+	allow := flag.String("allow", "*", "Allowed users, split by ','")
 	// dps := flag.String("dps", "", "Candidate dynamic ports")
 	// ndp := flag.Uint("ndp", 0, "Max dynamic ports")
 	conf := flag.String("conf", "server.json", "Server config file")
 
-	httpServer := flag.String("http", ":48101", "HTTP listen address")
-	tcpServer := flag.String("tcp", ":48100", "TCP listen address")
-	quicServer := flag.String("quic", ":48100", "HTTP listen address")
-	kcpServer := flag.String("kcp", ":48101", "HTTP listen address")
+	httpServer := flag.String("http", "", "HTTP/Websocket listen address")
+	tcpServer := flag.String("tcp", "", "TCP listen address")
+	quicServer := flag.String("quic", "", "QUIC listen address")
+	kcpServer := flag.String("kcp", "", "KCP listen address")
 
 	flag.Parse()
 

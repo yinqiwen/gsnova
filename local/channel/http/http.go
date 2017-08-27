@@ -49,7 +49,7 @@ func (cr *chunkedBody) offer(p []byte) error {
 	select {
 	case cr.chunkChannel <- p:
 		return nil
-	case <-time.After(10 * time.Second):
+	case <-time.After(100 * time.Millisecond):
 		return pmux.ErrTimeout
 	}
 }
@@ -283,14 +283,15 @@ func (h *httpDuplexConn) push() {
 		}
 
 		if h.chunkPushSupported {
-			h.writeLock.Lock()
-			if nil != h.chunkPushBody {
-				if sendBuffer.Len() > 0 {
-					err = h.chunkPushBody.offer(sendBuffer.Bytes())
+			if sendBuffer.Len() > 0 {
+				h.writeLock.Lock()
+				err = h.chunkPushBody.offer(sendBuffer.Bytes())
+				h.writeLock.Unlock()
+				if nil != err {
+					continue
 				}
 				notifyDone()
 			}
-			h.writeLock.Unlock()
 		} else {
 			if sendBuffer.Len() > 0 {
 				req := h.buildHTTPReq(h.pushurl, ioutil.NopCloser(sendBuffer))

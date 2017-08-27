@@ -77,7 +77,7 @@ func NewHTTPClient(conf *ProxyChannelConfig) (*http.Client, error) {
 		tr.Proxy = http.ProxyURL(proxyUrl)
 	}
 	hc := &http.Client{}
-	hc.Timeout = tr.ResponseHeaderTimeout
+	//hc.Timeout = tr.ResponseHeaderTimeout
 	hc.Transport = tr
 	return hc, nil
 }

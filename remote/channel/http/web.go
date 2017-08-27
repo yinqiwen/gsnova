@@ -62,13 +62,13 @@ const html = `
       <span class="small">by <a href="http://twitter.com/yinqiwen">@yinqiwen</a></span></h1>
 
     <div class="description">
-      Welcome to use GSnova PAAS Server ${Version}!
+      Welcome to use GSnova HTTP/WebSocket Server ${Version}!
     </div>
 
 	<h2>Code</h2>
     <p>You can clone the project with <a href="http://git-scm.com">Git</a>
       by running:
-      <pre>$ git clone git://github.com/yinqiwen/gsnova.git</pre>
+      <pre>$ git clone https://github.com/yinqiwen/gsnova.git</pre>
     </p>
 
     <div class="footer">
