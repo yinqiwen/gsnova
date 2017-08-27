@@ -56,7 +56,7 @@ func (tc *KCPProxy) CreateMuxSession(server string, conf *proxy.ProxyChannelConf
 	if err := kcpconn.SetWriteBuffer(conf.KCP.SockBuf); err != nil {
 		log.Println("SetWriteBuffer:", err)
 	}
-	session, err := pmux.Client(kcpconn, proxy.InitialPMuxConfig())
+	session, err := pmux.Client(kcpconn, proxy.InitialPMuxConfig(conf))
 	if nil != err {
 		return nil, err
 	}

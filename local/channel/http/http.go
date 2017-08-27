@@ -398,7 +398,7 @@ func (ws *HTTPProxy) CreateMuxSession(server string, conf *proxy.ProxyChannelCon
 		return nil, err
 	}
 	log.Printf("Connect %s success.", server)
-	ps, err := pmux.Client(conn, proxy.InitialPMuxConfig())
+	ps, err := pmux.Client(conn, proxy.InitialPMuxConfig(conf))
 	if nil != err {
 		return nil, err
 	}

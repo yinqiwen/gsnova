@@ -18,6 +18,7 @@ import (
 	"github.com/yinqiwen/gsnova/common/mux"
 	"github.com/yinqiwen/gsnova/local"
 	"github.com/yinqiwen/gsnova/local/hosts"
+	"github.com/yinqiwen/gsnova/local/proxy"
 	"github.com/yinqiwen/pmux"
 )
 
@@ -54,11 +55,17 @@ func allowedSchema() []string {
 	return schames
 }
 
-func InitialPMuxConfig() *pmux.Config {
+func InitialPMuxConfig(conf *proxy.ProxyChannelConfig) *pmux.Config {
 	cfg := pmux.DefaultConfig()
 	cfg.CipherKey = []byte(GConf.Cipher.Key)
 	cfg.CipherMethod = mux.DefaultMuxCipherMethod
 	cfg.CipherInitialCounter = mux.DefaultMuxInitialCipherCounter
+	if conf.HeartBeatPeriod > 0 {
+		cfg.EnableKeepAlive = true
+		cfg.KeepAliveInterval = time.Duration(conf.HeartBeatPeriod) * time.Second
+	} else {
+		cfg.EnableKeepAlive = false
+	}
 	return cfg
 }
 
