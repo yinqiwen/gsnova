@@ -1,6 +1,6 @@
 # Start from a Debian image with the latest version of Go installed
 # and a workspace (GOPATH) configured at /go.
-FROM golang:1.8.3-alpine3.6
+FROM golang:1.9-alpine3.6
 
 # Copy the local package files to the container's workspace.
 #ADD ./server.json /go/bin
