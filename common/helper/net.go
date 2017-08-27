@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/getlantern/netx"
+	"github.com/yinqiwen/gsnova/common/netx"
 )
 
 var ErrTLSIncomplete = errors.New("TLS header incomplete")

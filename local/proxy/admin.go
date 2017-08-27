@@ -11,9 +11,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/getlantern/netx"
 	"github.com/yinqiwen/gotoolkit/ots"
 	"github.com/yinqiwen/gsnova/common/helper"
+	"github.com/yinqiwen/gsnova/common/netx"
 	"github.com/yinqiwen/gsnova/local"
 )
 

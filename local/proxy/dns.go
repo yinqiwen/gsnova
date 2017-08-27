@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/getlantern/netx"
 	"github.com/hashicorp/golang-lru"
 	"github.com/miekg/dns"
+	"github.com/yinqiwen/gsnova/common/netx"
 )
 
 var errNoDNServer = errors.New("No DNS server configured.")

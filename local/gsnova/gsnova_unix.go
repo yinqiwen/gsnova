@@ -3,7 +3,7 @@
 package gsnova
 
 import (
-	"github.com/getlantern/netx"
+	"github.com/yinqiwen/gsnova/common/netx"
 	"github.com/yinqiwen/gsnova/local/protector"
 )
 
@@ -22,4 +22,5 @@ func ProtectConnections(dnsServer string, p SocketProtector) {
 	//p := New(protector.Protect, dnsServer)
 	netx.OverrideDial(protector.DialContext)
 	netx.OverrideResolve(protector.Resolve)
+	netx.OverrideListenUDP(protector.ListenUDP)
 }

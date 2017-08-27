@@ -11,12 +11,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yinqiwen/pmux"
-
 	"github.com/yinqiwen/gsnova/common/gfwlist"
 	"github.com/yinqiwen/gsnova/common/helper"
 	"github.com/yinqiwen/gsnova/common/mux"
 	"github.com/yinqiwen/gsnova/local/hosts"
+	"github.com/yinqiwen/pmux"
 )
 
 var GConf LocalConfig

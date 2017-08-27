@@ -34,3 +34,9 @@ func SetDNSServer(server string) {
 		currentDnsServer = server
 	}
 }
+
+func init() {
+	currentProtect = func(fd int) error {
+		return nil
+	}
+}

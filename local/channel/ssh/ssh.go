@@ -13,9 +13,9 @@ import (
 
 	"golang.org/x/crypto/ssh"
 
-	"github.com/getlantern/netx"
 	"github.com/yinqiwen/gsnova/common/helper"
 	"github.com/yinqiwen/gsnova/common/mux"
+	"github.com/yinqiwen/gsnova/common/netx"
 	"github.com/yinqiwen/gsnova/local/proxy"
 )
 

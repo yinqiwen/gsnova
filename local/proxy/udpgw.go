@@ -244,16 +244,13 @@ func handleUDPGatewayConn(localConn net.Conn, proxy ProxyConfig) {
 		if packet.addr.port == 53 {
 			selectProxy := proxy.findProxyChannelByRequest("dns", packet.addr.ip.String(), nil)
 			if selectProxy == directProxyChannelName {
-				go func() {
-					res, err := dnsQueryRaw(packet.content)
-					if nil == err {
-						err = usession.Write(res)
-					}
-					if nil != err {
-						log.Printf("[ERROR]Failed to query dns with reason:%v", err)
-						return
-					}
-				}()
+				res, err := dnsQueryRaw(packet.content)
+				if nil == err {
+					err = usession.Write(res)
+				}
+				if nil != err {
+					log.Printf("[ERROR]Failed to query dns with reason:%v", err)
+				}
 				continue
 			}
 			proxyChannelName = selectProxy
@@ -276,7 +273,7 @@ func handleUDPGatewayConn(localConn net.Conn, proxy ProxyConfig) {
 			}
 			stream, conf, err := getMuxStreamByChannel(proxyChannelName)
 			if nil != err {
-				log.Printf("[ERROR]Failed to create mux stream:%v", err)
+				log.Printf("[ERROR]Failed to create mux stream:%v for proxy:%s by address:%v", err, proxyChannelName, packet.addr)
 				return
 			}
 			stream.Connect("udp", packet.address())

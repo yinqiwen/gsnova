@@ -8,6 +8,7 @@ import (
 
 	quic "github.com/lucas-clemente/quic-go"
 	"github.com/yinqiwen/gsnova/common/mux"
+	"github.com/yinqiwen/gsnova/common/netx"
 	"github.com/yinqiwen/gsnova/local/proxy"
 )
 
@@ -36,7 +37,17 @@ func (tc *QUICProxy) CreateMuxSession(server string, conf *proxy.ProxyChannelCon
 		hostport = net.JoinHostPort(iphost, tcpPort)
 	}
 	var quicSession quic.Session
-	quicSession, err = quic.DialAddr(hostport, &tls.Config{InsecureSkipVerify: true}, nil)
+
+	udpAddr, err := net.ResolveUDPAddr("udp", hostport)
+	if err != nil {
+		return nil, err
+	}
+	udpConn, err := netx.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4zero, Port: 0})
+	if err != nil {
+		return nil, err
+	}
+	quicSession, err = quic.Dial(udpConn, udpAddr, hostport, &tls.Config{InsecureSkipVerify: true}, nil)
+
 	if err != nil {
 		return nil, err
 	}

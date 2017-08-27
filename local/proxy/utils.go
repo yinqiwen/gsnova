@@ -8,7 +8,7 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/getlantern/netx"
+	"github.com/yinqiwen/gsnova/common/netx"
 	"github.com/yinqiwen/gsnova/local/hosts"
 )
 

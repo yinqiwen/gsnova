@@ -66,9 +66,9 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 
 	//1. sniff SNI first
 	if trySNISniff {
-		sniChunkPeekSize := 1024
+		sniChunkPeekSize := 512
 		for {
-			conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+			conn.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
 			sniChunk, _ := bufconn.Peek(sniChunkPeekSize)
 			if len(sniChunk) > 0 {
 				sni, err := helper.TLSParseSNI(sniChunk)
@@ -199,7 +199,8 @@ START:
 		//localConn.Close()
 	}()
 	if isSocksProxy || isHttpsProxy {
-		io.Copy(streamWriter, localConn)
+		_, err := io.Copy(streamWriter, bufconn)
+
 		if close, ok := streamWriter.(io.Closer); ok {
 			close.Close()
 		}

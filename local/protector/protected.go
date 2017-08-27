@@ -17,13 +17,88 @@ import (
 	"time"
 )
 
-type ProtectedConn struct {
-	net.Conn
+type ProtectedConnBase struct {
 	mutex    sync.Mutex
 	isClosed bool
 	socketFd int
 	ip       [4]byte
 	port     int
+}
+
+// cleanup is ran whenever we encounter a socket error
+// we use a mutex since this connection is active in a variety
+// of goroutines and to prevent any possible race conditions
+func (conn *ProtectedConnBase) cleanup() {
+	conn.mutex.Lock()
+	defer conn.mutex.Unlock()
+
+	if conn.socketFd != socketError {
+		syscall.Close(conn.socketFd)
+		conn.socketFd = socketError
+	}
+}
+
+// connectSocket makes the connection to the given IP address port
+// for the given socket fd
+func (conn *ProtectedConnBase) connectSocket() error {
+	sockAddr := syscall.SockaddrInet4{Addr: conn.ip, Port: conn.port}
+	errCh := make(chan error, 2)
+	time.AfterFunc(connectTimeOut, func() {
+		errCh <- errors.New("connect timeout")
+	})
+	go func() {
+		errCh <- syscall.Connect(conn.socketFd, &sockAddr)
+	}()
+	err := <-errCh
+	return err
+}
+
+type ProtectedPacketConn struct {
+	ProtectedConnBase
+	net.PacketConn
+}
+
+// converts the protected connection specified by
+// socket fd to a net.Conn
+func (conn *ProtectedPacketConn) convert() error {
+	conn.mutex.Lock()
+	file := os.NewFile(uintptr(conn.socketFd), "")
+	// dup the fd and return a copy
+	fileConn, err := net.FilePacketConn(file)
+	// closes the original fd
+	file.Close()
+	conn.socketFd = socketError
+	if err != nil {
+		conn.mutex.Unlock()
+		return err
+	}
+	conn.PacketConn = fileConn
+	conn.mutex.Unlock()
+	return nil
+}
+
+// connectSocket makes the connection to the given IP address port
+// for the given socket fd
+func (conn *ProtectedPacketConn) listenSocket() error {
+	sockAddr := syscall.SockaddrInet4{Addr: conn.ip, Port: conn.port}
+	err := syscall.Bind(conn.socketFd, &sockAddr)
+	if nil != err {
+		return err
+	}
+	// errCh := make(chan error, 2)
+	// time.AfterFunc(connectTimeOut, func() {
+	// 	errCh <- errors.New("connect timeout")
+	// })
+	// go func() {
+	// 	errCh <- syscall.Listen(conn.socketFd, 512)
+	// }()
+	// err = <-errCh
+	return err
+}
+
+type ProtectedConn struct {
+	net.Conn
+	ProtectedConnBase
 }
 
 // Resolve resolves the given address using a DNS lookup on a UDP socket
@@ -112,9 +187,8 @@ func DialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 		return nil, err
 	}
 
-	conn := &ProtectedConn{
-		port: port,
-	}
+	conn := &ProtectedConn{}
+	conn.ProtectedConnBase.port = port
 	// do DNS query
 	IPAddr := net.ParseIP(host)
 	if IPAddr == nil {
@@ -169,21 +243,6 @@ func DialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 	return conn, nil
 }
 
-// connectSocket makes the connection to the given IP address port
-// for the given socket fd
-func (conn *ProtectedConn) connectSocket() error {
-	sockAddr := syscall.SockaddrInet4{Addr: conn.ip, Port: conn.port}
-	errCh := make(chan error, 2)
-	time.AfterFunc(connectTimeOut, func() {
-		errCh <- errors.New("connect timeout")
-	})
-	go func() {
-		errCh <- syscall.Connect(conn.socketFd, &sockAddr)
-	}()
-	err := <-errCh
-	return err
-}
-
 // converts the protected connection specified by
 // socket fd to a net.Conn
 func (conn *ProtectedConn) convert() error {
@@ -208,19 +267,6 @@ func (conn *ProtectedConn) convert() error {
 // of goroutines and to prevent any possible race conditions
 func (conn *ProtectedConn) GetConn() net.Conn {
 	return conn.Conn
-}
-
-// cleanup is ran whenever we encounter a socket error
-// we use a mutex since this connection is active in a variety
-// of goroutines and to prevent any possible race conditions
-func (conn *ProtectedConn) cleanup() {
-	conn.mutex.Lock()
-	defer conn.mutex.Unlock()
-
-	if conn.socketFd != socketError {
-		syscall.Close(conn.socketFd)
-		conn.socketFd = socketError
-	}
 }
 
 // Close is used to destroy a protected connection
@@ -268,4 +314,71 @@ func SplitHostPort(addr string) (string, int, error) {
 		return "", 0, err
 	}
 	return host, port, nil
+}
+
+func ListenUDP(network string, laddr *net.UDPAddr) (net.PacketConn, error) {
+	conn := &ProtectedPacketConn{}
+	conn.ProtectedConnBase.port = laddr.Port
+	copy(conn.ip[:], laddr.IP.To4())
+	socketFd, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_DGRAM, 0)
+	if err != nil {
+		log.Printf("Could not create udp socket: %v", err)
+		return nil, err
+	}
+	conn.socketFd = socketFd
+	defer conn.cleanup()
+
+	// Actually protect the underlying socket here
+	err = currentProtect(conn.socketFd)
+	if err != nil {
+		return nil, fmt.Errorf("Could not bind socket to system device: %v", err)
+	}
+
+	err = conn.listenSocket()
+	if err != nil {
+		log.Printf("Could not listen udp socket: %v", err)
+		return nil, err
+	}
+
+	// finally, convert the socket fd to a net.Conn
+	err = conn.convert()
+	if err != nil {
+		log.Printf("Error converting protected connection: %v", err)
+		return nil, err
+	}
+	return conn, nil
+}
+
+func DialUDP(network string, laddr, raddr *net.UDPAddr) (net.PacketConn, error) {
+	conn := &ProtectedPacketConn{}
+	conn.ProtectedConnBase.port = raddr.Port
+	copy(conn.ip[:], raddr.IP.To4())
+	socketFd, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_DGRAM, 0)
+	if err != nil {
+		log.Printf("Could not create udp socket: %v", err)
+		return nil, err
+	}
+	conn.socketFd = socketFd
+	defer conn.cleanup()
+	// Actually protect the underlying socket here
+	err = currentProtect(conn.socketFd)
+	if err != nil {
+		return nil, fmt.Errorf("Could not bind socket to system device: %v", err)
+	}
+
+	err = conn.connectSocket()
+	if err != nil {
+		log.Printf("Could not connect to %s socket: %v", raddr, err)
+		return nil, err
+	}
+
+	// finally, convert the socket fd to a net.Conn
+	err = conn.convert()
+	if err != nil {
+		log.Printf("Error converting protected connection: %v", err)
+		return nil, err
+	}
+
+	//conn.Conn.SetDeadline(time.Now().Add(timeout))
+	return conn, nil
 }
