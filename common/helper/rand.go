@@ -14,7 +14,7 @@ func RandBetween(min, max int) int {
 	return rand.Intn(max-min) + min
 }
 
-var letterRunes = []byte("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+var letterRunes = []byte("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
 
 func RandAsciiString(n int) string {
 	b := make([]byte, n)

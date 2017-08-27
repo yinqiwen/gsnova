@@ -2,11 +2,13 @@ package gsnova
 
 import (
 	"github.com/getlantern/netx"
-	_ "github.com/yinqiwen/gsnova/local/handler/direct"
-	_ "github.com/yinqiwen/gsnova/local/handler/gae"
-	_ "github.com/yinqiwen/gsnova/local/handler/paas"
-	_ "github.com/yinqiwen/gsnova/local/handler/reject"
-	_ "github.com/yinqiwen/gsnova/local/handler/vps"
+	_ "github.com/yinqiwen/gsnova/local/channel/direct"
+	_ "github.com/yinqiwen/gsnova/local/channel/http"
+	_ "github.com/yinqiwen/gsnova/local/channel/kcp"
+	_ "github.com/yinqiwen/gsnova/local/channel/quic"
+	_ "github.com/yinqiwen/gsnova/local/channel/ssh"
+	_ "github.com/yinqiwen/gsnova/local/channel/tcp"
+	_ "github.com/yinqiwen/gsnova/local/channel/websocket"
 	"github.com/yinqiwen/gsnova/local/proxy"
 )
 

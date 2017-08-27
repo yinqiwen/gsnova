@@ -33,15 +33,15 @@ func getConfigList(w http.ResponseWriter, r *http.Request) {
 func statCallback(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(200)
 	fmt.Fprintf(w, "Version: %s\n", local.Version)
-	fmt.Fprintf(w, "NumSession: %d\n", getProxySessionSize())
+	//fmt.Fprintf(w, "NumSession: %d\n", getProxySessionSize())
 	if nil != dnsCache {
 		fmt.Fprintf(w, "DNSCacheSize: %d\n", dnsCache.Len())
 	}
 	ots.Handle("stat", w)
-	for _, p := range proxyTable {
-		p.PrintStat(w)
-	}
-	dumpProxySessions(w)
+	// for _, p := range proxyTable {
+	// 	p.PrintStat(w)
+	// }
+	//dumpProxySessions(w)
 }
 func stackdumpCallback(w http.ResponseWriter, req *http.Request) {
 	w.WriteHeader(200)

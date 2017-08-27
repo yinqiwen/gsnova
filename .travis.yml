@@ -1,36 +1,31 @@
 language: go
 go:
-- 1.8.3
+- 1.9
 before_install:
 install:
 - go get github.com/tools/godep
-- go get -t github.com/yinqiwen/gsnova/remote/paas
-- go get -t github.com/yinqiwen/gsnova/remote/vps
-- go get -t github.com/yinqiwen/gsnova/local/main
-- go get github.com/mitchellh/gox
+- go get -t github.com/yinqiwen/gsnova/remote/server
+- go get -t github.com/yinqiwen/gsnova/local/client
 script:
-- cd remote/paas && godep save && tar cf ../../tmp-deploy.tar * .godir && cd ../.. && tar uf tmp-deploy.tar server.json && bzip2 tmp-deploy.tar && mv tmp-deploy.tar.bz2 gsnova-paas-deploy-with-dependencies-${TRAVIS_TAG}.tar.bz2
 - export CGO_ENABLED=0
-- gox -output="gsnova_{{.OS}}_{{.Arch}}" -osarch="windows/386" github.com/yinqiwen/gsnova/local/main
-- gox -output="gsnova_{{.OS}}_{{.Arch}}" -osarch="windows/amd64" github.com/yinqiwen/gsnova/local/main
-- gox -output="gsnova_{{.OS}}_{{.Arch}}" -osarch="linux/386" github.com/yinqiwen/gsnova/local/main
-- gox -output="gsnova_{{.OS}}_{{.Arch}}" -osarch="linux/amd64" github.com/yinqiwen/gsnova/local/main
-- gox -output="gsnova_{{.OS}}_{{.Arch}}" -osarch="linux/arm" github.com/yinqiwen/gsnova/local/main
-- gox -output="gsnova_{{.OS}}_{{.Arch}}" -osarch="darwin/amd64" github.com/yinqiwen/gsnova/local/main
-- gox -output="gsnova_vps_{{.OS}}_{{.Arch}}" -osarch="linux/386" github.com/yinqiwen/gsnova/remote/vps
-- gox -output="gsnova_vps_{{.OS}}_{{.Arch}}" -osarch="linux/amd64" github.com/yinqiwen/gsnova/remote/vps
-- gox -output="gsnova_paas_{{.OS}}_{{.Arch}}" -osarch="linux/386" github.com/yinqiwen/gsnova/remote/paas
-- gox -output="gsnova_paas_{{.OS}}_{{.Arch}}" -osarch="linux/amd64" github.com/yinqiwen/gsnova/remote/paas
-- tar cjf gsnova_windows_386-${TRAVIS_TAG}.tar.bz2 client.json hosts.json Fake-ACRoot-* gsnova_windows_386.exe
-- tar cjf gsnova_windows_amd64-${TRAVIS_TAG}.tar.bz2 client.json hosts.json Fake-ACRoot-* gsnova_windows_amd64.exe
-- tar cjf gsnova_linux_386-${TRAVIS_TAG}.tar.bz2 client.json hosts.json Fake-ACRoot-* gsnova_linux_386
-- tar cjf gsnova_linux_amd64-${TRAVIS_TAG}.tar.bz2 client.json hosts.json Fake-ACRoot-* gsnova_linux_amd64
-- tar cjf gsnova_linux_arm-${TRAVIS_TAG}.tar.bz2 client.json hosts.json Fake-ACRoot-* gsnova_linux_arm
-- tar cjf gsnova_macos_amd64-${TRAVIS_TAG}.tar.bz2 client.json hosts.json Fake-ACRoot-* gsnova_darwin_amd64
-- tar cjf gsnova_vps_linux_amd64-${TRAVIS_TAG}.tar.bz2 server.json gsnova_vps_linux_amd64
-- tar cjf gsnova_vps_linux_386-${TRAVIS_TAG}.tar.bz2 server.json gsnova_vps_linux_386
-- tar cjf gsnova_paas_linux_amd64-${TRAVIS_TAG}.tar.bz2 server.json gsnova_paas_linux_amd64
-- tar cjf gsnova_paas_linux_386-${TRAVIS_TAG}.tar.bz2 server.json gsnova_paas_linux_386
+- GOOS=windows GOARCH=386 go build -o gsnova_client.exe github.com/yinqiwen/gsnova/local/client
+- tar cjf gsnova_client_windows_386-${TRAVIS_TAG}.tar.bz2 client.json hosts.json gsnova_client.exe
+- GOOS=windows GOARCH=amd64 go build -o gsnova_client.exe github.com/yinqiwen/gsnova/local/client
+- tar cjf gsnova_client_windows_amd64-${TRAVIS_TAG}.tar.bz2 client.json hosts.json gsnova_client.exe
+- GOOS=linux GOARCH=386 go build -o gsnova_client github.com/yinqiwen/gsnova/local/client
+- tar cjf gsnova_client_linux_386-${TRAVIS_TAG}.tar.bz2 client.json hosts.json gsnova_client
+- GOOS=linux GOARCH=amd64 go build -o gsnova_client github.com/yinqiwen/gsnova/local/client
+- tar cjf gsnova_client_linux_amd64-${TRAVIS_TAG}.tar.bz2 client.json hosts.json gsnova_client
+- GOOS=linux GOARCH=arm go build -o gsnova_client github.com/yinqiwen/gsnova/local/client
+- tar cjf gsnova_client_linux_arm-${TRAVIS_TAG}.tar.bz2 client.json hosts.json gsnova_client
+- GOOS=darwin GOARCH=amd64 go build -o gsnova_client github.com/yinqiwen/gsnova/local/client
+- tar cjf gsnova_client_macos_amd64-${TRAVIS_TAG}.tar.bz2 client.json hosts.json gsnova_client
+- GOOS=linux GOARCH=386 go build -o gsnova_server github.com/yinqiwen/gsnova/remote/server
+- tar cjf gsnova_server_linux_386-${TRAVIS_TAG}.tar.bz2 server.json gsnova_server
+- GOOS=linux GOARCH=amd64 go build -o gsnova_server github.com/yinqiwen/gsnova/remote/server
+- tar cjf gsnova_server_linux_amd64-${TRAVIS_TAG}.tar.bz2 server.json gsnova_server
+
+
 
 
 
@@ -39,17 +34,14 @@ deploy:
   api_key:
     secure: YngDT2JlydCG+qb8Ww9wBFyWiLRQJczybNLeoFKluBXKoh1Vu+TZeReMK+rRUjOqOmYV8sNtOnEVSg4+ICeYDNp9fRRwcNKTkp0H+8pH0OynxdH2faCjx1H5U0WQuWqMLQoMSHZ90I0tL40kEJOChLY6WGvwY47YBqi/dsvmTfg=
   file: 
-    - "gsnova_windows_386-${TRAVIS_TAG}.tar.bz2"
-    - "gsnova_windows_amd64-${TRAVIS_TAG}.tar.bz2"
-    - "gsnova_macos_amd64-${TRAVIS_TAG}.tar.bz2"
-    - "gsnova_linux_386-${TRAVIS_TAG}.tar.bz2"
-    - "gsnova_linux_amd64-${TRAVIS_TAG}.tar.bz2"
-    - "gsnova_linux_arm-${TRAVIS_TAG}.tar.bz2"
-    - "gsnova_vps_linux_amd64-${TRAVIS_TAG}.tar.bz2"
-    - "gsnova_vps_linux_386-${TRAVIS_TAG}.tar.bz2"
-    - "gsnova_paas_linux_amd64-${TRAVIS_TAG}.tar.bz2"
-    - "gsnova_paas_linux_386-${TRAVIS_TAG}.tar.bz2"
-    - "gsnova-paas-deploy-with-dependencies-${TRAVIS_TAG}.tar.bz2"
+    - "gsnova_client_windows_386-${TRAVIS_TAG}.tar.bz2"
+    - "gsnova_client_windows_amd64-${TRAVIS_TAG}.tar.bz2"
+    - "gsnova_client_linux_386-${TRAVIS_TAG}.tar.bz2"
+    - "gsnova_client_linux_amd64-${TRAVIS_TAG}.tar.bz2"
+    - "gsnova_client_linux_arm-${TRAVIS_TAG}.tar.bz2"
+    - "gsnova_client_macos_amd64-${TRAVIS_TAG}.tar.bz2"
+    - "gsnova_server_linux_amd64-${TRAVIS_TAG}.tar.bz2"
+    - "gsnova_server_linux_386-${TRAVIS_TAG}.tar.bz2"
   skip_cleanup: true
   on:
     tags: true

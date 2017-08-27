@@ -3,35 +3,31 @@ package proxy
 import (
 	"crypto/tls"
 	"log"
-	"math/rand"
 	"net"
 	"net/http"
 	"net/url"
-	"strings"
 	"time"
 
 	"github.com/getlantern/netx"
-	"github.com/yinqiwen/gsnova/common/event"
-	"github.com/yinqiwen/gsnova/common/helper"
 	"github.com/yinqiwen/gsnova/local/hosts"
 )
 
-func NewAuthEvent(secureTransport bool) *event.AuthEvent {
-	auth := &event.AuthEvent{}
-	auth.User = GConf.Auth
-	//auth.Mac = getDeviceId()
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-	auth.SetId(uint32(r.Int31()))
-	auth.Rand = []byte(helper.RandAsciiString(int(r.Int31n(128))))
-	if secureTransport && strings.EqualFold(GConf.Encrypt.Method, "auto") {
-		auth.EncryptMethod = uint8(event.NoneEncrypter)
-	} else {
-		auth.EncryptMethod = event.GetDefaultCryptoMethod()
-	}
-	return auth
-}
+// func NewAuthEvent(secureTransport bool) *event.AuthEvent {
+// 	auth := &event.AuthEvent{}
+// 	auth.User = GConf.Auth
+// 	//auth.Mac = getDeviceId()
+// 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+// 	auth.SetId(uint32(r.Int31()))
+// 	auth.Rand = []byte(helper.RandAsciiString(int(r.Int31n(128))))
+// 	if secureTransport && strings.EqualFold(GConf.Encrypt.Method, "auto") {
+// 		auth.EncryptMethod = uint8(event.NoneEncrypter)
+// 	} else {
+// 		auth.EncryptMethod = event.GetDefaultCryptoMethod()
+// 	}
+// 	return auth
+// }
 
-func NewHTTPClient(conf *ProxyChannelConfig) (*http.Client, error) {
+func NewDialByConf(conf *ProxyChannelConfig) func(network, addr string) (net.Conn, error) {
 	localDial := func(network, addr string) (net.Conn, error) {
 		host, port, _ := net.SplitHostPort(addr)
 		if port == "443" && len(conf.SNIProxy) > 0 && hosts.InHosts(conf.SNIProxy) {
@@ -49,15 +45,19 @@ func NewHTTPClient(conf *ProxyChannelConfig) (*http.Client, error) {
 		if 0 == dailTimeout {
 			dailTimeout = 5
 		}
-		log.Printf("[Proxy]Connect %s", addr)
+		//log.Printf("Connect %s", addr)
 		return netx.DialTimeout(network, addr, time.Duration(dailTimeout)*time.Second)
 	}
+	return localDial
+}
+
+func NewHTTPClient(conf *ProxyChannelConfig) (*http.Client, error) {
 	readTimeout := conf.ReadTimeout
 	if 0 == readTimeout {
 		readTimeout = 30
 	}
 	tr := &http.Transport{
-		Dial:                  localDial,
+		Dial:                  NewDialByConf(conf),
 		DisableCompression:    true,
 		MaxIdleConnsPerHost:   2 * int(conf.ConnsPerServer),
 		ResponseHeaderTimeout: time.Duration(readTimeout) * time.Second,
@@ -77,7 +77,7 @@ func NewHTTPClient(conf *ProxyChannelConfig) (*http.Client, error) {
 		tr.Proxy = http.ProxyURL(proxyUrl)
 	}
 	hc := &http.Client{}
-	hc.Timeout = tr.ResponseHeaderTimeout
+	//hc.Timeout = tr.ResponseHeaderTimeout
 	hc.Transport = tr
 	return hc, nil
 }

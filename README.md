@@ -4,15 +4,18 @@
 Develop branch used by myself. 
 
 remote:   
-1. gae  
-2. http/websocket paas(heroku, openshift)   
-3. vps   
-4. udp over proxy channel(paas/vps)
+1. http  
+2. websocket
+3. tcp   
+4. quic
+5. kcp
 
 local:  
-1. socks proxy  
-2. http(s) proxy  
-3. direct forward   
-5. dns/udp proxy   
-6. android vpn app  
+1. direct  
+2. http  
+3. websocket   
+5. tcp   
+6. quic
+7. kcp
+8. ssh 
 

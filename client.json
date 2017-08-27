@@ -1,14 +1,13 @@
 {
     //this is just a example
-
 	"Log": ["stdout", "gsnova.log"],
 	"UserAgent":"Mozilla/5.0 (Windows NT 6.1; WOW64; rv:15.0) Gecko/20100101 Firefox/15.0.1",
 	//encrypt method can choose from aes/salsa20/chacha20/rc4/none/auto
 	//'auto' method would choose fastest encrypt method for current env
-	"Encrypt":{"Method":"auto", "Key":"809240d3a021449f6e67aa73221d42df942a308a"},
-   
-    //user name auth
-    "Auth": "gsnova",
+	"Cipher":{"Method":"auto", "Key":"809240d3a021449f6e67aa73221d42df942a308a"},
+	
+	 //user name auth
+	 "User": "gsnova",
 
     "LocalDNS":{
     	//only listen UDP
@@ -157,7 +156,10 @@
 		    //ReconnectPeriod rand adjustment, the real reconnect period is random value between [P - adjust, P + adjust] 
 		    "RCPRandomAdjustment" : 60,
 		    //Send heartbeat msg to keep alive 
-		    "HeartBeatPeriod": 10
+		    "HeartBeatPeriod": 10,
+			"KCP":{
+				"Mode":"fast"
+			}
 		}
 	]
 }
