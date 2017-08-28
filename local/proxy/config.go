@@ -452,6 +452,7 @@ func (cfg *LocalConfig) init() error {
 	}
 	if !haveDirect {
 		directProxyChannel := make([]ProxyChannelConfig, 1)
+		directProxyChannel[0].Name = directProxyChannelName
 		directProxyChannel[0].Enable = true
 		directProxyChannel[0].ConnsPerServer = 1
 		directProxyChannel[0].DialTimeout = 5

@@ -68,7 +68,7 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 	if trySNISniff {
 		sniChunkPeekSize := 512
 		for {
-			conn.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
+			conn.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
 			sniChunk, _ := bufconn.Peek(sniChunkPeekSize)
 			if len(sniChunk) > 0 {
 				sni, err := helper.TLSParseSNI(sniChunk)
@@ -176,12 +176,12 @@ START:
 	proxyChannelName = proxy.getProxyChannelByHost(protocol, remoteHost)
 
 	if len(proxyChannelName) == 0 {
-		log.Printf("[ERROR]No proxy found for %s:%s", remoteHost, remotePort)
+		log.Printf("[ERROR]No proxy found for %s:%s", protocol, remoteHost)
 		return
 	}
 	stream, conf, err := getMuxStreamByChannel(proxyChannelName)
 	if nil != err || nil == stream {
-		log.Printf("Failed to open stream for reason:%v", err)
+		log.Printf("Failed to open stream for reason:%v by proxy:%s", err, proxyChannelName)
 		return
 	}
 	defer stream.Close()
@@ -192,6 +192,11 @@ START:
 		log.Printf("Connect failed from proxy connection for reason:%v", err)
 		return
 	}
+
+	//clear read timeout
+	var zero time.Time
+	localConn.SetReadDeadline(zero)
+
 	streamReader, streamWriter := mux.GetCompressStreamReaderWriter(stream, conf.Compressor)
 
 	go func() {
@@ -199,8 +204,8 @@ START:
 		//localConn.Close()
 	}()
 	if isSocksProxy || isHttpsProxy {
-		_, err := io.Copy(streamWriter, bufconn)
 
+		io.Copy(streamWriter, bufconn)
 		if close, ok := streamWriter.(io.Closer); ok {
 			close.Close()
 		}
