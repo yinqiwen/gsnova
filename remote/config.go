@@ -185,13 +185,15 @@ func init() {
 		}
 	}
 
+	logger.InitLogger(ServerConf.Log)
 	key := os.Getenv("GSNOVA_CIPHER_KEY")
 	if len(key) > 0 {
 		ServerConf.Cipher.Key = key
 		log.Printf("Server cipher key overide by env:GSNOVA_CIPHER_KEY")
+	} else {
+		log.Printf("Server cipher key not overide by env:GSNOVA_CIPHER_KEY")
 	}
 
-	logger.InitLogger(ServerConf.Log)
 	log.Printf("Load server conf success.")
 	confdata, _ := json.MarshalIndent(&ServerConf, "", "    ")
 	log.Printf("Start with config:\n%s", string(confdata))
