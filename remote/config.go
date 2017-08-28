@@ -186,9 +186,9 @@ func init() {
 	}
 
 	logger.InitLogger(ServerConf.Log)
-	key := os.Getenv("GSNOVA_CIPHER_KEY")
-	if len(key) > 0 {
-		ServerConf.Cipher.Key = key
+	cipherKey := os.Getenv("GSNOVA_CIPHER_KEY")
+	if len(cipherKey) > 0 {
+		ServerConf.Cipher.Key = cipherKey
 		log.Printf("Server cipher key overide by env:GSNOVA_CIPHER_KEY")
 	} else {
 		log.Printf("Server cipher key not overide by env:GSNOVA_CIPHER_KEY")
