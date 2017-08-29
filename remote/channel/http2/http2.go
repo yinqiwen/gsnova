@@ -78,8 +78,16 @@ func servHTTP2(lp net.Listener, addr string, config *tls.Config) {
 		opt := &http2.ServeConnOpts{}
 		opt.BaseConfig = server
 		opt.Handler = &http2Handler{session: muxSession}
+
 		go func() {
-			http2Server.ServeConn(conn, opt)
+			tlsconn := tls.Server(conn, config)
+			err = tlsconn.Handshake()
+			if nil != err {
+				log.Printf("TLS handshake failed:%v", err)
+				muxSession.Close()
+				return
+			}
+			http2Server.ServeConn(tlsconn, opt)
 			muxSession.Close()
 		}()
 	}

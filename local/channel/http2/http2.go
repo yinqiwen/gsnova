@@ -1,14 +1,15 @@
 package http2
 
 import (
+	"crypto/tls"
 	"log"
 	"net"
 	"net/url"
 	"time"
 
-	"github.com/getlantern/netx"
 	"github.com/yinqiwen/gsnova/common/helper"
 	"github.com/yinqiwen/gsnova/common/mux"
+	"github.com/yinqiwen/gsnova/common/netx"
 	"github.com/yinqiwen/gsnova/local/proxy"
 )
 
@@ -55,6 +56,14 @@ func (tc *HTTP2Proxy) CreateMuxSession(server string, conf *proxy.ProxyChannelCo
 	if err != nil {
 		return nil, err
 	}
+	tlscfg := &tls.Config{}
+	tlscfg.InsecureSkipVerify = true
+	tlsconn := tls.Client(conn, tlscfg)
+	err = tlsconn.Handshake()
+	if err != nil {
+		return nil, err
+	}
+	conn = tlsconn
 	log.Printf("Connect HTTP2 %s success.", server)
 	return mux.NewHTTP2ClientMuxSession(conn, rurl.Host)
 }

@@ -123,6 +123,7 @@ func (q *HTTP2MuxSession) OpenStream() (MuxStream, error) {
 	go func() {
 		opt := http2.RoundTripOpt{OnlyCachedConn: false}
 		res, err := q.Client.RoundTripOpt(req, opt)
+		//res, err := q.Client.RoundTrip(req)
 		if nil != err {
 			stream.Close()
 		} else {
@@ -177,7 +178,6 @@ func NewHTTP2ClientMuxSession(conn net.Conn, host string) (MuxSession, error) {
 	if nil != err {
 		return nil, err
 	}
-
 	tr.ConnPool = &singleClientConnPool{conn: cc}
 	//client := &http.Client{}
 	//client.Transport = tr
