@@ -49,6 +49,11 @@ type QUICServerConfig struct {
 type HTTPServerConfig struct {
 	Listen string
 }
+type HTTP2ServerConfig struct {
+	Listen string
+	Cert   string
+	Key    string
+}
 
 type TCPServerConfig struct {
 	Listen string
@@ -68,6 +73,7 @@ type ServerConfig struct {
 	QUIC                 QUICServerConfig
 	HTTP                 HTTPServerConfig
 	TCP                  TCPServerConfig
+	HTTP2                HTTP2ServerConfig
 }
 
 func (conf *ServerConfig) VerifyUser(user string) bool {
@@ -121,6 +127,7 @@ func init() {
 	conf := flag.String("conf", "server.json", "Server config file")
 
 	httpServer := flag.String("http", "", "HTTP/Websocket listen address")
+	http2Server := flag.String("http2", "", "HTTP2 listen address")
 	tcpServer := flag.String("tcp", "", "TCP listen address")
 	quicServer := flag.String("quic", "", "QUIC listen address")
 	kcpServer := flag.String("kcp", "", "KCP listen address")
@@ -146,6 +153,7 @@ func init() {
 		ServerConf.QUIC.Listen = *quicServer
 		ServerConf.KCP.Listen = *kcpServer
 		ServerConf.HTTP.Listen = *httpServer
+		ServerConf.HTTP2.Listen = *http2Server
 		port := os.Getenv("PORT")
 		if port == "" {
 			port = os.Getenv("OPENSHIFT_GO_PORT")
@@ -190,8 +198,6 @@ func init() {
 	if len(cipherKey) > 0 {
 		ServerConf.Cipher.Key = cipherKey
 		log.Printf("Server cipher key overide by env:GSNOVA_CIPHER_KEY")
-	} else {
-		log.Printf("Server cipher key not overide by env:GSNOVA_CIPHER_KEY")
 	}
 
 	log.Printf("Load server conf success.")

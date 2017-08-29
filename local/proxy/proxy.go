@@ -279,7 +279,7 @@ func Start(home string, monitor InternalEventMonitor) error {
 	GConf.init()
 	logger.InitLogger(GConf.Log)
 
-	log.Printf("Allowed proxy channel with type:%v", allowedSchema())
+	log.Printf("Allowed proxy channel with schema:%v", allowedSchema())
 	for _, conf := range GConf.Channel {
 		if !conf.Enable {
 			continue
@@ -296,7 +296,7 @@ func Start(home string, monitor InternalEventMonitor) error {
 			}
 			schema := strings.ToLower(u.Scheme)
 			if t, ok := proxyTypeTable[schema]; !ok {
-				log.Printf("[ERROR]No registe proxy type for schema:%s", schema)
+				log.Printf("[ERROR]No registe proxy for schema:%s", schema)
 				continue
 			} else {
 				v := reflect.New(t)

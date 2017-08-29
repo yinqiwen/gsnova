@@ -4,6 +4,7 @@ import (
 	"github.com/yinqiwen/gsnova/common/netx"
 	_ "github.com/yinqiwen/gsnova/local/channel/direct"
 	_ "github.com/yinqiwen/gsnova/local/channel/http"
+	_ "github.com/yinqiwen/gsnova/local/channel/http2"
 	_ "github.com/yinqiwen/gsnova/local/channel/kcp"
 	_ "github.com/yinqiwen/gsnova/local/channel/quic"
 	_ "github.com/yinqiwen/gsnova/local/channel/ssh"

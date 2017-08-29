@@ -11,7 +11,6 @@ import (
 
 func handleProxyStream(stream mux.MuxStream, compresor string) {
 	creq, err := mux.ReadConnectRequest(stream)
-
 	if nil != err {
 		stream.Close()
 		log.Printf("[ERROR]:Failed to read connect request:%v", err)

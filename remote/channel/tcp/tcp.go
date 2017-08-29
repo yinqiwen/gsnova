@@ -32,7 +32,7 @@ func servTCP(lp net.Listener) {
 func StartTcpProxyServer(addr string) error {
 	lp, err := net.Listen("tcp", addr)
 	if nil != err {
-		log.Printf("[ERROR]Failed to listen TCP address:%s with reason:%b", addr, err)
+		log.Printf("[ERROR]Failed to listen TCP address:%s with reason:%v", addr, err)
 		return err
 	}
 	log.Printf("Listen on TCP address:%s", addr)
@@ -43,7 +43,7 @@ func StartTcpProxyServer(addr string) error {
 func StartTLSProxyServer(addr string, config *tls.Config) error {
 	lp, err := net.Listen("tcp", addr)
 	if nil != err {
-		log.Printf("[ERROR]Failed to listen TLS address:%s with reason:%b", addr, err)
+		log.Printf("[ERROR]Failed to listen TLS address:%s with reason:%v", addr, err)
 		return err
 	}
 	lp = tls.NewListener(lp, config)

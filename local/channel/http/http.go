@@ -122,6 +122,7 @@ func (h *httpDuplexConn) testChunkPush() {
 	response, err := h.client.Do(req)
 	if nil != err || response.StatusCode != 200 {
 		h.chunkPushSupported = false
+		log.Printf("Server:%s do NOT support chunked transfer encoding request.", h.server)
 		return
 	}
 	if nil != response.Body {
@@ -295,6 +296,7 @@ func (h *httpDuplexConn) push() {
 		} else {
 			if sendBuffer.Len() > 0 {
 				req := h.buildHTTPReq(h.pushurl, ioutil.NopCloser(sendBuffer))
+				req.ContentLength = int64(sendBuffer.Len())
 				response, err := h.client.Do(req)
 				h.setAckId(response)
 				if nil != err || response.StatusCode != 200 { //try once more

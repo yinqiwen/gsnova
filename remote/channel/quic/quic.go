@@ -1,39 +1,13 @@
 package quic
 
 import (
-	"crypto/rand"
-	"crypto/rsa"
-	"crypto/tls"
-	"crypto/x509"
-	"encoding/pem"
 	"log"
-	"math/big"
 
 	quic "github.com/lucas-clemente/quic-go"
+	"github.com/yinqiwen/gsnova/common/helper"
 	"github.com/yinqiwen/gsnova/common/mux"
 	"github.com/yinqiwen/gsnova/remote"
 )
-
-// Setup a bare-bones TLS config for the server
-func generateTLSConfig() *tls.Config {
-	key, err := rsa.GenerateKey(rand.Reader, 1024)
-	if err != nil {
-		panic(err)
-	}
-	template := x509.Certificate{SerialNumber: big.NewInt(1)}
-	certDER, err := x509.CreateCertificate(rand.Reader, &template, &template, &key.PublicKey, key)
-	if err != nil {
-		panic(err)
-	}
-	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)})
-	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER})
-
-	tlsCert, err := tls.X509KeyPair(certPEM, keyPEM)
-	if err != nil {
-		panic(err)
-	}
-	return &tls.Config{Certificates: []tls.Certificate{tlsCert}}
-}
 
 func servQUIC(lp quic.Listener) {
 	for {
@@ -48,7 +22,7 @@ func servQUIC(lp quic.Listener) {
 }
 
 func StartQuicProxyServer(addr string) error {
-	lp, err := quic.ListenAddr(addr, generateTLSConfig(), nil)
+	lp, err := quic.ListenAddr(addr, helper.GenerateTLSConfig(), nil)
 	if nil != err {
 		log.Printf("[ERROR]Failed to listen QUIC address:%s with reason:%v", addr, err)
 		return err

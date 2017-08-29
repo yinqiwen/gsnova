@@ -12,9 +12,10 @@ remote:
 
 local:  
 1. direct  
-2. http  
-3. websocket   
-5. tcp   
+2. http(s)  
+3. http2
+4. websocket   
+5. tcp(tls)   
 6. quic
 7. kcp
 8. ssh 

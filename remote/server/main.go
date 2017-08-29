@@ -6,9 +6,12 @@ import (
 	"io"
 	"log"
 
+	"github.com/yinqiwen/gsnova/common/helper"
+
 	"github.com/yinqiwen/gotoolkit/ots"
 	"github.com/yinqiwen/gsnova/remote"
 	"github.com/yinqiwen/gsnova/remote/channel/http"
+	"github.com/yinqiwen/gsnova/remote/channel/http2"
 	"github.com/yinqiwen/gsnova/remote/channel/kcp"
 	"github.com/yinqiwen/gsnova/remote/channel/quic"
 	"github.com/yinqiwen/gsnova/remote/channel/tcp"
@@ -22,6 +25,17 @@ func dumpServerStat(args []string, c io.Writer) error {
 	// fmt.Fprintf(c, "NumRetiredDynamicServer: %d\n", retiredDynamicServerSize())
 	// fmt.Fprintf(c, "TotalUserConn: %d\n", totalConn)
 	return nil
+}
+
+func generateTLSConfig(cert, key string) (*tls.Config, error) {
+	if len(cert) > 0 {
+		tlscfg := &tls.Config{}
+		tlscfg.Certificates = make([]tls.Certificate, 1)
+		var err error
+		tlscfg.Certificates[0], err = tls.LoadX509KeyPair(remote.ServerConf.TLS.Cert, remote.ServerConf.TLS.Key)
+		return tlscfg, err
+	}
+	return helper.GenerateTLSConfig(), nil
 }
 
 func main() {
@@ -50,21 +64,19 @@ func main() {
 			done <- true
 		}()
 	}
-	if len(remote.ServerConf.TLS.Cert) > 0 && len(remote.ServerConf.TLS.Listen) > 0 {
-		tlscfg := &tls.Config{}
-		tlscfg.Certificates = make([]tls.Certificate, 1)
-		var err error
-		tlscfg.Certificates[0], err = tls.LoadX509KeyPair(remote.ServerConf.TLS.Cert, remote.ServerConf.TLS.Key)
+	if len(remote.ServerConf.TLS.Listen) > 0 {
+		tlscfg, err := generateTLSConfig(remote.ServerConf.TLS.Cert, remote.ServerConf.TLS.Key)
 		if nil != err {
-			log.Fatalf("Invalid cert/key for reason:%v", err)
-			return
+			log.Printf("Failed to create TLS config by cert/key: %s/%s", remote.ServerConf.TLS.Cert, remote.ServerConf.TLS.Key)
+		} else {
+			done := make(chan bool)
+			serverDone = append(serverDone, done)
+			go func() {
+				tcp.StartTLSProxyServer(remote.ServerConf.TLS.Listen, tlscfg)
+				done <- true
+			}()
 		}
-		done := make(chan bool)
-		serverDone = append(serverDone, done)
-		go func() {
-			tcp.StartTLSProxyServer(remote.ServerConf.TLS.Listen, tlscfg)
-			done <- true
-		}()
+
 	}
 	if len(remote.ServerConf.HTTP.Listen) > 0 {
 		done := make(chan bool)
@@ -81,6 +93,19 @@ func main() {
 			tcp.StartTcpProxyServer(remote.ServerConf.TCP.Listen)
 			done <- true
 		}()
+	}
+	if len(remote.ServerConf.HTTP2.Listen) > 0 {
+		tlscfg, err := generateTLSConfig(remote.ServerConf.TLS.Cert, remote.ServerConf.TLS.Key)
+		if nil != err {
+			log.Printf("Failed to create TLS config by cert/key: %s/%s", remote.ServerConf.TLS.Cert, remote.ServerConf.TLS.Key)
+		} else {
+			done := make(chan bool)
+			serverDone = append(serverDone, done)
+			go func() {
+				http2.StartHTTTP2ProxyServer(remote.ServerConf.HTTP2.Listen, tlscfg)
+				done <- true
+			}()
+		}
 	}
 
 	for _, done := range serverDone {

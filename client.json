@@ -79,6 +79,7 @@
 		{
 		    "Enable":false,
 			"Name":"heroku-websocket",
+			//Allowed server url with schema 'http/http2/https/ws/wss/tcp/tls/quic/kcp/ssh'
 			//"ServerList":["quic://1.1.1.1:48101"],
 			"ServerList":["wss://xyz.herokuapp.com"],
 			//"ServerList":["tcp://127.0.0.1:18080"],
