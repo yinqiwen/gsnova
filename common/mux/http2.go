@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -53,7 +54,6 @@ func (s *http2ClientMuxStream) Read(b []byte) (n int, err error) {
 		return 0, io.EOF
 	}
 	n, err = s.r.Read(b)
-
 	return
 }
 
@@ -83,16 +83,19 @@ type HTTP2MuxSession struct {
 	streamCounter int64
 	AcceptCh      chan MuxStream
 	closeCh       chan struct{}
+	streams       sync.Map
 }
 
 func (q *HTTP2MuxSession) CloseStream(stream MuxStream) error {
+	q.streams.Delete(stream)
 	atomic.AddInt64(&q.streamCounter, -1)
 	return nil
 }
 
-func (q *HTTP2MuxSession) OfferStream(stream MuxStream) error {
+func (q *HTTP2MuxSession) OfferStream(stream io.ReadWriteCloser) error {
+	s := &ProxyMuxStream{ReadWriteCloser: stream, session: q}
 	select {
-	case q.AcceptCh <- stream:
+	case q.AcceptCh <- s:
 		return nil
 	default:
 		stream.Close()
@@ -126,13 +129,16 @@ func (q *HTTP2MuxSession) OpenStream() (MuxStream, error) {
 			stream.setReader(res.Body)
 		}
 	}()
-
-	return &ProxyMuxStream{ReadWriteCloser: stream, session: q}, nil
+	muxStream := &ProxyMuxStream{ReadWriteCloser: stream, session: q}
+	atomic.AddInt64(&q.streamCounter, 1)
+	q.streams.Store(muxStream, true)
+	return muxStream, nil
 }
 
 func (q *HTTP2MuxSession) AcceptStream() (MuxStream, error) {
 	select {
 	case conn := <-q.AcceptCh:
+		q.streams.Store(conn, true)
 		return conn, nil
 	case <-q.closeCh:
 		return nil, pmux.ErrSessionShutdown
@@ -145,7 +151,14 @@ func (q *HTTP2MuxSession) NumStreams() int {
 
 func (q *HTTP2MuxSession) Close() error {
 	helper.AsyncNotify(q.closeCh)
-	return q.Conn.Close()
+	q.Conn.Close()
+	q.streams.Range(func(key, value interface{}) bool {
+		stream := value.(MuxStream)
+		stream.Close()
+		return true
+	})
+	//q.streams = sync.Map{}
+	return nil
 }
 
 func NewHTTP2ServerMuxSession(conn net.Conn) *HTTP2MuxSession {
@@ -164,6 +177,7 @@ func NewHTTP2ClientMuxSession(conn net.Conn, host string) (MuxSession, error) {
 	if nil != err {
 		return nil, err
 	}
+
 	tr.ConnPool = &singleClientConnPool{conn: cc}
 	//client := &http.Client{}
 	//client.Transport = tr

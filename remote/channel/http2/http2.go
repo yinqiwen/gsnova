@@ -52,7 +52,7 @@ func (ss *http2Handler) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	s.rw = rw
 	s.closeCh = make(chan struct{}, 1)
 	rw.WriteHeader(200)
-	err := ss.session.OfferStream(&mux.ProxyMuxStream{ReadWriteCloser: s})
+	err := ss.session.OfferStream(s)
 	if nil != err {
 		log.Printf("%v", err)
 		return
