@@ -202,5 +202,5 @@ func init() {
 
 	log.Printf("Load server conf success.")
 	confdata, _ := json.MarshalIndent(&ServerConf, "", "    ")
-	log.Printf("Start with config:\n%s", string(confdata))
+	log.Printf("Server:%s start with config:\n%s", Version, string(confdata))
 }
