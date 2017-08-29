@@ -12,6 +12,6 @@ RUN apk add --update git && \
 #WORKDIR /go/bin
 # Run the outyet command by default when the container starts.
 #ENTRYPOINT ["/go/bin/vps"]
-CMD ["/go/bin/server","-key", "809240d3a021449f6e67aa73221d42df942a308a", "-tcp", ":9443", "-quic", ":9443", "-http", ":9444", "-kcp", ":9444"]
+CMD ["/go/bin/server","-key", "809240d3a021449f6e67aa73221d42df942a308a", "-tcp", ":9443", "-quic", ":9443", "-http", ":9444", "-kcp", ":9444", "-http2", ":9445"]
 # Document that the service listens on port 9443.
 #EXPOSE 9443
