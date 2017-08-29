@@ -121,7 +121,7 @@ func (q *HTTP2MuxSession) OpenStream() (MuxStream, error) {
 		readReady: make(chan struct{}),
 	}
 	go func() {
-		opt := http2.RoundTripOpt{OnlyCachedConn: false}
+		opt := http2.RoundTripOpt{OnlyCachedConn: true}
 		res, err := q.Client.RoundTripOpt(req, opt)
 		//res, err := q.Client.RoundTrip(req)
 		if nil != err {
