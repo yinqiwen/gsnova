@@ -69,19 +69,20 @@ func InitialPMuxConfig(conf *ProxyChannelConfig) *pmux.Config {
 }
 
 type muxSessionHolder struct {
-	creatTime      time.Time
-	expireTime     time.Time
-	muxSession     mux.MuxSession
-	retiredSession mux.MuxSession
-	server         string
-	p              Proxy
-	sessionMutex   sync.Mutex
-	conf           *ProxyChannelConfig
+	creatTime       time.Time
+	expireTime      time.Time
+	muxSession      mux.MuxSession
+	retiredSessions map[mux.MuxSession]bool
+	server          string
+	p               Proxy
+	sessionMutex    sync.Mutex
+	conf            *ProxyChannelConfig
 }
 
 func (s *muxSessionHolder) close() {
 	s.sessionMutex.Lock()
 	defer s.sessionMutex.Unlock()
+
 	if nil != s.muxSession {
 		s.muxSession.Close()
 		s.muxSession = nil
@@ -92,10 +93,11 @@ func (s *muxSessionHolder) get() (mux.MuxSession, int) {
 	s.sessionMutex.Lock()
 	defer s.sessionMutex.Unlock()
 	defer func() {
-		if nil != s.retiredSession && s.retiredSession.NumStreams() <= 0 {
-			s.retiredSession.Close()
-			s.retiredSession = nil
-			log.Printf("Close retired mux session since it's has no active stream.")
+		for retiredSession := range s.retiredSessions {
+			if retiredSession.NumStreams() <= 0 {
+				log.Printf("Close retired mux session since it's has no active stream.")
+				delete(s.retiredSessions, retiredSession)
+			}
 		}
 	}()
 	if nil == s.muxSession {
@@ -103,11 +105,7 @@ func (s *muxSessionHolder) get() (mux.MuxSession, int) {
 		return s.muxSession, 0
 	}
 	if !s.expireTime.IsZero() && s.expireTime.Before(time.Now()) {
-		if nil != s.retiredSession {
-			s.retiredSession.Close()
-			log.Printf("Fore close retired mux session since it's replaced by new retired session.")
-		}
-		s.retiredSession = s.muxSession
+		s.retiredSessions[s.muxSession] = true
 		s.muxSession = nil
 		return nil, 0
 	}
@@ -174,9 +172,10 @@ type proxyChannel struct {
 
 func (ch *proxyChannel) createMuxSessionByProxy(p Proxy, server string) (*muxSessionHolder, error) {
 	holder := &muxSessionHolder{
-		conf:   &ch.Conf,
-		p:      p,
-		server: server,
+		conf:            &ch.Conf,
+		p:               p,
+		server:          server,
+		retiredSessions: make(map[mux.MuxSession]bool),
 	}
 	err := holder.init(true)
 	if nil == err {
