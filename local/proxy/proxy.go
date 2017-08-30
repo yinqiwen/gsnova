@@ -203,7 +203,7 @@ func (ch *proxyChannel) getMuxSession() *muxSessionHolder {
 func (ch *proxyChannel) getMuxStream() (stream mux.MuxStream, err error) {
 	for i := 0; i < 3; i++ {
 		session := ch.getMuxSession()
-		if nil == session {
+		if nil == session || nil == session.muxSession {
 			continue
 		}
 		stream, err = session.muxSession.OpenStream()

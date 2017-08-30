@@ -105,6 +105,9 @@ func (q *HTTP2MuxSession) OfferStream(stream io.ReadWriteCloser) error {
 }
 
 func (q *HTTP2MuxSession) OpenStream() (MuxStream, error) {
+	if nil == q.Conn {
+		return nil, pmux.ErrSessionShutdown
+	}
 	pr, pw := io.Pipe()
 	req := &http.Request{
 		Method:        http.MethodPost,
@@ -128,6 +131,7 @@ func (q *HTTP2MuxSession) OpenStream() (MuxStream, error) {
 		if nil != err {
 			log.Printf("Failed to post http/2 with error:%v", err)
 			stream.Close()
+			q.Close()
 		} else {
 			stream.setReader(res.Body)
 		}
