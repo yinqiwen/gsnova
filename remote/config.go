@@ -131,6 +131,7 @@ func init() {
 	tcpServer := flag.String("tcp", "", "TCP listen address")
 	quicServer := flag.String("quic", "", "QUIC listen address")
 	kcpServer := flag.String("kcp", "", "KCP listen address")
+	tlsServer := flag.String("tls", "", "TLS listen address")
 
 	flag.Parse()
 
@@ -154,6 +155,7 @@ func init() {
 		ServerConf.KCP.Listen = *kcpServer
 		ServerConf.HTTP.Listen = *httpServer
 		ServerConf.HTTP2.Listen = *http2Server
+		ServerConf.TLS.Listen = *tlsServer
 		port := os.Getenv("PORT")
 		if port == "" {
 			port = os.Getenv("OPENSHIFT_GO_PORT")

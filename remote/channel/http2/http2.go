@@ -2,6 +2,7 @@ package http2
 
 import (
 	"crypto/tls"
+	"encoding/json"
 	"log"
 	"net"
 	"net/http"
@@ -73,7 +74,8 @@ func servHTTP2(lp net.Listener, addr string, config *tls.Config) {
 			TLSConfig: config,
 		}
 		http2Server := &http2.Server{
-			MaxConcurrentStreams: 4096,
+			MaxConcurrentStreams:         4096,
+			PermitProhibitedCipherSuites: true,
 		}
 		opt := &http2.ServeConnOpts{}
 		opt.BaseConfig = server
@@ -87,6 +89,8 @@ func servHTTP2(lp net.Listener, addr string, config *tls.Config) {
 				muxSession.Close()
 				return
 			}
+			stateData, _ := json.MarshalIndent(tlsconn.ConnectionState(), "", "    ")
+			log.Printf("###Recv conn state : %s", string(stateData))
 			http2Server.ServeConn(tlsconn, opt)
 			muxSession.Close()
 		}()
