@@ -104,6 +104,7 @@ func (ch *proxyChannel) createMuxSessionByProxy(p Proxy, server string) (*muxSes
 		err = authStream.Auth(authReq)
 		if nil != err {
 			//authStream.Close()
+
 			return nil, err
 		}
 		if psession, ok := session.(*mux.ProxyMuxSession); ok {

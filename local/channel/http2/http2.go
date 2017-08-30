@@ -38,7 +38,10 @@ func (tc *HTTP2Proxy) CreateMuxSession(server string, conf *proxy.ProxyChannelCo
 		tcpHost = rurl.Host
 		hostport = hostport + ":443"
 	}
+	tlscfg := &tls.Config{}
+	tlscfg.InsecureSkipVerify = true
 	if net.ParseIP(tcpHost) == nil {
+		tlscfg.ServerName = tcpHost
 		iphost, err := proxy.DnsGetDoaminIP(tcpHost)
 		if nil != err {
 			return nil, err
@@ -56,15 +59,15 @@ func (tc *HTTP2Proxy) CreateMuxSession(server string, conf *proxy.ProxyChannelCo
 	if err != nil {
 		return nil, err
 	}
-	tlscfg := &tls.Config{}
-	tlscfg.InsecureSkipVerify = true
+
+	//tlscfg.ServerName = "xx-gsnova.7e14.starter-us-west-2.openshiftapps.com"
 	tlsconn := tls.Client(conn, tlscfg)
 	err = tlsconn.Handshake()
 	if err != nil {
 		return nil, err
 	}
 	conn = tlsconn
-	log.Printf("Connect HTTP2 %s success.", server)
+	log.Printf("Connect %s success.", server)
 	return mux.NewHTTP2ClientMuxSession(conn, rurl.Host)
 }
 

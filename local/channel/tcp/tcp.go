@@ -35,10 +35,11 @@ func (tc *TcpProxy) CreateMuxSession(server string, conf *proxy.ProxyChannelConf
 	if nil != err {
 		return nil, err
 	}
-	var tlscfg *tls.Config
+	tlscfg := &tls.Config{InsecureSkipVerify: true}
 	hostport := rurl.Host
 	tcpHost, tcpPort, _ := net.SplitHostPort(hostport)
 	if net.ParseIP(tcpHost) == nil {
+		tlscfg.ServerName = tcpHost
 		iphost, err := proxy.DnsGetDoaminIP(tcpHost)
 		if nil != err {
 			return nil, err
@@ -47,8 +48,6 @@ func (tc *TcpProxy) CreateMuxSession(server string, conf *proxy.ProxyChannelConf
 	}
 
 	if strings.EqualFold(rurl.Scheme, "tls") {
-		tlscfg = &tls.Config{}
-		tlscfg.ServerName = tcpHost
 		if len(conf.SNIProxy) > 0 && tcpPort == "443" && hosts.InHosts(conf.SNIProxy) {
 			hostport = hosts.GetAddr(conf.SNIProxy, "443")
 			tcpHost, _, _ = net.SplitHostPort(hostport)
@@ -63,10 +62,11 @@ func (tc *TcpProxy) CreateMuxSession(server string, conf *proxy.ProxyChannelConf
 	} else {
 		conn, err = netx.DialTimeout("tcp", hostport, timeout)
 	}
-	if nil != tlscfg && nil == err {
-		conn = tls.Client(conn, tlscfg)
+	if strings.EqualFold(rurl.Scheme, "tls") && nil == err {
+		tlsConn := tls.Client(conn, tlscfg)
+		err = tlsConn.Handshake()
+		conn = tlsConn
 	}
-
 	if err != nil {
 		return nil, err
 	}

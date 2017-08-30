@@ -3,6 +3,7 @@ package mux
 import (
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -78,7 +79,7 @@ func (s *http2ClientMuxStream) Close() (err error) {
 type HTTP2MuxSession struct {
 	net.Conn
 	ServerHost string
-	//Client        *http.Client
+	//Client     *http.Client
 	Client        *http2.Transport
 	streamCounter int64
 	AcceptCh      chan MuxStream
@@ -123,8 +124,9 @@ func (q *HTTP2MuxSession) OpenStream() (MuxStream, error) {
 	go func() {
 		opt := http2.RoundTripOpt{OnlyCachedConn: true}
 		res, err := q.Client.RoundTripOpt(req, opt)
-		//res, err := q.Client.RoundTrip(req)
+		//res, err := q.Client.Do(req)
 		if nil != err {
+			log.Printf("Failed to post http/2 with error:%v", err)
 			stream.Close()
 		} else {
 			stream.setReader(res.Body)
@@ -154,7 +156,7 @@ func (q *HTTP2MuxSession) Close() error {
 	helper.AsyncNotify(q.closeCh)
 	q.Conn.Close()
 	q.streams.Range(func(key, value interface{}) bool {
-		stream := value.(MuxStream)
+		stream := key.(MuxStream)
 		stream.Close()
 		return true
 	})
@@ -182,6 +184,7 @@ func NewHTTP2ClientMuxSession(conn net.Conn, host string) (MuxSession, error) {
 	//client := &http.Client{}
 	//client.Transport = tr
 	s.Client = tr
+	//s.Client = client
 	s.ServerHost = host
 	return s, nil
 }
