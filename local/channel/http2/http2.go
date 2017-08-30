@@ -10,6 +10,7 @@ import (
 	"github.com/yinqiwen/gsnova/common/helper"
 	"github.com/yinqiwen/gsnova/common/mux"
 	"github.com/yinqiwen/gsnova/common/netx"
+	"github.com/yinqiwen/gsnova/local/hosts"
 	"github.com/yinqiwen/gsnova/local/proxy"
 )
 
@@ -42,6 +43,13 @@ func (tc *HTTP2Proxy) CreateMuxSession(server string, conf *proxy.ProxyChannelCo
 	tlscfg.InsecureSkipVerify = true
 	if net.ParseIP(tcpHost) == nil {
 		tlscfg.ServerName = tcpHost
+	}
+	if len(conf.SNIProxy) > 0 && tcpPort == "443" && hosts.InHosts(conf.SNIProxy) {
+		hostport = hosts.GetAddr(conf.SNIProxy, "443")
+		tcpHost, _, _ = net.SplitHostPort(hostport)
+		log.Printf("HTTP2 channel select SNIProxy %s to connect", hostport)
+	}
+	if net.ParseIP(tcpHost) == nil {
 		iphost, err := proxy.DnsGetDoaminIP(tcpHost)
 		if nil != err {
 			return nil, err

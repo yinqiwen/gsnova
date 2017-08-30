@@ -69,122 +69,149 @@ func InitialPMuxConfig(conf *ProxyChannelConfig) *pmux.Config {
 }
 
 type muxSessionHolder struct {
-	creatTime  time.Time
-	expireTime time.Time
-	muxSession mux.MuxSession
-	server     string
-	p          Proxy
+	creatTime      time.Time
+	expireTime     time.Time
+	muxSession     mux.MuxSession
+	retiredSession mux.MuxSession
+	server         string
+	p              Proxy
+	sessionMutex   sync.Mutex
+	conf           *ProxyChannelConfig
 }
 
-type proxyChannel struct {
-	Conf         ProxyChannelConfig
-	sessionMutex sync.Mutex
-	sessions     map[*muxSessionHolder]bool
-	proxies      map[Proxy]map[string]bool
+func (s *muxSessionHolder) close() {
+	s.sessionMutex.Lock()
+	defer s.sessionMutex.Unlock()
+	if nil != s.muxSession {
+		s.muxSession.Close()
+		s.muxSession = nil
+	}
 }
 
-func (ch *proxyChannel) createMuxSessionByProxy(p Proxy, server string) (*muxSessionHolder, error) {
-	session, err := p.CreateMuxSession(server, &ch.Conf)
+func (s *muxSessionHolder) get() (mux.MuxSession, int) {
+	s.sessionMutex.Lock()
+	defer s.sessionMutex.Unlock()
+	defer func() {
+		if nil != s.retiredSession && s.retiredSession.NumStreams() <= 0 {
+			s.retiredSession.Close()
+			s.retiredSession = nil
+			log.Printf("Close retired mux session since it's has no active stream.")
+		}
+	}()
+	if nil == s.muxSession {
+		s.init(false)
+		return s.muxSession, 0
+	}
+	if !s.expireTime.IsZero() && s.expireTime.Before(time.Now()) {
+		if nil != s.retiredSession {
+			s.retiredSession.Close()
+			log.Printf("Fore close retired mux session since it's replaced by new retired session.")
+		}
+		s.retiredSession = s.muxSession
+		s.muxSession = nil
+		return nil, 0
+	}
+	return s.muxSession, s.muxSession.NumStreams()
+}
+
+func (s *muxSessionHolder) init(lock bool) error {
+	if lock {
+		s.sessionMutex.Lock()
+		defer s.sessionMutex.Unlock()
+	}
+	if nil != s.muxSession {
+		return nil
+	}
+	session, err := s.p.CreateMuxSession(s.server, s.conf)
 	if nil == err {
 		authStream, err := session.OpenStream()
 		if nil != err {
-			return nil, err
+			return err
 		}
 		counter := uint64(helper.RandBetween(0, math.MaxInt32))
 		cipherMethod := GConf.Cipher.Method
-		if strings.HasPrefix(server, "https://") || strings.HasPrefix(server, "wss://") || strings.HasPrefix(server, "tls://") {
+		if strings.HasPrefix(s.server, "https://") || strings.HasPrefix(s.server, "wss://") || strings.HasPrefix(s.server, "tls://") {
 			cipherMethod = "none"
 		}
 		authReq := &mux.AuthRequest{
 			User:           GConf.User,
 			CipherCounter:  counter,
 			CipherMethod:   cipherMethod,
-			CompressMethod: ch.Conf.Compressor,
+			CompressMethod: s.conf.Compressor,
 		}
 		err = authStream.Auth(authReq)
 		if nil != err {
-			//authStream.Close()
-
-			return nil, err
+			return err
 		}
 		if psession, ok := session.(*mux.ProxyMuxSession); ok {
 			err = psession.Session.ResetCryptoContext(cipherMethod, counter)
 			if nil != err {
 				log.Printf("[ERROR]Failed to reset cipher context with reason:%v", err)
-				return nil, err
+				return err
 			}
 		}
-
-		holder := &muxSessionHolder{
-			creatTime:  time.Now(),
-			muxSession: session,
-			server:     server,
-		}
-		features := p.Features()
+		s.creatTime = time.Now()
+		s.muxSession = session
+		features := s.p.Features()
 		if features.AutoExpire {
-			expireAfter := helper.RandBetween(ch.Conf.ReconnectPeriod-ch.Conf.RCPRandomAdjustment, ch.Conf.ReconnectPeriod+ch.Conf.RCPRandomAdjustment)
+			expireAfter := 1800
+			if s.conf.ReconnectPeriod > 0 {
+				expireAfter = helper.RandBetween(s.conf.ReconnectPeriod-s.conf.RCPRandomAdjustment, s.conf.ReconnectPeriod+s.conf.RCPRandomAdjustment)
+			}
 			log.Printf("Mux session woulde expired after %d seconds.", expireAfter)
-			holder.expireTime = time.Now().Add(time.Duration(expireAfter) * time.Second)
+			s.expireTime = time.Now().Add(time.Duration(expireAfter) * time.Second)
 		}
+		return nil
+	}
+	return err
+}
 
+type proxyChannel struct {
+	Conf     ProxyChannelConfig
+	sessions map[*muxSessionHolder]bool
+	//proxies  map[Proxy]map[string]bool
+}
+
+func (ch *proxyChannel) createMuxSessionByProxy(p Proxy, server string) (*muxSessionHolder, error) {
+	holder := &muxSessionHolder{
+		conf:   &ch.Conf,
+		p:      p,
+		server: server,
+	}
+	err := holder.init(true)
+	if nil == err {
 		ch.sessions[holder] = true
 		return holder, nil
 	}
 	return nil, err
 }
 
-func (ch *proxyChannel) getMuxSession() (*muxSessionHolder, error) {
+func (ch *proxyChannel) getMuxSession() *muxSessionHolder {
 	var session *muxSessionHolder
 	minStreamNum := -1
 	for holder := range ch.sessions {
-		if !holder.expireTime.IsZero() && holder.expireTime.Before(time.Now()) {
-			if holder.muxSession.NumStreams() == 0 {
-				holder.muxSession.Close()
-				delete(ch.sessions, holder)
-			}
-			continue
-		}
-		if minStreamNum < 0 || holder.muxSession.NumStreams() < minStreamNum {
-			minStreamNum = holder.muxSession.NumStreams()
-			session = holder
-		}
-	}
-
-	//log.Printf("####session null")
-	if nil == session {
-		for p := range ch.proxies {
-			for server := range ch.proxies[p] {
-				log.Printf("Create session by server:%s", server)
-				return ch.createMuxSessionByProxy(p, server)
+		muxSession, num := holder.get()
+		if nil != muxSession {
+			if minStreamNum < 0 || num < minStreamNum {
+				minStreamNum = num
+				session = holder
 			}
 		}
 	}
-	return session, nil
+	return session
 }
 
-func (ch *proxyChannel) getMuxStream() (mux.MuxStream, error) {
-	ch.sessionMutex.Lock()
-	defer ch.sessionMutex.Unlock()
-	session, err := ch.getMuxSession()
-	//log.Printf("####End get getMuxSession")
-	if nil != err {
-		return nil, err
-	}
-	var stream mux.MuxStream
-
+func (ch *proxyChannel) getMuxStream() (stream mux.MuxStream, err error) {
 	for i := 0; i < 3; i++ {
-		//log.Printf("####Start Open new stream")
-		if nil != session {
-			stream, err = session.muxSession.OpenStream()
+		session := ch.getMuxSession()
+		if nil == session {
+			continue
 		}
+		stream, err = session.muxSession.OpenStream()
 		//log.Printf("####Open new stream:%T for session:%v %d", stream, ch.Conf.Name, i)
 		if nil != err || nil == stream {
-			if nil != session {
-				session.muxSession.Close()
-				delete(ch.sessions, session)
-			}
-			log.Printf("Get new session since current session failed to open new stream.")
-			session, err = ch.getMuxSession()
+			session.close()
+			log.Printf("Try to get next session since current session failed to open new stream.")
 			continue
 		} else {
 			return stream, nil
@@ -196,7 +223,6 @@ func (ch *proxyChannel) getMuxStream() (mux.MuxStream, error) {
 func newProxyChannel() *proxyChannel {
 	channel := &proxyChannel{}
 	channel.sessions = make(map[*muxSessionHolder]bool)
-	channel.proxies = make(map[Proxy]map[string]bool)
 	return channel
 }
 
@@ -302,10 +328,6 @@ func Start(home string, monitor InternalEventMonitor) error {
 			} else {
 				v := reflect.New(t)
 				p := v.Interface().(Proxy)
-				if nil == channel.proxies[p] {
-					channel.proxies[p] = make(map[string]bool)
-				}
-				channel.proxies[p][server] = true
 				for i := 0; i < conf.ConnsPerServer; i++ {
 					_, err := channel.createMuxSessionByProxy(p, server)
 					if nil != err {

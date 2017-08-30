@@ -219,6 +219,9 @@ START:
 					log.Printf("Failed to write http request for reason:%v", err)
 					return
 				}
+				if nil != proxyReq.Body {
+					proxyReq.Body.Close()
+				}
 			}
 			prevReq := proxyReq
 			localConn.SetReadDeadline(time.Now().Add(60 * time.Second))
