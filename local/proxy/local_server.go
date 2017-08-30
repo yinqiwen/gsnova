@@ -214,13 +214,11 @@ START:
 		initialHTTPReq = nil
 		for {
 			if nil != proxyReq {
+				proxyReq.Header.Del("Proxy-Connection")
 				err = proxyReq.Write(streamWriter)
 				if nil != err {
 					log.Printf("Failed to write http request for reason:%v", err)
 					return
-				}
-				if nil != proxyReq.Body {
-					proxyReq.Body.Close()
 				}
 			}
 			prevReq := proxyReq

@@ -154,7 +154,9 @@ func (q *HTTP2MuxSession) NumStreams() int {
 
 func (q *HTTP2MuxSession) Close() error {
 	helper.AsyncNotify(q.closeCh)
-	q.Conn.Close()
+	if nil != q.Conn {
+		q.Conn.Close()
+	}
 	q.streams.Range(func(key, value interface{}) bool {
 		stream := key.(MuxStream)
 		stream.Close()
@@ -174,6 +176,7 @@ func NewHTTP2ServerMuxSession(conn net.Conn) *HTTP2MuxSession {
 
 func NewHTTP2ClientMuxSession(conn net.Conn, host string) (MuxSession, error) {
 	s := &HTTP2MuxSession{}
+	s.Conn = conn
 	s.closeCh = make(chan struct{})
 	tr := &http2.Transport{}
 	cc, err := tr.NewClientConn(conn)
