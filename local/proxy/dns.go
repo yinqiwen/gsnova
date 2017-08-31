@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"errors"
+	"fmt"
 	"log"
 	"math/rand"
 	"net"
@@ -154,6 +155,23 @@ func dnsQueryRaw(r []byte) ([]byte, error) {
 		return nil, err
 	}
 	return res.Pack()
+}
+
+func dnsGenResponse(req *dns.Msg, ip string) *dns.Msg {
+	res := &dns.Msg{}
+	res.SetReply(req)
+	res.Compress = false
+	switch req.Opcode {
+	case dns.OpcodeQuery:
+		for _, q := range res.Question {
+			switch q.Qtype {
+			case dns.TypeA:
+				rr, _ := dns.NewRR(fmt.Sprintf("%s A %s", q.Name, ip))
+				res.Answer = append(res.Answer, rr)
+			}
+		}
+	}
+	return res
 }
 
 func DnsGetDoaminIP(domain string) (string, error) {

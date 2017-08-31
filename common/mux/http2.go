@@ -16,20 +16,31 @@ import (
 	"golang.org/x/net/http2"
 )
 
-type singleClientConnPool struct {
-	conn *http2.ClientConn
-}
+// type cachedClientConnPool struct {
+// 	conns sync.Map
+// }
 
-func (c *singleClientConnPool) GetClientConn(req *http.Request, addr string) (*http2.ClientConn, error) {
-	//log.Printf("###return %v %v %p", req, addr, c.conn)
-	if nil != c.conn {
-		return c.conn, nil
-	}
-	return nil, fmt.Errorf("Existing connection closed")
-}
-func (c *singleClientConnPool) MarkDead(conn *http2.ClientConn) {
-	c.conn = nil
-}
+// func (c *cachedClientConnPool) GetClientConn(req *http.Request, addr string) (*http2.ClientConn, error) {
+// 	var conn *http2.ClientConn
+// 	c.conns.Range(func(key, value interface{}) bool {
+// 		conn = key.(*http2.ClientConn)
+// 		return false
+// 	})
+// 	if nil != conn {
+// 		return conn, nil
+// 	}
+// 	return nil, fmt.Errorf("Existing connection closed")
+// }
+// func (c *cachedClientConnPool) MarkDead(conn *http2.ClientConn) {
+// 	c.conns.Delete(conn)
+// }
+
+// func (c *cachedClientConnPool) add(conn *http2.ClientConn) {
+// 	c.conns.Store(conn, true)
+// }
+
+// var cacheConns cachedClientConnPool
+var http2Transport = &http2.Transport{}
 
 type http2ClientMuxStream struct {
 	w         *io.PipeWriter
@@ -78,9 +89,10 @@ func (s *http2ClientMuxStream) Close() (err error) {
 
 type HTTP2MuxSession struct {
 	net.Conn
+	h2Conn     *http2.ClientConn
 	ServerHost string
 	//Client     *http.Client
-	Client        *http2.Transport
+	//Client        *http2.Transport
 	streamCounter int64
 	AcceptCh      chan MuxStream
 	closeCh       chan struct{}
@@ -125,8 +137,8 @@ func (q *HTTP2MuxSession) OpenStream() (MuxStream, error) {
 		readReady: make(chan struct{}),
 	}
 	go func() {
-		opt := http2.RoundTripOpt{OnlyCachedConn: true}
-		res, err := q.Client.RoundTripOpt(req, opt)
+		//opt := http2.RoundTripOpt{OnlyCachedConn: true}
+		res, err := q.h2Conn.RoundTrip(req)
 		//res, err := q.Client.Do(req)
 		if nil != err {
 			log.Printf("Failed to post http/2 with error:%v", err)
@@ -160,6 +172,7 @@ func (q *HTTP2MuxSession) Close() error {
 	helper.AsyncNotify(q.closeCh)
 	if nil != q.Conn {
 		q.Conn.Close()
+		q.Conn = nil
 	}
 	q.streams.Range(func(key, value interface{}) bool {
 		stream := key.(MuxStream)
@@ -182,15 +195,16 @@ func NewHTTP2ClientMuxSession(conn net.Conn, host string) (MuxSession, error) {
 	s := &HTTP2MuxSession{}
 	s.Conn = conn
 	s.closeCh = make(chan struct{})
-	tr := &http2.Transport{}
-	cc, err := tr.NewClientConn(conn)
+	cc, err := http2Transport.NewClientConn(conn)
 	if nil != err {
 		return nil, err
 	}
-	tr.ConnPool = &singleClientConnPool{conn: cc}
+	s.h2Conn = cc
+	//cacheConns.add(cc)
+	//tr.ConnPool = &singleClientConnPool{conn: cc}
 	//client := &http.Client{}
 	//client.Transport = tr
-	s.Client = tr
+	//s.Client = tr
 	//s.Client = client
 	s.ServerHost = host
 	return s, nil

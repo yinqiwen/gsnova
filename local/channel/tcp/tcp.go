@@ -1,8 +1,6 @@
 package tcp
 
 import (
-	"log"
-
 	"github.com/yinqiwen/gsnova/common/mux"
 	"github.com/yinqiwen/gsnova/local/proxy"
 	"github.com/yinqiwen/pmux"
@@ -23,7 +21,7 @@ func (tc *TcpProxy) CreateMuxSession(server string, conf *proxy.ProxyChannelConf
 	if err != nil {
 		return nil, err
 	}
-	log.Printf("Connect %s success.", server)
+	//log.Printf("Connect %s success.", server)
 	ps, err := pmux.Client(conn, proxy.InitialPMuxConfig(conf))
 	if nil != err {
 		return nil, err

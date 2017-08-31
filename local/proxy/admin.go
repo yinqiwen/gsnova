@@ -38,10 +38,16 @@ func statCallback(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "DNSCacheSize: %d\n", dnsCache.Len())
 	}
 	ots.Handle("stat", w)
-	// for _, p := range proxyTable {
-	// 	p.PrintStat(w)
-	// }
-	//dumpProxySessions(w)
+	fmt.Fprintf(w, "RunningProxyStreamNum: %d\n", runningProxyStreamCount)
+	for _, pch := range proxyChannelTable {
+		if pch.Conf.Name != directProxyChannelName {
+			for holder := range pch.sessions {
+				if nil != holder {
+					holder.dumpStat(w)
+				}
+			}
+		}
+	}
 }
 func stackdumpCallback(w http.ResponseWriter, req *http.Request) {
 	w.WriteHeader(200)
@@ -60,9 +66,6 @@ func startAdminServer() {
 	if len(GConf.Admin.Listen) == 0 {
 		return
 	}
-	// go func() {
-	// 	log.Println(http.ListenAndServe("localhost:6060", nil))
-	// }()
 	if len(GConf.Admin.ConfigDir) == 0 {
 		log.Printf("[WARN]The ConfigDir's Dir is empty, use current dir instead")
 		GConf.Admin.ConfigDir = "./"
@@ -100,7 +103,6 @@ func startAdminServer() {
 	if nil != err {
 		log.Printf("[ERROR]Failed to start config store server:%v", err)
 	}
-
 }
 
 var syncClient *http.Client

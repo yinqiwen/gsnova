@@ -3,6 +3,7 @@ package proxy
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"math"
 	"net/url"
@@ -79,6 +80,23 @@ type muxSessionHolder struct {
 	conf            *ProxyChannelConfig
 }
 
+func (s *muxSessionHolder) tryCloseRetiredSessions() {
+	for retiredSession := range s.retiredSessions {
+		if retiredSession.NumStreams() <= 0 {
+			log.Printf("Close retired mux session since it's has no active stream.")
+			retiredSession.Close()
+			delete(s.retiredSessions, retiredSession)
+		}
+	}
+}
+
+func (s *muxSessionHolder) dumpStat(w io.Writer) {
+	s.sessionMutex.Lock()
+	defer s.sessionMutex.Unlock()
+	s.tryCloseRetiredSessions()
+	fmt.Fprintf(w, "Server:%s, CreateTime:%v, RetireTime:%v, RetireSessionNum:%v\n", s.server, s.creatTime.Format("15:04:05"), s.expireTime.Format("15:04:05"), len(s.retiredSessions))
+}
+
 func (s *muxSessionHolder) close() {
 	s.sessionMutex.Lock()
 	defer s.sessionMutex.Unlock()
@@ -93,26 +111,18 @@ func (s *muxSessionHolder) getNewStream() (mux.MuxStream, error) {
 	s.sessionMutex.Lock()
 	defer s.sessionMutex.Unlock()
 	defer func() {
-		for retiredSession := range s.retiredSessions {
-			if retiredSession.NumStreams() <= 0 {
-				log.Printf("Close retired mux session since it's has no active stream.")
-				delete(s.retiredSessions, retiredSession)
-			}
-		}
+		s.tryCloseRetiredSessions()
 	}()
-
+	if nil != s.muxSession && !s.expireTime.IsZero() && s.expireTime.Before(time.Now()) {
+		s.retiredSessions[s.muxSession] = true
+		s.muxSession = nil
+	}
 	if nil == s.muxSession {
 		s.init(false)
 	}
 	if nil == s.muxSession {
 		return nil, pmux.ErrSessionShutdown
 	}
-	if !s.expireTime.IsZero() && s.expireTime.Before(time.Now()) {
-		s.retiredSessions[s.muxSession] = true
-		s.muxSession = nil
-		return nil, pmux.ErrSessionShutdown
-	}
-
 	return s.muxSession.OpenStream()
 }
 

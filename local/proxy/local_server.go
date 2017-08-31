@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/yinqiwen/gsnova/common/helper"
@@ -16,16 +17,18 @@ import (
 
 var proxyServerRunning = true
 
+var runningProxyStreamCount int64
+
 func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 	var proxyChannelName string
 	protocol := "tcp"
 	localConn := conn
+	atomic.AddInt64(&runningProxyStreamCount, 1)
 	defer localConn.Close()
+	defer atomic.AddInt64(&runningProxyStreamCount, -1)
 
 	remoteHost := ""
 	remotePort := ""
-	//indicate that if remote opened by event
-	trySNISniff := false
 	isSocksProxy := false
 	isHttpsProxy := false
 	isHttp11Proto := false
@@ -49,10 +52,6 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 			log.Printf("Invalid socks target addresss:%s with reason %v", socksConn.Req.Target, err)
 			return
 		}
-		if net.ParseIP(remoteHost) != nil && !helper.IsPrivateIP(remoteHost) && proxy.SNISniff {
-			//this is a ip from local dns query
-			trySNISniff = true
-		}
 	} else {
 		if nil == bufconn {
 			localConn.Close()
@@ -64,8 +63,14 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 		bufconn = bufio.NewReader(localConn)
 	}
 
+	trySniffDomain := false
+	if len(remoteHost) == 0 || (net.ParseIP(remoteHost) != nil && !helper.IsPrivateIP(remoteHost)) {
+		//this is a ip from local dns query
+		trySniffDomain = true
+	}
+
 	//1. sniff SNI first
-	if trySNISniff {
+	if isSocksProxy && trySniffDomain {
 		sniChunkPeekSize := 512
 		for {
 			conn.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
@@ -81,6 +86,7 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 				} else {
 					log.Printf("Sniffed SNI:%s:%s for IP:%s:%s", sni, remotePort, remoteHost, remotePort)
 					remoteHost = sni
+					trySniffDomain = false
 					break
 				}
 			} else {
@@ -90,8 +96,8 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 		}
 	}
 
-	//2. try read http
-	if len(remoteHost) == 0 {
+	//2. sniff domain via http
+	if trySniffDomain {
 		localConn.SetReadDeadline(time.Now().Add(60 * time.Second))
 		headChunk, err := bufconn.Peek(7)
 		if len(headChunk) != 7 {
@@ -99,7 +105,6 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 				log.Printf("Peek:%s %d %v", string(headChunk), len(headChunk), err)
 			}
 			return
-			//goto START
 		}
 		method := string(headChunk)
 		if tmp := strings.Fields(method); len(tmp) > 0 {
@@ -147,18 +152,13 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 			}
 			if strings.EqualFold(initialHTTPReq.Method, "CONNECT") {
 				protocol = "https"
-				if len(remotePort) == 0 {
-					remotePort = "443"
-				}
 				if !isSocksProxy {
 					localConn.Write([]byte("HTTP/1.0 200 Connection established\r\n\r\n"))
 					isHttpsProxy = true
+					initialHTTPReq = nil
 				}
 			} else {
 				protocol = "http"
-				if len(remotePort) == 0 {
-					remotePort = "80"
-				}
 			}
 		} else {
 			if !isHttp11Proto {
@@ -167,7 +167,6 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 			}
 		}
 	}
-
 START:
 	if len(remoteHost) == 0 || len(remotePort) == 0 {
 		log.Printf("Can NOT resolve remote host or port %s:%s", remoteHost, remotePort)
@@ -196,15 +195,12 @@ START:
 	//clear read timeout
 	var zero time.Time
 	localConn.SetReadDeadline(zero)
-
 	streamReader, streamWriter := mux.GetCompressStreamReaderWriter(stream, conf.Compressor)
 
 	go func() {
 		io.Copy(localConn, streamReader)
-		//localConn.Close()
 	}()
 	if isSocksProxy || isHttpsProxy {
-
 		io.Copy(streamWriter, bufconn)
 		if close, ok := streamWriter.(io.Closer); ok {
 			close.Close()

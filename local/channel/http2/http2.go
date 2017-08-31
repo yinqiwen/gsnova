@@ -1,7 +1,6 @@
 package http2
 
 import (
-	"log"
 	"net/url"
 
 	"github.com/yinqiwen/gsnova/common/mux"
@@ -26,7 +25,7 @@ func (tc *HTTP2Proxy) CreateMuxSession(server string, conf *proxy.ProxyChannelCo
 	if err != nil {
 		return nil, err
 	}
-	log.Printf("Connect %s success.", server)
+	//log.Printf("Connect %s success.", server)
 	return mux.NewHTTP2ClientMuxSession(conn, rurl.Host)
 }
 

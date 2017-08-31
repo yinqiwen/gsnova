@@ -290,9 +290,8 @@ func (pac *PACConfig) Match(protocol string, ip string, req *http.Request) bool 
 }
 
 type ProxyConfig struct {
-	Local    string
-	PAC      []PACConfig
-	SNISniff bool
+	Local string
+	PAC   []PACConfig
 }
 
 func (cfg *ProxyConfig) getProxyChannelByHost(proto string, host string) string {
@@ -337,6 +336,11 @@ type AdminConfig struct {
 	ConfigDir     string
 }
 
+type UDPGWConfig struct {
+	Addr          string
+	FakeDNSResult bool
+}
+
 type GFWListConfig struct {
 	URL      string
 	UserRule []string
@@ -344,17 +348,16 @@ type GFWListConfig struct {
 }
 
 type LocalConfig struct {
-	Log              []string
-	Cipher           CipherConfig
-	UserAgent        string
-	User             string
-	LocalDNS         LocalDNSConfig
-	UDPGWAddr        string
-	ChannelKeepAlive bool
-	Admin            AdminConfig
-	GFWList          GFWListConfig
-	Proxy            []ProxyConfig
-	Channel          []ProxyChannelConfig
+	Log       []string
+	Cipher    CipherConfig
+	UserAgent string
+	User      string
+	LocalDNS  LocalDNSConfig
+	UDPGWAddr string
+	Admin     AdminConfig
+	GFWList   GFWListConfig
+	Proxy     []ProxyConfig
+	Channel   []ProxyChannelConfig
 }
 
 func (cfg *LocalConfig) init() error {
