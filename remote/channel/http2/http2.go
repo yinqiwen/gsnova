@@ -3,9 +3,11 @@ package http2
 import (
 	"crypto/tls"
 	"encoding/json"
+	"io"
 	"log"
 	"net"
 	"net/http"
+	"sync"
 
 	"golang.org/x/net/http2"
 
@@ -17,6 +19,7 @@ import (
 type http2Stream struct {
 	req     *http.Request
 	rw      http.ResponseWriter
+	rwLock  sync.Mutex
 	closeCh chan struct{}
 }
 
@@ -26,6 +29,11 @@ func (s *http2Stream) Read(b []byte) (n int, err error) {
 }
 
 func (s *http2Stream) Write(b []byte) (n int, err error) {
+	s.rwLock.Lock()
+	defer s.rwLock.Unlock()
+	if nil == s.rw {
+		return 0, io.EOF
+	}
 	n, err = s.rw.Write(b)
 	if nil != err {
 		return n, err
@@ -39,6 +47,9 @@ func (s *http2Stream) Write(b []byte) (n int, err error) {
 func (s *http2Stream) Close() (err error) {
 	helper.AsyncNotify(s.closeCh)
 	s.req.Body.Close()
+	s.rwLock.Lock()
+	s.rw = nil
+	s.rwLock.Unlock()
 	return nil
 }
 

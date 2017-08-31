@@ -89,7 +89,7 @@ func (s *muxSessionHolder) close() {
 	}
 }
 
-func (s *muxSessionHolder) get() (mux.MuxSession, int) {
+func (s *muxSessionHolder) getNewStream() (mux.MuxStream, error) {
 	s.sessionMutex.Lock()
 	defer s.sessionMutex.Unlock()
 	defer func() {
@@ -100,16 +100,20 @@ func (s *muxSessionHolder) get() (mux.MuxSession, int) {
 			}
 		}
 	}()
+
 	if nil == s.muxSession {
 		s.init(false)
-		return s.muxSession, 0
+	}
+	if nil == s.muxSession {
+		return nil, pmux.ErrSessionShutdown
 	}
 	if !s.expireTime.IsZero() && s.expireTime.Before(time.Now()) {
 		s.retiredSessions[s.muxSession] = true
 		s.muxSession = nil
-		return nil, 0
+		return nil, pmux.ErrSessionShutdown
 	}
-	return s.muxSession, s.muxSession.NumStreams()
+
+	return s.muxSession.OpenStream()
 }
 
 func (s *muxSessionHolder) init(lock bool) error {
@@ -185,38 +189,22 @@ func (ch *proxyChannel) createMuxSessionByProxy(p Proxy, server string) (*muxSes
 	return nil, err
 }
 
-func (ch *proxyChannel) getMuxSession() *muxSessionHolder {
-	var session *muxSessionHolder
-	minStreamNum := -1
-	for holder := range ch.sessions {
-		muxSession, num := holder.get()
-		if nil != muxSession {
-			if minStreamNum < 0 || num < minStreamNum {
-				minStreamNum = num
-				session = holder
-			}
-		}
-	}
-	return session
-}
-
 func (ch *proxyChannel) getMuxStream() (stream mux.MuxStream, err error) {
-	for i := 0; i < 3; i++ {
-		session := ch.getMuxSession()
-		if nil == session || nil == session.muxSession {
-			continue
-		}
-		stream, err = session.muxSession.OpenStream()
-		//log.Printf("####Open new stream:%T for session:%v %d", stream, ch.Conf.Name, i)
-		if nil != err || nil == stream {
-			session.close()
-			log.Printf("Try to get next session since current session failed to open new stream.")
-			continue
+	for holder := range ch.sessions {
+		stream, err = holder.getNewStream()
+		if nil != err {
+			if err == pmux.ErrSessionShutdown {
+				holder.close()
+			}
+			log.Printf("Try to get next session since current session failed to open new stream with err:%v", err)
 		} else {
-			return stream, nil
+			return
 		}
 	}
-	return nil, err
+	if nil == stream {
+		err = fmt.Errorf("Create mux porxy stream failed")
+	}
+	return
 }
 
 func newProxyChannel() *proxyChannel {

@@ -6,6 +6,7 @@ import (
 	"io"
 	"io/ioutil"
 	"math/rand"
+	"sync/atomic"
 	"time"
 
 	quic "github.com/lucas-clemente/quic-go"
@@ -13,6 +14,8 @@ import (
 	"github.com/yinqiwen/gsnova/common/helper"
 	"github.com/yinqiwen/pmux"
 )
+
+var streamIDSeed int64
 
 type ConnectRequest struct {
 	//ProxySID uint32
@@ -95,7 +98,8 @@ type MuxSession interface {
 
 type ProxyMuxStream struct {
 	io.ReadWriteCloser
-	session MuxSession
+	session   MuxSession
+	sessionID int64
 }
 
 func (s *ProxyMuxStream) StreamID() uint32 {
@@ -104,7 +108,10 @@ func (s *ProxyMuxStream) StreamID() uint32 {
 	} else if qs, ok := s.ReadWriteCloser.(quic.Stream); ok {
 		return uint32(qs.StreamID())
 	}
-	return 0
+	if 0 == s.sessionID {
+		s.sessionID = atomic.AddInt64(&streamIDSeed, 1)
+	}
+	return uint32(s.sessionID)
 }
 
 func (s *ProxyMuxStream) Close() error {
