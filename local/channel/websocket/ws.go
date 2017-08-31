@@ -1,9 +1,7 @@
 package websocket
 
 import (
-	"crypto/tls"
 	"log"
-	"net/http"
 	"net/url"
 
 	"github.com/gorilla/websocket"
@@ -29,19 +27,7 @@ func (ws *WebsocketProxy) CreateMuxSession(server string, conf *proxy.ProxyChann
 	u.Path = "/ws"
 	wsDialer := &websocket.Dialer{}
 	wsDialer.NetDial = proxy.NewDialByConf(conf)
-	if len(conf.Proxy) > 0 {
-		proxyUrl, err := url.Parse(conf.Proxy)
-		if nil != err {
-			return nil, err
-		}
-		wsDialer.Proxy = http.ProxyURL(proxyUrl)
-	}
-	if len(conf.SNI) > 0 {
-		tlscfg := &tls.Config{}
-		tlscfg.InsecureSkipVerify = true
-		tlscfg.ServerName = conf.SNI[0]
-		wsDialer.TLSClientConfig = tlscfg
-	}
+	wsDialer.TLSClientConfig = proxy.NewTLSConfig(conf)
 	c, _, err := wsDialer.Dial(u.String(), nil)
 	if err != nil {
 		log.Printf("dial websocket error:%v", err)

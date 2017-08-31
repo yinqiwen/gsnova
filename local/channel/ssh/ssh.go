@@ -7,15 +7,11 @@ import (
 	"log"
 	"net"
 	"net/url"
-	"strings"
 	"sync"
-	"time"
 
 	"golang.org/x/crypto/ssh"
 
-	"github.com/yinqiwen/gsnova/common/helper"
 	"github.com/yinqiwen/gsnova/common/mux"
-	"github.com/yinqiwen/gsnova/common/netx"
 	"github.com/yinqiwen/gsnova/local/proxy"
 )
 
@@ -150,30 +146,9 @@ func (p *SSHProxy) CreateMuxSession(server string, conf *proxy.ProxyChannelConfi
 	if nil != err {
 		return nil, err
 	}
-	addr := u.Host
-	if nil != conf.ProxyURL() {
-		addr = conf.ProxyURL().Host
-	}
-	connectHost, connectPort, _ := net.SplitHostPort(u.Host)
-	if net.ParseIP(connectHost) == nil {
-		iphost, err := proxy.DnsGetDoaminIP(connectHost)
-		if nil != err {
-			return nil, err
-		}
-		addr = net.JoinHostPort(iphost, connectPort)
-	}
-	dailTimeout := conf.DialTimeout
-	if 0 == dailTimeout {
-		dailTimeout = 5
-	}
-	//log.Printf("Session:%d connect %s:%s for %s %T %v %v %s", ev.GetId(), network, addr, host, ev, needHttpsConnect, conf.ProxyURL(), net.JoinHostPort(host, port))
-	c, err := netx.DialTimeout("tcp", addr, time.Duration(dailTimeout)*time.Second)
-	if nil != conf.ProxyURL() && nil == err {
-		if strings.HasPrefix(conf.ProxyURL().Scheme, "socks") {
-			err = helper.Socks5ProxyConnect(conf.ProxyURL(), c, net.JoinHostPort(connectHost, connectPort))
-		} else {
-			err = helper.HTTPProxyConnect(conf.ProxyURL(), c, "https://"+net.JoinHostPort(connectHost, connectPort))
-		}
+	c, err := proxy.DialServerByConf(server, conf)
+	if err != nil {
+		return nil, err
 	}
 	var sshConf *ssh.ClientConfig
 	passwd, ok := u.User.Password()

@@ -259,7 +259,7 @@ func HTTPProxyConnect(proxyURL *url.URL, c net.Conn, addr string) error {
 	return nil
 }
 
-func HTTPProxyDial(proxyURL string, addr string, timeout time.Duration) (net.Conn, error) {
+func ProxyDial(proxyURL string, addr string, timeout time.Duration) (net.Conn, error) {
 	u, err := url.Parse(proxyURL)
 	if nil != err {
 		return nil, err
@@ -268,7 +268,17 @@ func HTTPProxyDial(proxyURL string, addr string, timeout time.Duration) (net.Con
 	if err != nil {
 		return nil, err
 	}
-	err = HTTPProxyConnect(u, c, addr)
+	switch u.Scheme {
+	case "http":
+		fallthrough
+	case "https":
+		err = HTTPProxyConnect(u, c, addr)
+	case "socks":
+	case "socks5":
+		err = Socks5ProxyConnect(u, c, addr)
+	default:
+		return nil, fmt.Errorf("invalid proxy schema:%s", u.Scheme)
+	}
 	if nil != err {
 		c.Close()
 		return nil, err

@@ -3,53 +3,13 @@ package proxy
 import (
 	"crypto/tls"
 	"log"
-	"net"
 	"net/http"
 	"net/url"
+	"sync"
 	"time"
-
-	"github.com/yinqiwen/gsnova/common/netx"
-	"github.com/yinqiwen/gsnova/local/hosts"
 )
 
-// func NewAuthEvent(secureTransport bool) *event.AuthEvent {
-// 	auth := &event.AuthEvent{}
-// 	auth.User = GConf.Auth
-// 	//auth.Mac = getDeviceId()
-// 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-// 	auth.SetId(uint32(r.Int31()))
-// 	auth.Rand = []byte(helper.RandAsciiString(int(r.Int31n(128))))
-// 	if secureTransport && strings.EqualFold(GConf.Encrypt.Method, "auto") {
-// 		auth.EncryptMethod = uint8(event.NoneEncrypter)
-// 	} else {
-// 		auth.EncryptMethod = event.GetDefaultCryptoMethod()
-// 	}
-// 	return auth
-// }
-
-func NewDialByConf(conf *ProxyChannelConfig) func(network, addr string) (net.Conn, error) {
-	localDial := func(network, addr string) (net.Conn, error) {
-		host, port, _ := net.SplitHostPort(addr)
-		if port == "443" && len(conf.SNIProxy) > 0 && hosts.InHosts(conf.SNIProxy) {
-			addr = hosts.GetAddr(conf.SNIProxy, "443")
-			host, _, _ = net.SplitHostPort(addr)
-		}
-		if net.ParseIP(host) == nil {
-			iphost, err := DnsGetDoaminIP(host)
-			if nil != err {
-				return nil, err
-			}
-			addr = net.JoinHostPort(iphost, port)
-		}
-		dailTimeout := conf.DialTimeout
-		if 0 == dailTimeout {
-			dailTimeout = 5
-		}
-		//log.Printf("Connect %s", addr)
-		return netx.DialTimeout(network, addr, time.Duration(dailTimeout)*time.Second)
-	}
-	return localDial
-}
+var httpClientMap sync.Map
 
 func NewHTTPClient(conf *ProxyChannelConfig) (*http.Client, error) {
 	readTimeout := conf.ReadTimeout
@@ -79,6 +39,10 @@ func NewHTTPClient(conf *ProxyChannelConfig) (*http.Client, error) {
 	hc := &http.Client{}
 	//hc.Timeout = tr.ResponseHeaderTimeout
 	hc.Transport = tr
+	localClient, loaded := httpClientMap.LoadOrStore(conf, hc)
+	if loaded {
+		return localClient.(*http.Client), nil
+	}
 	return hc, nil
 }
 
