@@ -90,6 +90,7 @@ func (s *http2ClientMuxStream) Close() (err error) {
 type HTTP2MuxSession struct {
 	net.Conn
 	h2Conn     *http2.ClientConn
+	tr         *http2.Transport
 	ServerHost string
 	//Client     *http.Client
 	//Client        *http2.Transport
@@ -179,6 +180,7 @@ func (q *HTTP2MuxSession) Close() error {
 		stream.Close()
 		return true
 	})
+	http2Transport.CloseIdleConnections()
 	//q.streams = sync.Map{}
 	return nil
 }
