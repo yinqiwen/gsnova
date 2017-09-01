@@ -7,8 +7,8 @@ import (
 )
 
 type QUICMuxSession struct {
-	quic.Session
 	streamCounter int64
+	quic.Session
 }
 
 func (q *QUICMuxSession) CloseStream(stream MuxStream) error {

@@ -135,7 +135,7 @@ func (s *muxSessionHolder) init(lock bool) error {
 		return nil
 	}
 	session, err := s.p.CreateMuxSession(s.server, s.conf)
-	if nil == err {
+	if nil == err && nil != session {
 		authStream, err := session.OpenStream()
 		if nil != err {
 			return err
@@ -174,6 +174,9 @@ func (s *muxSessionHolder) init(lock bool) error {
 			s.expireTime = time.Now().Add(time.Duration(expireAfter) * time.Second)
 		}
 		return nil
+	}
+	if nil == err {
+		err = fmt.Errorf("Empty error to create session")
 	}
 	return err
 }

@@ -88,16 +88,16 @@ func (s *http2ClientMuxStream) Close() (err error) {
 }
 
 type HTTP2MuxSession struct {
+	streamCounter int64
 	net.Conn
 	h2Conn     *http2.ClientConn
 	tr         *http2.Transport
 	ServerHost string
 	//Client     *http.Client
 	//Client        *http2.Transport
-	streamCounter int64
-	AcceptCh      chan MuxStream
-	closeCh       chan struct{}
-	streams       sync.Map
+	AcceptCh chan MuxStream
+	closeCh  chan struct{}
+	streams  sync.Map
 }
 
 func (q *HTTP2MuxSession) CloseStream(stream MuxStream) error {
