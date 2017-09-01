@@ -73,7 +73,7 @@ type getConnIntf interface {
 	GetConn() net.Conn
 }
 
-func dnsQuery(r *dns.Msg) (*dns.Msg, error) {
+func dnsQuery(r *dns.Msg, viaGW bool) (*dns.Msg, error) {
 	dnsServers := GConf.LocalDNS.TrustedDNS
 	var record *dnsCacheRecord
 	var domain string
@@ -97,6 +97,13 @@ func dnsQuery(r *dns.Msg) (*dns.Msg, error) {
 				}
 			}
 		}
+		if viaGW {
+			matchResult := GConf.UDPGW.matchDNS(domain)
+			if len(matchResult) > 0 {
+				return dnsGenResponse(r, matchResult), nil
+			}
+		}
+
 		if nil != mygfwlist {
 			connReq, _ := http.NewRequest("CONNECT", "https://"+domain, nil)
 			isBlocked, _ := mygfwlist.FastMatchDoamin(connReq)
@@ -147,10 +154,10 @@ func dnsQuery(r *dns.Msg) (*dns.Msg, error) {
 	return nil, errDNSQuryFail
 }
 
-func dnsQueryRaw(r []byte) ([]byte, error) {
+func dnsQueryRaw(r []byte, viaGW bool) ([]byte, error) {
 	req := new(dns.Msg)
 	req.Unpack(r)
-	res, err := dnsQuery(req)
+	res, err := dnsQuery(req, viaGW)
 	if nil != err {
 		return nil, err
 	}
@@ -174,12 +181,19 @@ func dnsGenResponse(req *dns.Msg, ip string) *dns.Msg {
 	return res
 }
 
+func dnsGenResponsePacket(raw []byte, ip string) ([]byte, error) {
+	req := new(dns.Msg)
+	req.Unpack(raw)
+	res := dnsGenResponse(req, ip)
+	return res.Pack()
+}
+
 func DnsGetDoaminIP(domain string) (string, error) {
 	m := new(dns.Msg)
 	m.Id = dns.Id()
 	m.SetQuestion(dns.Fqdn(domain), dns.TypeA)
 	m.RecursionDesired = true
-	res, err := dnsQuery(m)
+	res, err := dnsQuery(m, false)
 	if nil != err {
 		return "", err
 	}
@@ -187,7 +201,7 @@ func DnsGetDoaminIP(domain string) (string, error) {
 }
 
 func proxyDNS(w dns.ResponseWriter, r *dns.Msg) {
-	dnsres, err := dnsQuery(r)
+	dnsres, err := dnsQuery(r, false)
 	if nil != err {
 		log.Printf("DNS query error:%v", err)
 		return

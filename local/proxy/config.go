@@ -337,8 +337,25 @@ type AdminConfig struct {
 }
 
 type UDPGWConfig struct {
-	Addr          string
-	FakeDNSResult bool
+	Addr           string
+	LocalDNSRecord map[string]string
+}
+
+func (gw *UDPGWConfig) matchDNS(domain string) string {
+	if nil == gw.LocalDNSRecord {
+		return ""
+	}
+	for k, v := range gw.LocalDNSRecord {
+		matched, err := filepath.Match(k, domain)
+		if nil != err {
+			log.Printf("Invalid pattern:%s with reason:%v", k, err)
+			continue
+		}
+		if matched {
+			return v
+		}
+	}
+	return ""
 }
 
 type GFWListConfig struct {
@@ -353,7 +370,7 @@ type LocalConfig struct {
 	UserAgent string
 	User      string
 	LocalDNS  LocalDNSConfig
-	UDPGWAddr string
+	UDPGW     UDPGWConfig
 	Admin     AdminConfig
 	GFWList   GFWListConfig
 	Proxy     []ProxyConfig

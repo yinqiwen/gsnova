@@ -41,7 +41,7 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 		socksConn.Grant(&net.TCPAddr{
 			IP: net.ParseIP("0.0.0.0"), Port: 0})
 		localConn = socksConn
-		if socksConn.Req.Target == GConf.UDPGWAddr {
+		if socksConn.Req.Target == GConf.UDPGW.Addr {
 			log.Printf("Handle udpgw conn for %v", socksConn.Req.Target)
 			handleUDPGatewayConn(localConn, proxy)
 			return

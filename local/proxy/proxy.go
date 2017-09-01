@@ -305,6 +305,7 @@ func Start(home string, monitor InternalEventMonitor) error {
 	proxyHome = home
 	GConf.init()
 	logger.InitLogger(GConf.Log)
+	go initDNS()
 
 	log.Printf("Allowed proxy channel with schema:%v", allowedSchema())
 	for _, conf := range GConf.Channel {
@@ -353,7 +354,7 @@ func Start(home string, monitor InternalEventMonitor) error {
 	channel.sessions = make(map[*muxSessionHolder]bool)
 
 	log.Printf("Starting GSnova %s.", local.Version)
-	go initDNS()
+
 	go startAdminServer()
 	startLocalServers()
 	return nil

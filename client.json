@@ -19,8 +19,14 @@
     	"TCPConnect": false 
     },
 
-    //fake address, only used as udp traffic indicator in VPN mode
-    "UDPGWAddr": "20.20.20.20:1111",
+	"UDPGW":{
+		//fake address, only used as udp protocol indicator
+		"Addr":"20.20.20.20:1111",
+		//since gsnova sniff SNI for https, 'Host' for http, return fake record for dns query would make it run faster for http/https traffic
+		"LocalDNSRecord":{
+			"*" : "111.111.111.111"
+		}
+	},
 
     //Close idle proxy channels when no active proxy session if 'ChannelKeepAlive' is false
 	"ChannelKeepAlive": false,
