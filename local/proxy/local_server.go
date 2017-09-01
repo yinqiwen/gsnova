@@ -161,7 +161,7 @@ func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
 				protocol = "http"
 			}
 		} else {
-			if !isHttp11Proto {
+			if !isHttp11Proto && !isSocksProxy {
 				log.Printf("[ERROR]Can NOT handle non HTTP1.1 proto in non socks proxy mode.")
 				return
 			}
