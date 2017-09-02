@@ -27,6 +27,7 @@ type KCPProxy struct {
 func (p *KCPProxy) Features() proxy.ProxyFeatureSet {
 	return proxy.ProxyFeatureSet{
 		AutoExpire: true,
+		Pingable:   true,
 	}
 }
 

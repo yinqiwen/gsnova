@@ -19,7 +19,7 @@ var proxyServerRunning = true
 
 var runningProxyStreamCount int64
 
-func serveProxyConn(conn net.Conn, proxy ProxyConfig) {
+func serveProxyConn(conn net.Conn, proxy *ProxyConfig) {
 	var proxyChannelName string
 	protocol := "tcp"
 	localConn := conn
@@ -235,26 +235,27 @@ START:
 	}
 }
 
-func startLocalProxyServer(proxy ProxyConfig) (*net.TCPListener, error) {
-	tcpaddr, err := net.ResolveTCPAddr("tcp", proxy.Local)
+func startLocalProxyServer(proxyIdx int) (*net.TCPListener, error) {
+	proxyConf := &GConf.Proxy[proxyIdx]
+	tcpaddr, err := net.ResolveTCPAddr("tcp", proxyConf.Local)
 	if nil != err {
-		log.Fatalf("[ERROR]Local server address:%s error:%v", proxy.Local, err)
+		log.Fatalf("[ERROR]Local server address:%s error:%v", proxyConf.Local, err)
 		return nil, err
 	}
 	var lp *net.TCPListener
 	lp, err = net.ListenTCP("tcp", tcpaddr)
 	if nil != err {
-		log.Fatalf("Can NOT listen on address:%s", proxy.Local)
+		log.Fatalf("Can NOT listen on address:%s", proxyConf.Local)
 		return nil, err
 	}
-	log.Printf("Listen on address %s", proxy.Local)
+	log.Printf("Listen on address %s", proxyConf.Local)
 	go func() {
 		for proxyServerRunning {
 			conn, err := lp.AcceptTCP()
 			if nil != err {
 				continue
 			}
-			go serveProxyConn(conn, proxy)
+			go serveProxyConn(conn, &GConf.Proxy[proxyIdx])
 		}
 		lp.Close()
 	}()
@@ -266,8 +267,8 @@ var runningServers []*net.TCPListener
 func startLocalServers() error {
 	proxyServerRunning = true
 	runningServers = make([]*net.TCPListener, 0)
-	for _, proxy := range GConf.Proxy {
-		l, _ := startLocalProxyServer(proxy)
+	for i, _ := range GConf.Proxy {
+		l, _ := startLocalProxyServer(i)
 		if nil != l {
 			runningServers = append(runningServers, l)
 		}

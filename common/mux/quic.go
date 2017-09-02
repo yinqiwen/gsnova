@@ -2,6 +2,7 @@ package mux
 
 import (
 	"sync/atomic"
+	"time"
 
 	quic "github.com/lucas-clemente/quic-go"
 )
@@ -9,6 +10,10 @@ import (
 type QUICMuxSession struct {
 	streamCounter int64
 	quic.Session
+}
+
+func (q *QUICMuxSession) Ping() (time.Duration, error) {
+	return 0, nil
 }
 
 func (q *QUICMuxSession) CloseStream(stream MuxStream) error {

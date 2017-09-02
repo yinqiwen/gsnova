@@ -1,6 +1,7 @@
 package mux
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"log"
@@ -115,6 +116,15 @@ func (q *HTTP2MuxSession) OfferStream(stream io.ReadWriteCloser) error {
 		stream.Close()
 		return fmt.Errorf("Can NOT accept new stream")
 	}
+}
+
+func (q *HTTP2MuxSession) Ping() (time.Duration, error) {
+	start := time.Now()
+	if nil != q.h2Conn {
+		q.h2Conn.Ping(context.Background())
+		return time.Now().Sub(start), nil
+	}
+	return 0, nil
 }
 
 func (q *HTTP2MuxSession) OpenStream() (MuxStream, error) {

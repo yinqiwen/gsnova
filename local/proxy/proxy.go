@@ -28,6 +28,7 @@ type InternalEventMonitor func(code int, desc string) error
 
 type ProxyFeatureSet struct {
 	AutoExpire bool
+	Pingable   bool
 }
 
 type Proxy interface {
@@ -60,12 +61,7 @@ func InitialPMuxConfig(conf *ProxyChannelConfig) *pmux.Config {
 	cfg.CipherKey = []byte(GConf.Cipher.Key)
 	cfg.CipherMethod = mux.DefaultMuxCipherMethod
 	cfg.CipherInitialCounter = mux.DefaultMuxInitialCipherCounter
-	if conf.HeartBeatPeriod > 0 {
-		cfg.EnableKeepAlive = true
-		cfg.KeepAliveInterval = time.Duration(conf.HeartBeatPeriod) * time.Second
-	} else {
-		cfg.EnableKeepAlive = false
-	}
+	cfg.EnableKeepAlive = false
 	return cfg
 }
 
@@ -78,6 +74,7 @@ type muxSessionHolder struct {
 	p               Proxy
 	sessionMutex    sync.Mutex
 	conf            *ProxyChannelConfig
+	heatbeating     bool
 }
 
 func (s *muxSessionHolder) tryCloseRetiredSessions() {
@@ -126,6 +123,31 @@ func (s *muxSessionHolder) getNewStream() (mux.MuxStream, error) {
 	return s.muxSession.OpenStream()
 }
 
+func (s *muxSessionHolder) heartbeat(interval int) {
+	if s.heatbeating {
+		return
+	}
+	for {
+		s.heatbeating = true
+		select {
+		case <-time.After(time.Duration(interval) * time.Second):
+			s.sessionMutex.Lock()
+			session := s.muxSession
+			s.sessionMutex.Unlock()
+			if nil != session {
+				duration, err := session.Ping()
+				if err != nil {
+					log.Printf("[ERR]: Ping remote:%s failed: %v", s.server, err)
+					//s.exitErr(ErrKeepAliveTimeout)
+					//return
+				} else {
+					log.Printf("Cost %v to ping remote:%s", duration, s.server)
+				}
+			}
+		}
+	}
+}
+
 func (s *muxSessionHolder) init(lock bool) error {
 	if lock {
 		s.sessionMutex.Lock()
@@ -165,13 +187,16 @@ func (s *muxSessionHolder) init(lock bool) error {
 		s.creatTime = time.Now()
 		s.muxSession = session
 		features := s.p.Features()
-		if features.AutoExpire {
+		if features.AutoExpire && s.conf.ReconnectPeriod > 0 {
 			expireAfter := 1800
 			if s.conf.ReconnectPeriod > 0 {
 				expireAfter = helper.RandBetween(s.conf.ReconnectPeriod-s.conf.RCPRandomAdjustment, s.conf.ReconnectPeriod+s.conf.RCPRandomAdjustment)
 			}
 			log.Printf("Mux session woulde expired after %d seconds.", expireAfter)
 			s.expireTime = time.Now().Add(time.Duration(expireAfter) * time.Second)
+		}
+		if features.Pingable && s.conf.HeartBeatPeriod > 0 {
+			go s.heartbeat(s.conf.HeartBeatPeriod)
 		}
 		return nil
 	}

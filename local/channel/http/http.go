@@ -388,6 +388,7 @@ type HTTPProxy struct {
 func (p *HTTPProxy) Features() proxy.ProxyFeatureSet {
 	return proxy.ProxyFeatureSet{
 		AutoExpire: false,
+		Pingable:   true,
 	}
 }
 

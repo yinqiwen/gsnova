@@ -92,6 +92,7 @@ type MuxSession interface {
 	OpenStream() (MuxStream, error)
 	CloseStream(stream MuxStream) error
 	AcceptStream() (MuxStream, error)
+	Ping() (time.Duration, error)
 	NumStreams() int
 	Close() error
 }

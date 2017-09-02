@@ -19,6 +19,7 @@ type QUICProxy struct {
 func (p *QUICProxy) Features() proxy.ProxyFeatureSet {
 	return proxy.ProxyFeatureSet{
 		AutoExpire: true,
+		Pingable:   false,
 	}
 }
 
@@ -46,7 +47,10 @@ func (tc *QUICProxy) CreateMuxSession(server string, conf *proxy.ProxyChannelCon
 	if err != nil {
 		return nil, err
 	}
-	quicSession, err = quic.Dial(udpConn, udpAddr, hostport, &tls.Config{InsecureSkipVerify: true}, nil)
+	quicConfig := &quic.Config{
+		KeepAlive: true,
+	}
+	quicSession, err = quic.Dial(udpConn, udpAddr, hostport, &tls.Config{InsecureSkipVerify: true}, quicConfig)
 
 	if err != nil {
 		return nil, err

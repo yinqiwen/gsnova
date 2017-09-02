@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/url"
 	"sync"
+	"time"
 
 	"golang.org/x/crypto/ssh"
 
@@ -132,12 +133,17 @@ func (tc *sshMuxSession) Close() error {
 	return nil
 }
 
+func (tc *sshMuxSession) Ping() (time.Duration, error) {
+	return 0, nil
+}
+
 type SSHProxy struct {
 }
 
 func (p *SSHProxy) Features() proxy.ProxyFeatureSet {
 	return proxy.ProxyFeatureSet{
 		AutoExpire: true,
+		Pingable:   false,
 	}
 }
 

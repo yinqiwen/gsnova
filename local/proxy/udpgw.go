@@ -212,7 +212,7 @@ func getCid(sid uint32) (uint16, bool) {
 	return cid, exist
 }
 
-func handleUDPGatewayConn(localConn net.Conn, proxy ProxyConfig) {
+func handleUDPGatewayConn(localConn net.Conn, proxy *ProxyConfig) {
 	var proxyChannelName string
 	bufconn := bufio.NewReader(localConn)
 	var stream mux.MuxStream

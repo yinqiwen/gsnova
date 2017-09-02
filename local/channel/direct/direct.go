@@ -143,6 +143,9 @@ func (tc *directMuxSession) NumStreams() int {
 	defer tc.streamsMutex.Unlock()
 	return len(tc.streams)
 }
+func (tc *directMuxSession) Ping() (time.Duration, error) {
+	return 0, nil
+}
 
 func (tc *directMuxSession) Close() error {
 	tc.streamsMutex.Lock()
@@ -168,6 +171,7 @@ func (p *DirectProxy) CreateMuxSession(server string, conf *proxy.ProxyChannelCo
 func (p *DirectProxy) Features() proxy.ProxyFeatureSet {
 	return proxy.ProxyFeatureSet{
 		AutoExpire: false,
+		Pingable:   false,
 	}
 }
 

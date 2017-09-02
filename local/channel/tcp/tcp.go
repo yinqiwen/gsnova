@@ -13,6 +13,7 @@ type TcpProxy struct {
 func (p *TcpProxy) Features() proxy.ProxyFeatureSet {
 	return proxy.ProxyFeatureSet{
 		AutoExpire: true,
+		Pingable:   true,
 	}
 }
 

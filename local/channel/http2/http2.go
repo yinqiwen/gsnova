@@ -13,6 +13,7 @@ type HTTP2Proxy struct {
 func (p *HTTP2Proxy) Features() proxy.ProxyFeatureSet {
 	return proxy.ProxyFeatureSet{
 		AutoExpire: true,
+		Pingable:   true,
 	}
 }
 

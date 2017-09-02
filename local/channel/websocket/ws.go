@@ -16,6 +16,7 @@ type WebsocketProxy struct {
 func (p *WebsocketProxy) Features() proxy.ProxyFeatureSet {
 	return proxy.ProxyFeatureSet{
 		AutoExpire: true,
+		Pingable:   true,
 	}
 }
 
