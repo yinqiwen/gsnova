@@ -28,9 +28,6 @@
 		}
 	},
 
-    //Close idle proxy channels when no active proxy session if 'ChannelKeepAlive' is false
-	"ChannelKeepAlive": false,
-
     //used to handle admin command from http client    
     "Admin":{
     	//a local http server, do NOT expose this http server to public
@@ -98,7 +95,7 @@
 		    //Unit: second
 		    "ReadTimeout":15,
 		    //Reconnect after 120s
-		    "ReconnectPeriod": 30,
+		    "ReconnectPeriod": 300,
 		    //ReconnectPeriod rand adjustment, the real reconnect period is random value between [P - adjust, P + adjust] 
 		    "RCPRandomAdjustment" : 10,
 		    //Send heartbeat msg to keep alive 
@@ -117,7 +114,7 @@
 		    //Unit: second
 		    "ReadTimeout":15,
 		    //Reconnect after 120s
-		    "ReconnectPeriod": 1200,
+		    "ReconnectPeriod": 1800,
 		    //ReconnectPeriod rand adjustment, the real reconnect period is random value between [P - adjust, P + adjust] 
 		    "RCPRandomAdjustment" : 60,
 		    //Send heartbeat msg to keep alive 
