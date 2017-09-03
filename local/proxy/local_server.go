@@ -88,6 +88,9 @@ func serveProxyConn(conn net.Conn, proxy *ProxyConfig) {
 					sniChunkPeekSize = sniChunkPeekSize * 2
 					continue
 				} else {
+					if redirect, ok := GConf.SNI.redirect(sni); ok {
+						sni = redirect
+					}
 					log.Printf("Sniffed SNI:%s:%s for IP:%s:%s", sni, remotePort, remoteHost, remotePort)
 					remoteHost = sni
 					trySniffDomain = false

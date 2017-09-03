@@ -1,7 +1,7 @@
 {
     //this is just a example
 	"Log": ["stdout", "gsnova.log"],
-	"UserAgent":"Mozilla/5.0 (Windows NT 6.1; WOW64; rv:15.0) Gecko/20100101 Firefox/15.0.1",
+	"UserAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/60.0.3112.101 Safari/537.36",
 	//encrypt method can choose from none/auto/salsa20/chacha20poly1305/aes256-gcm
 	//'auto' method would choose fastest encrypt method for current env
 	"Cipher":{"Method":"auto", "Key":"809240d3a021449f6e67aa73221d42df942a308a"},
@@ -25,6 +25,14 @@
 		//since gsnova sniff SNI for https, 'Host' for http, return fake record for dns query would make it run faster for http/https traffic
 		"LocalDNSRecord":{
 			"*" : "111.111.111.111"
+		}
+	},
+
+	"SNI":{
+		//Used to redirect SNI host to another for sniffed SNI
+		"Redirect":{
+			//This fix "DF-DFERH-01" error in HW phone for google play 
+			"services.googleapis.cn":"services.googleapis.com"
 		}
 	},
 

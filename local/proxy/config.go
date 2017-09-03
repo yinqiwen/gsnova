@@ -357,6 +357,24 @@ func (gw *UDPGWConfig) matchDNS(domain string) string {
 	return ""
 }
 
+type SNIConfig struct {
+	Redirect map[string]string
+}
+
+func (sni *SNIConfig) redirect(domain string) (string, bool) {
+	for k, v := range sni.Redirect {
+		matched, err := filepath.Match(k, domain)
+		if nil != err {
+			log.Printf("Invalid pattern:%s with reason:%v", k, err)
+			continue
+		}
+		if matched {
+			return v, true
+		}
+	}
+	return "", false
+}
+
 type GFWListConfig struct {
 	URL      string
 	UserRule []string
@@ -370,6 +388,7 @@ type LocalConfig struct {
 	User      string
 	LocalDNS  LocalDNSConfig
 	UDPGW     UDPGWConfig
+	SNI       SNIConfig
 	Admin     AdminConfig
 	GFWList   GFWListConfig
 	Proxy     []ProxyConfig
