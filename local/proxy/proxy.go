@@ -139,6 +139,9 @@ func (s *muxSessionHolder) heartbeat(interval int) {
 				if err != nil {
 					log.Printf("[ERR]: Ping remote:%s failed: %v", s.server, err)
 					//s.exitErr(ErrKeepAliveTimeout)
+					if err == pmux.ErrSessionShutdown {
+						s.close()
+					}
 					//return
 				} else {
 					log.Printf("Cost %v to ping remote:%s", duration, s.server)
