@@ -134,6 +134,11 @@ func (tc *sshMuxSession) Close() error {
 }
 
 func (tc *sshMuxSession) Ping() (time.Duration, error) {
+	if nil != tc.sshClient {
+		start := time.Now()
+		_, _, err := tc.sshClient.SendRequest("ping", true, nil)
+		return time.Now().Sub(start), err
+	}
 	return 0, nil
 }
 
@@ -143,7 +148,7 @@ type SSHProxy struct {
 func (p *SSHProxy) Features() proxy.ProxyFeatureSet {
 	return proxy.ProxyFeatureSet{
 		AutoExpire: true,
-		Pingable:   false,
+		Pingable:   true,
 	}
 }
 
