@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -18,14 +19,17 @@ import (
 var proxyServerRunning = true
 
 var runningProxyStreamCount int64
+var runningProxyConns sync.Map
 
 func serveProxyConn(conn net.Conn, proxy *ProxyConfig) {
 	var proxyChannelName string
 	protocol := "tcp"
 	localConn := conn
 	atomic.AddInt64(&runningProxyStreamCount, 1)
+	runningProxyConns.Store(conn, true)
 	defer localConn.Close()
 	defer atomic.AddInt64(&runningProxyStreamCount, -1)
+	defer runningProxyConns.Delete(conn)
 
 	remoteHost := ""
 	remotePort := ""
@@ -211,6 +215,7 @@ START:
 		for {
 			if nil != proxyReq {
 				proxyReq.Header.Del("Proxy-Connection")
+				proxyReq.Header.Del("Proxy-Authorization")
 				err = proxyReq.Write(streamWriter)
 				if nil != err {
 					log.Printf("Failed to write http request for reason:%v", err)
@@ -283,4 +288,11 @@ func stopLocalServers() {
 	}
 	//closeAllProxySession()
 	closeAllUDPSession()
+	runningProxyConns.Range(func(key, value interface{}) bool {
+		conn := key.(net.Conn)
+		if nil != conn {
+			conn.Close()
+		}
+		return true
+	})
 }
