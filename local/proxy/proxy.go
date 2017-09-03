@@ -143,6 +143,8 @@ func (s *muxSessionHolder) heartbeat(interval int) {
 				} else {
 					log.Printf("Cost %v to ping remote:%s", duration, s.server)
 				}
+			} else {
+				s.init(true)
 			}
 		}
 	}
@@ -180,7 +182,7 @@ func (s *muxSessionHolder) init(lock bool) error {
 		if psession, ok := session.(*mux.ProxyMuxSession); ok {
 			err = psession.Session.ResetCryptoContext(cipherMethod, counter)
 			if nil != err {
-				log.Printf("[ERROR]Failed to reset cipher context with reason:%v", err)
+				log.Printf("[ERROR]Failed to reset cipher context with reason:%v, while cipher method:%s", err, cipherMethod)
 				return err
 			}
 		}
@@ -212,14 +214,18 @@ type proxyChannel struct {
 	//proxies  map[Proxy]map[string]bool
 }
 
-func (ch *proxyChannel) createMuxSessionByProxy(p Proxy, server string) (*muxSessionHolder, error) {
+func (ch *proxyChannel) createMuxSessionByProxy(p Proxy, server string, init bool) (*muxSessionHolder, error) {
 	holder := &muxSessionHolder{
 		conf:            &ch.Conf,
 		p:               p,
 		server:          server,
 		retiredSessions: make(map[mux.MuxSession]bool),
 	}
-	err := holder.init(true)
+	var err error
+	if init {
+		err = holder.init(true)
+	}
+
 	if nil == err {
 		ch.sessions[holder] = true
 		return holder, nil
@@ -245,6 +251,44 @@ func (ch *proxyChannel) getMuxStream() (stream mux.MuxStream, err error) {
 	return
 }
 
+func (ch *proxyChannel) init() bool {
+	conf := &ch.Conf
+	success := false
+	for _, server := range conf.ServerList {
+		u, err := url.Parse(server)
+		if nil != err {
+			log.Printf("Invalid server url:%s with reason:%v", server, err)
+			continue
+		}
+		schema := strings.ToLower(u.Scheme)
+		if t, ok := proxyTypeTable[schema]; !ok {
+			log.Printf("[ERROR]No registe proxy for schema:%s", schema)
+			continue
+		} else {
+			v := reflect.New(t)
+			p := v.Interface().(Proxy)
+			for i := 0; i < conf.ConnsPerServer; i++ {
+				_, err := ch.createMuxSessionByProxy(p, server, i == 0)
+				if nil != err {
+					log.Printf("[ERROR]Failed to create mux session for %s:%d with reason:%v", server, i, err)
+					break
+				} else {
+					success = true
+				}
+			}
+		}
+	}
+	if success {
+		log.Printf("Proxy channel:%s init success", conf.Name)
+		proxyChannelMutex.Lock()
+		proxyChannelTable[conf.Name] = ch
+		proxyChannelMutex.Unlock()
+	} else {
+		log.Printf("[ERROR]Proxy channel:%s init failed", conf.Name)
+	}
+	return success
+}
+
 func newProxyChannel() *proxyChannel {
 	channel := &proxyChannel{}
 	channel.sessions = make(map[*muxSessionHolder]bool)
@@ -264,9 +308,9 @@ func RegisterProxyType(str string, p Proxy) error {
 }
 
 func getMuxStreamByChannel(name string) (mux.MuxStream, *ProxyChannelConfig, error) {
-	proxyChannelMutex.Lock()
+
 	pch, exist := proxyChannelTable[name]
-	proxyChannelMutex.Unlock()
+
 	if !exist {
 		return nil, nil, fmt.Errorf("No proxy found to get mux session")
 	}
@@ -285,7 +329,7 @@ func loadConf(conf string) error {
 		if nil != err {
 			fmt.Printf("Failed to unmarshal json:%s to config for reason:%v", string(confdata), err)
 		}
-		return err
+		return GConf.init()
 	}
 	err := hosts.Init(conf)
 	if nil != err {
@@ -317,6 +361,7 @@ func Start(home string, monitor InternalEventMonitor) error {
 	}
 	clientConf := home + "/" + clientConfName
 	hostsConf := home + "/" + hostsConfName
+	proxyHome = home
 	confWatcher.Add(clientConf)
 	confWatcher.Add(hostsConf)
 	go watchConf(confWatcher)
@@ -326,51 +371,26 @@ func Start(home string, monitor InternalEventMonitor) error {
 		return err
 	}
 	loadConf(hostsConf)
-
-	proxyHome = home
-	GConf.init()
 	logger.InitLogger(GConf.Log)
 	go initDNS()
 
 	log.Printf("Allowed proxy channel with schema:%v", allowedSchema())
+	singalCh := make(chan bool, len(GConf.Channel))
+	channelCount := 0
 	for _, conf := range GConf.Channel {
 		if !conf.Enable {
 			continue
 		}
 		channel := newProxyChannel()
 		channel.Conf = conf
-		success := false
-
-		for _, server := range conf.ServerList {
-			u, err := url.Parse(server)
-			if nil != err {
-				log.Printf("Invalid server url:%s with reason:%v", server, err)
-				continue
-			}
-			schema := strings.ToLower(u.Scheme)
-			if t, ok := proxyTypeTable[schema]; !ok {
-				log.Printf("[ERROR]No registe proxy for schema:%s", schema)
-				continue
-			} else {
-				v := reflect.New(t)
-				p := v.Interface().(Proxy)
-				for i := 0; i < conf.ConnsPerServer; i++ {
-					_, err := channel.createMuxSessionByProxy(p, server)
-					if nil != err {
-						log.Printf("[ERROR]Failed to create mux session for %s:%d with reason:%v", server, i, err)
-						break
-					} else {
-						success = true
-					}
-				}
-			}
-		}
-		if success {
-			log.Printf("Proxy channel:%s init success", conf.Name)
-			proxyChannelTable[conf.Name] = channel
-		} else {
-			log.Printf("Proxy channel:%s init failed", conf.Name)
-		}
+		channelCount++
+		go func() {
+			channel.init()
+			singalCh <- true
+		}()
+	}
+	for i := 0; i < channelCount; i++ {
+		<-singalCh
 	}
 
 	//add direct channel
@@ -387,7 +407,7 @@ func Start(home string, monitor InternalEventMonitor) error {
 
 func Stop() error {
 	stopLocalServers()
-	proxyChannelMutex.Lock()
+	//proxyChannelMutex.Lock()
 	for _, pch := range proxyChannelTable {
 		for holder := range pch.sessions {
 			if nil != holder {
@@ -396,7 +416,7 @@ func Stop() error {
 		}
 	}
 	proxyChannelTable = make(map[string]*proxyChannel)
-	proxyChannelMutex.Unlock()
+	//proxyChannelMutex.Unlock()
 	hosts.Clear()
 	if nil != cnIPRange {
 		cnIPRange.Clear()

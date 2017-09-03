@@ -235,6 +235,7 @@ func NewGFWList(u string, hc *http.Client, userRules []string, cacheFile string,
 			if nil != err {
 				return "", err
 			}
+			log.Printf("Fetch latest GFWList success at %s", cacheFile)
 			fetchFromRemote = true
 			gfwlistContent = string(plainTxt)
 			if len(userRules) > 0 {

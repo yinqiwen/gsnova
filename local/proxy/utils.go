@@ -7,6 +7,8 @@ import (
 	"net/url"
 	"sync"
 	"time"
+
+	"github.com/yinqiwen/gsnova/common/gfwlist"
 )
 
 var httpClientMap sync.Map
@@ -46,7 +48,56 @@ func NewHTTPClient(conf *ProxyChannelConfig) (*http.Client, error) {
 	return hc, nil
 }
 
-// func FillNOnce(auth *event.AuthEvent, nonceLen int) {
-// 	auth.NOnce = make([]byte, nonceLen)
-// 	io.ReadFull(rand.Reader, auth.NOnce)
-// }
+var syncGFWListTaskRunning = false
+var syncIPRangeTaskRunning = false
+
+func syncGFWList() {
+	if syncGFWListTaskRunning {
+		return
+	}
+	syncGFWListTaskRunning = true
+	hc, _ := NewHTTPClient(&ProxyChannelConfig{Proxy: GConf.GFWList.Proxy})
+	hc.Timeout = 30 * time.Second
+	dst := proxyHome + "/gfwlist.txt"
+	tmp, err := gfwlist.NewGFWList(GConf.GFWList.URL, hc, GConf.GFWList.UserRule, dst, true)
+	if nil == err {
+		mygfwlist = tmp
+	} else {
+		log.Printf("[ERROR]Failed to create gfwlist  for reason:%v", err)
+	}
+}
+
+func syncIPRangeFile() {
+	if syncIPRangeTaskRunning {
+		return
+	}
+	syncIPRangeTaskRunning = true
+	iprangeFile := proxyHome + "/" + cnIPFile
+	ipHolder, err := parseApnicIPFile(iprangeFile)
+	nextFetchTime := 1 * time.Second
+	if nil == err {
+		cnIPRange = ipHolder
+		nextFetchTime = 1 * time.Minute
+	}
+	var hc *http.Client
+	for {
+		select {
+		case <-time.After(nextFetchTime):
+			if nil == hc {
+				hc, err = NewHTTPClient(&ProxyChannelConfig{})
+				hc.Timeout = 15 * time.Second
+			}
+			if nil != hc {
+				ipHolder, err = getCNIPRangeHolder(hc)
+				if nil != err {
+					log.Printf("[ERROR]Failed to fetch CNIP file:%v", err)
+					nextFetchTime = 1 * time.Second
+				} else {
+					log.Printf("Fetch latest IP range file success at %s", iprangeFile)
+					nextFetchTime = 24 * time.Hour
+					cnIPRange = ipHolder
+				}
+			}
+		}
+	}
+}

@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"time"
 
 	"github.com/yinqiwen/gsnova/common/gfwlist"
 	"github.com/yinqiwen/gsnova/common/helper"
@@ -393,50 +392,11 @@ func (cfg *LocalConfig) init() error {
 			}
 		}
 	}
-
 	if gfwlistEnable {
-		go func() {
-			hc, _ := NewHTTPClient(&ProxyChannelConfig{Proxy: cfg.GFWList.Proxy})
-			hc.Timeout = 15 * time.Second
-			dst := proxyHome + "/gfwlist.txt"
-			tmp, err := gfwlist.NewGFWList(cfg.GFWList.URL, hc, cfg.GFWList.UserRule, dst, true)
-			if nil == err {
-				mygfwlist = tmp
-			} else {
-				log.Printf("[ERROR]Failed to create gfwlist  for reason:%v", err)
-			}
-		}()
+		go syncGFWList()
 	}
 	if cnIPEnable {
-		go func() {
-			iprangeFile := proxyHome + "/" + cnIPFile
-			ipHolder, err := parseApnicIPFile(iprangeFile)
-			nextFetchTime := 1 * time.Second
-			if nil == err {
-				cnIPRange = ipHolder
-				nextFetchTime = 1 * time.Minute
-			}
-			var hc *http.Client
-			for {
-				select {
-				case <-time.After(nextFetchTime):
-					if nil == hc {
-						hc, err = NewHTTPClient(&ProxyChannelConfig{})
-						hc.Timeout = 15 * time.Second
-					}
-					if nil != hc {
-						ipHolder, err = getCNIPRangeHolder(hc)
-						if nil != err {
-							log.Printf("[ERROR]Failed to fetch CNIP file:%v", err)
-							nextFetchTime = 1 * time.Second
-						} else {
-							nextFetchTime = 24 * time.Hour
-							cnIPRange = ipHolder
-						}
-					}
-				}
-			}
-		}()
+		go syncIPRangeFile()
 	}
 
 	switch GConf.Cipher.Method {
