@@ -6,7 +6,9 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/common-nighthawk/go-figure"
 	"github.com/yinqiwen/gsnova/common/logger"
+	"github.com/yinqiwen/gsnova/local"
 	"github.com/yinqiwen/gsnova/local/gsnova"
 )
 
@@ -19,6 +21,9 @@ func main() {
 	home, _ := filepath.Split(path)
 	dir := flag.String("dir", home, "Specify running dir for gsnova")
 	flag.Parse()
+
+	myFigure := figure.NewFigure(fmt.Sprintf("GSNOVA CLIENT %s", local.Version), "", true)
+	myFigure.Print()
 
 	err = gsnova.StartLocalProxy(*dir, nil)
 	if nil != err {
