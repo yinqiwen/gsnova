@@ -99,7 +99,7 @@ func (kcfg *KCPConfig) initDefaultConf() {
 	kcfg.RcvWnd = 512
 	kcfg.DataShard = 10
 	kcfg.ParityShard = 3
-	kcfg.DSCP = 30
+	kcfg.DSCP = 0
 	kcfg.AckNodelay = true
 	kcfg.NoDelay = 0
 	kcfg.Interval = 50

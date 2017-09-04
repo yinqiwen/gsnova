@@ -34,7 +34,7 @@ func (ws *WebsocketProxy) CreateMuxSession(server string, conf *proxy.ProxyChann
 		logger.Notice("dial websocket error:%v", err)
 		return nil, err
 	}
-	logger.Info("Connect %s success.", server)
+	logger.Debug("Connect %s success.", server)
 	ps, err := pmux.Client(&mux.WsConn{Conn: c}, proxy.InitialPMuxConfig(conf))
 	if nil != err {
 		return nil, err

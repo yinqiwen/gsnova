@@ -69,7 +69,7 @@ func (tc *KCPProxy) CreateMuxSession(server string, conf *proxy.ProxyChannelConf
 	kcpconn.SetACKNoDelay(conf.KCP.AckNodelay)
 
 	if err := kcpconn.SetDSCP(conf.KCP.DSCP); err != nil {
-		logger.Notice("SetDSCP:%v", err)
+		logger.Notice("SetDSCP:%v with value:%v", err, conf.KCP.DSCP)
 	}
 	if err := kcpconn.SetReadBuffer(conf.KCP.SockBuf); err != nil {
 		logger.Notice("SetReadBuffer:%v", err)
