@@ -5,7 +5,6 @@ import (
 	"context"
 	"io"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -13,6 +12,7 @@ import (
 	"time"
 
 	"github.com/yinqiwen/gsnova/common/helper"
+	"github.com/yinqiwen/gsnova/common/logger"
 	"github.com/yinqiwen/gsnova/common/mux"
 	"github.com/yinqiwen/gsnova/local/proxy"
 	"github.com/yinqiwen/pmux"
@@ -122,7 +122,7 @@ func (h *httpDuplexConn) testChunkPush() {
 	response, err := h.client.Do(req)
 	if nil != err || response.StatusCode != 200 {
 		h.chunkPushSupported = false
-		log.Printf("Server:%s do NOT support chunked transfer encoding request.", h.server)
+		logger.Notice("Server:%s do NOT support chunked transfer encoding request.", h.server)
 		return
 	}
 	if nil != response.Body {
@@ -130,7 +130,7 @@ func (h *httpDuplexConn) testChunkPush() {
 	}
 	h.chunkPushSupported = true
 	h.newChunkPushBody()
-	log.Printf("Server:%s support chunked transfer encoding request.", h.server)
+	logger.Notice("Server:%s support chunked transfer encoding request.", h.server)
 }
 
 func (h *httpDuplexConn) init(server string, pushRateLimit int) error {
@@ -181,7 +181,7 @@ func (h *httpDuplexConn) chunkPush() {
 
 	for h.running {
 		h.pushLimiter.Wait(context.TODO())
-		log.Printf("HTTP start chunked push for %v with id:%s", h.pushurl, h.id)
+		logger.Debug("HTTP start chunked push for %v with id:%s", h.pushurl, h.id)
 		req := h.buildHTTPReq(h.pushurl, h.chunkPushBody)
 		req.ContentLength = -1
 		restartChunkPushTimer = time.NewTimer(time.Duration(h.conf.ReconnectPeriod) * time.Second)
@@ -196,7 +196,7 @@ func (h *httpDuplexConn) chunkPush() {
 		}()
 		res, err := h.client.Do(req)
 		if nil != res && res.StatusCode == 401 {
-			log.Printf("Failed to chunk push to HTTP server for response:%v", res)
+			logger.Notice("Failed to chunk push to HTTP server for response:%v", res)
 			h.Close()
 			return
 		}
@@ -222,12 +222,12 @@ func (h *httpDuplexConn) pull() {
 		req.Header.Set(mux.HTTPMuxPullPeriodHeader, strconv.Itoa(h.conf.ReconnectPeriod))
 		response, err := h.client.Do(req)
 		if nil != err {
-			log.Printf("Failed to write data to HTTP server for reason:%v", err)
+			logger.Notice("Failed to write data to HTTP server for reason:%v", err)
 			time.Sleep(1 * time.Second)
 			continue
 		}
 		if response.StatusCode == 401 { //try once more
-			log.Printf("Failed to pull data from HTTP server for response:%v", response)
+			logger.Notice("Failed to pull data from HTTP server for response:%v", response)
 			h.Close()
 			return
 		}
@@ -274,7 +274,7 @@ func (h *httpDuplexConn) push() {
 		if len(frs) == 0 {
 			frs, err = readFrames()
 			if nil != err {
-				log.Printf("[ERR] pmux: Failed to write frames: %v", err)
+				logger.Notice("[ERR] Failed to read frames: %v", err)
 				break
 			}
 		}
@@ -300,7 +300,7 @@ func (h *httpDuplexConn) push() {
 				response, err := h.client.Do(req)
 				h.setAckId(response)
 				if nil != err || response.StatusCode != 200 { //try once more
-					log.Printf("Failed to write data to HTTP server:%s for reason:%v or res:%v", h.pushurl.String(), err, response)
+					logger.Notice("Failed to write data to HTTP server:%s for reason:%v or res:%v", h.pushurl.String(), err, response)
 					if nil != response && response.StatusCode == 401 {
 						h.Close()
 						return

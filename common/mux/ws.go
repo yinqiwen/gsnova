@@ -3,9 +3,9 @@ package mux
 import (
 	"bytes"
 	"io"
-	"log"
 
 	"github.com/gorilla/websocket"
+	"github.com/yinqiwen/gsnova/common/logger"
 )
 
 type WsConn struct {
@@ -20,7 +20,7 @@ func (ws *WsConn) Write(p []byte) (int, error) {
 	}
 	err := c.WriteMessage(websocket.BinaryMessage, p)
 	if nil != err {
-		log.Printf("Failed to write websocket binary messgage:%v", err)
+		logger.Error("Failed to write websocket binary messgage:%v", err)
 		return 0, err
 	}
 	return len(p), nil
@@ -47,7 +47,7 @@ func (ws *WsConn) Read(p []byte) (int, error) {
 		ws.readbuf.Write(data)
 		return ws.readbuf.Read(p)
 	default:
-		log.Printf("Invalid websocket message type")
+		logger.Error("Invalid websocket message type:%d", mt)
 		return 0, io.EOF
 	}
 }

@@ -11,7 +11,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"math"
 	"math/big"
 	"net"
@@ -21,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yinqiwen/gsnova/common/logger"
 	"github.com/yinqiwen/gsnova/common/netx"
 )
 
@@ -244,7 +244,7 @@ func HTTPProxyConnect(proxyURL *url.URL, c net.Conn, addr string) error {
 	if err != nil {
 		var tmp bytes.Buffer
 		connReq.Write(&tmp)
-		log.Printf("CONNECT %v error with request %s", proxyURL, string(tmp.Bytes()))
+		logger.Error("CONNECT %v error with request %s", proxyURL, string(tmp.Bytes()))
 		return err
 	}
 	if nil != connRes.Body {
@@ -464,7 +464,7 @@ func GetLocalIPv4() []string {
 	}
 	addrs, err := net.InterfaceAddrs()
 	if err != nil {
-		log.Printf("[ERROR]Failed to get local ip:%v", err)
+		logger.Error("[ERROR]Failed to get local ip:%v", err)
 		return localIPv4
 	}
 	for _, a := range addrs {

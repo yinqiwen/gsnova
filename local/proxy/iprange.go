@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"os"
 	"sort"
@@ -14,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/yinqiwen/gsnova/common/helper"
+	"github.com/yinqiwen/gsnova/common/logger"
 )
 
 var errIPRangeNotMatch = errors.New("No ip range could match the ip")
@@ -60,7 +60,7 @@ func (h *IPRangeHolder) sort() {
 func (h *IPRangeHolder) FindCountry(ip string) (string, error) {
 	v, err := helper.IPv42Int(ip)
 	if nil != err {
-		log.Printf("Failed to convert ip to int for reason:%v", err)
+		logger.Error("Failed to convert ip to int for reason:%v", err)
 		return "z2", err
 	}
 
@@ -74,12 +74,12 @@ func (h *IPRangeHolder) FindCountry(ip string) (string, error) {
 	}
 	if index > 0 {
 		if h.ranges[index].Start == uint64(v) && h.ranges[index].End >= uint64(v) {
-			log.Printf("%s match ip range %s-%s", ip, helper.Long2IPv4(h.ranges[index].Start), helper.Long2IPv4(h.ranges[index].End))
+			logger.Debug("%s match ip range %s-%s", ip, helper.Long2IPv4(h.ranges[index].Start), helper.Long2IPv4(h.ranges[index].End))
 			return h.ranges[index].Country, nil
 		}
 		if index > 0 {
 			if h.ranges[index-1].Start <= uint64(v) && h.ranges[index-1].End >= uint64(v) {
-				log.Printf("%s match ip range %s-%s", ip, helper.Long2IPv4(h.ranges[index-1].Start), helper.Long2IPv4(h.ranges[index-1].End))
+				logger.Debug("%s match ip range %s-%s", ip, helper.Long2IPv4(h.ranges[index-1].Start), helper.Long2IPv4(h.ranges[index-1].End))
 				return h.ranges[index-1].Country, nil
 			}
 		}
@@ -109,7 +109,7 @@ func parseApnicIPReader(rc io.ReadCloser, persist bool) (*IPRangeHolder, error) 
 		if nil == err {
 			defer perststFile.Close()
 		} else {
-			log.Printf("[ERROR]Failed to open CN IP file:%v", err)
+			logger.Error("[ERROR]Failed to open CN IP file:%v", err)
 		}
 	}
 	for {

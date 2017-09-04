@@ -3,7 +3,6 @@ package proxy
 import (
 	"errors"
 	"fmt"
-	"log"
 	"math/rand"
 	"net"
 	"net/http"
@@ -12,6 +11,7 @@ import (
 
 	"github.com/hashicorp/golang-lru"
 	"github.com/miekg/dns"
+	"github.com/yinqiwen/gsnova/common/logger"
 	"github.com/yinqiwen/gsnova/common/netx"
 )
 
@@ -113,14 +113,14 @@ func dnsQuery(r *dns.Msg, viaGW bool) (*dns.Msg, error) {
 			}
 		}
 	} else {
-		log.Printf("###DNS with %v", r.Question)
+		logger.Debug("###DNS with %v", r.Question)
 	}
 	if len(dnsServers) == 0 {
 		dnsServers = GConf.LocalDNS.TrustedDNS
 		useTrustedDNS = true
 	}
 	if len(dnsServers) == 0 {
-		log.Printf("At least one DNS server need to be configured in 'FastDNS/TrustedDNS'")
+		logger.Debug("At least one DNS server need to be configured in 'FastDNS/TrustedDNS'")
 		return nil, errNoDNServer
 	}
 	server := selectDNSServer(dnsServers)
@@ -128,7 +128,7 @@ func dnsQuery(r *dns.Msg, viaGW bool) (*dns.Msg, error) {
 	if GConf.LocalDNS.TCPConnect && useTrustedDNS {
 		network = "tcp"
 	}
-	log.Printf("DNS query %s to %s", domain, server)
+	logger.Debug("DNS query %s to %s", domain, server)
 	for retry := 0; retry < 3; retry++ {
 		c, err := netx.DialTimeout(network, server, 1*time.Second)
 		if nil != err {
@@ -203,7 +203,7 @@ func DnsGetDoaminIP(domain string) (string, error) {
 func proxyDNS(w dns.ResponseWriter, r *dns.Msg) {
 	dnsres, err := dnsQuery(r, false)
 	if nil != err {
-		log.Printf("DNS query error:%v", err)
+		logger.Error("DNS query error:%v", err)
 		return
 	}
 	if nil != dnsres {
@@ -218,7 +218,7 @@ func initDNS() {
 	if len(GConf.LocalDNS.Listen) > 0 {
 		err := dns.ListenAndServe(GConf.LocalDNS.Listen, "udp", dns.HandlerFunc(proxyDNS))
 		if nil != err {
-			log.Printf("Failed to start dns server:%v", err)
+			logger.Error("Failed to start dns server:%v", err)
 		}
 	}
 }

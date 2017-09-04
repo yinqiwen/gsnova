@@ -3,7 +3,6 @@ package http
 import (
 	"bytes"
 	"io"
-	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -12,6 +11,7 @@ import (
 	"time"
 
 	"github.com/yinqiwen/gsnova/common/helper"
+	"github.com/yinqiwen/gsnova/common/logger"
 	"github.com/yinqiwen/gsnova/common/mux"
 	"github.com/yinqiwen/gsnova/remote"
 	"github.com/yinqiwen/pmux"
@@ -91,7 +91,7 @@ func (h *httpDuplexServConn) init(id string) error {
 			if time.Now().Sub(h.lastActiveIOTime) > 2*time.Minute {
 				h.checkAliveTicker.Stop()
 				h.Close()
-				log.Printf("Stop http duplex conn:%s since it's not active since %v ago", h.id, time.Now().Sub(h.lastActiveIOTime))
+				logger.Debug("Stop http duplex conn:%s since it's not active since %v ago", h.id, time.Now().Sub(h.lastActiveIOTime))
 				return
 			}
 		}
@@ -239,14 +239,14 @@ func httpTest(w http.ResponseWriter, r *http.Request) {
 func HTTPInvoke(w http.ResponseWriter, r *http.Request) {
 	id := r.Header.Get(mux.HTTPMuxSessionIDHeader)
 	if len(id) == 0 {
-		log.Printf("Invalid header with no session id:%v", r)
+		logger.Debug("Invalid header with no session id:%v", r)
 		return
 	}
 	c, create := getHttpDuplexServConnByID(id, true)
 	if create {
 		if len(r.Header.Get(mux.HTTPMuxSessionACKIDHeader)) > 0 {
 			w.WriteHeader(401)
-			log.Printf("###ERR1 : %s", r.Header.Get(mux.HTTPMuxSessionACKIDHeader))
+			logger.Error("###ERR1 : %s", r.Header.Get(mux.HTTPMuxSessionACKIDHeader))
 			return
 		}
 		session, err := pmux.Server(c, remote.InitialPMuxConfig())
@@ -264,12 +264,12 @@ func HTTPInvoke(w http.ResponseWriter, r *http.Request) {
 	ackID := r.Header.Get(mux.HTTPMuxSessionACKIDHeader)
 	if len(ackID) > 0 && ackID != c.ackID {
 		w.WriteHeader(401)
-		log.Printf("###ERR2 : %s %s", r.Header.Get(mux.HTTPMuxSessionACKIDHeader), c.ackID)
+		logger.Error("###ERR2 : %s %s", r.Header.Get(mux.HTTPMuxSessionACKIDHeader), c.ackID)
 		return
 	}
 	w.Header().Set(mux.HTTPMuxSessionACKIDHeader, c.ackID)
 	if strings.HasSuffix(r.URL.Path, "pull") {
-		log.Printf("HTTP server recv pull for id:%s", id)
+		logger.Debug("HTTP server recv pull for id:%s", id)
 		period, _ := strconv.Atoi(r.Header.Get("X-PullPeriod"))
 		if period <= 0 {
 			period = 30
@@ -286,14 +286,14 @@ func HTTPInvoke(w http.ResponseWriter, r *http.Request) {
 		select {
 		case <-timeout:
 			c.closeWrite()
-			log.Printf("HTTP server close pull for id:%s", id)
+			logger.Notice("HTTP server close pull for id:%s", id)
 			return
 		case <-c.closeNotifyCh:
 			timer.Stop()
 			w.WriteHeader(401)
-			log.Printf("HTTP server close pull for id:%s close ", id)
+			logger.Debug("HTTP server close pull for id:%s close ", id)
 		case <-stopByOther:
-			log.Printf("HTTP server recv pull id:%s stop by other pull", id)
+			logger.Debug("HTTP server recv pull id:%s stop by other pull", id)
 			timer.Stop()
 			return
 		}

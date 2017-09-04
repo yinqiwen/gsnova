@@ -1,9 +1,8 @@
 package kcp
 
 import (
-	"log"
-
 	kcp "github.com/xtaci/kcp-go"
+	"github.com/yinqiwen/gsnova/common/logger"
 	"github.com/yinqiwen/gsnova/common/mux"
 	"github.com/yinqiwen/gsnova/remote"
 	"github.com/yinqiwen/pmux"
@@ -14,20 +13,20 @@ func StartKCPProxyServer(addr string) error {
 	block, _ := kcp.NewNoneBlockCrypt(nil)
 	lis, err := kcp.ListenWithOptions(addr, block, config.DataShard, config.ParityShard)
 	if nil != err {
-		log.Printf("[ERROR]Failed to listen KCP address:%s with reason:%v", addr, err)
+		logger.Error("[ERROR]Failed to listen KCP address:%s with reason:%v", addr, err)
 		return err
 	}
 
 	if err := lis.SetDSCP(config.DSCP); err != nil {
-		log.Println("SetDSCP:", err)
+		logger.Debug("SetDSCP:%v", err)
 	}
 	if err := lis.SetReadBuffer(config.SockBuf); err != nil {
-		log.Println("SetReadBuffer:", err)
+		logger.Debug("SetReadBuffer:%v", err)
 	}
 	if err := lis.SetWriteBuffer(config.SockBuf); err != nil {
-		log.Println("SetWriteBuffer:", err)
+		logger.Debug("SetWriteBuffer:%v", err)
 	}
-	log.Printf("Listen on KCP address:%s", addr)
+	logger.Info("Listen on KCP address:%s", addr)
 	servKCP(lis)
 	return nil
 }
@@ -47,7 +46,7 @@ func servKCP(lp *kcp.Listener) {
 		conn.SetACKNoDelay(config.AckNodelay)
 		session, err := pmux.Server(conn, remote.InitialPMuxConfig())
 		if nil != err {
-			log.Printf("[ERROR]Failed to create mux session for tcp server with reason:%v", err)
+			logger.Error("[ERROR]Failed to create mux session for tcp server with reason:%v", err)
 			continue
 		}
 		muxSession := &mux.ProxyMuxSession{Session: session}

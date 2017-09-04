@@ -1,11 +1,11 @@
 package kcp
 
 import (
-	"log"
 	"net"
 	"net/url"
 
 	kcp "github.com/xtaci/kcp-go"
+	"github.com/yinqiwen/gsnova/common/logger"
 	"github.com/yinqiwen/gsnova/common/mux"
 	"github.com/yinqiwen/gsnova/common/netx"
 	"github.com/yinqiwen/gsnova/local/proxy"
@@ -69,19 +69,19 @@ func (tc *KCPProxy) CreateMuxSession(server string, conf *proxy.ProxyChannelConf
 	kcpconn.SetACKNoDelay(conf.KCP.AckNodelay)
 
 	if err := kcpconn.SetDSCP(conf.KCP.DSCP); err != nil {
-		log.Println("SetDSCP:", err)
+		logger.Notice("SetDSCP:%v", err)
 	}
 	if err := kcpconn.SetReadBuffer(conf.KCP.SockBuf); err != nil {
-		log.Println("SetReadBuffer:", err)
+		logger.Notice("SetReadBuffer:%v", err)
 	}
 	if err := kcpconn.SetWriteBuffer(conf.KCP.SockBuf); err != nil {
-		log.Println("SetWriteBuffer:", err)
+		logger.Notice("SetWriteBuffer:%v", err)
 	}
 	session, err := pmux.Client(kcpconn, proxy.InitialPMuxConfig(conf))
 	if nil != err {
 		return nil, err
 	}
-	log.Printf("Connect %s success.", server)
+	logger.Debug("Connect %s success.", server)
 	return &mux.ProxyMuxSession{Session: session}, nil
 }
 

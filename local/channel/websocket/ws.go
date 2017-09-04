@@ -1,10 +1,10 @@
 package websocket
 
 import (
-	"log"
 	"net/url"
 
 	"github.com/gorilla/websocket"
+	"github.com/yinqiwen/gsnova/common/logger"
 	"github.com/yinqiwen/gsnova/common/mux"
 	"github.com/yinqiwen/gsnova/local/proxy"
 	"github.com/yinqiwen/pmux"
@@ -31,10 +31,10 @@ func (ws *WebsocketProxy) CreateMuxSession(server string, conf *proxy.ProxyChann
 	wsDialer.TLSClientConfig = proxy.NewTLSConfig(conf)
 	c, _, err := wsDialer.Dial(u.String(), nil)
 	if err != nil {
-		log.Printf("dial websocket error:%v", err)
+		logger.Notice("dial websocket error:%v", err)
 		return nil, err
 	}
-	log.Printf("Connect %s success.", server)
+	logger.Info("Connect %s success.", server)
 	ps, err := pmux.Client(&mux.WsConn{Conn: c}, proxy.InitialPMuxConfig(conf))
 	if nil != err {
 		return nil, err

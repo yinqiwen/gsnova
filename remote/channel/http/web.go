@@ -3,11 +3,11 @@ package http
 import (
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"strings"
 
 	"github.com/yinqiwen/gotoolkit/ots"
+	"github.com/yinqiwen/gsnova/common/logger"
 	"github.com/yinqiwen/gsnova/remote"
 	"github.com/yinqiwen/gsnova/remote/channel/websocket"
 )
@@ -38,10 +38,10 @@ func StartHTTPProxyServer(listenAddr string) {
 	mux.HandleFunc("/http/push", HTTPInvoke)
 	mux.HandleFunc("/http/test", httpTest)
 
-	log.Printf("Listen on HTTP address:%s", listenAddr)
+	logger.Info("Listen on HTTP address:%s", listenAddr)
 	err := http.ListenAndServe(listenAddr, mux)
 	if nil != err {
-		log.Printf("Listen HTTP server error:%v", err)
+		logger.Error("Listen HTTP server error:%v", err)
 	}
 }
 

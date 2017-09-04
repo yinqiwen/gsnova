@@ -2,7 +2,6 @@ package proxy
 
 import (
 	"encoding/json"
-	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -12,6 +11,7 @@ import (
 
 	"github.com/yinqiwen/gsnova/common/gfwlist"
 	"github.com/yinqiwen/gsnova/common/helper"
+	"github.com/yinqiwen/gsnova/common/logger"
 	"github.com/yinqiwen/gsnova/common/mux"
 	"github.com/yinqiwen/gsnova/local/hosts"
 	"github.com/yinqiwen/pmux"
@@ -157,7 +157,7 @@ func (c *ProxyChannelConfig) ProxyURL() *url.URL {
 		var err error
 		c.proxyURL, err = url.Parse(c.Proxy)
 		if nil != err {
-			log.Printf("Failed to parse proxy URL ", c.Proxy)
+			logger.Error("Failed to parse proxy URL ", c.Proxy)
 		}
 	}
 	return c.proxyURL
@@ -211,15 +211,15 @@ func (pac *PACConfig) matchRules(ip string, req *http.Request) bool {
 			if nil != mygfwlist && nil != req {
 				ok = mygfwlist.IsBlockedByGFW(req)
 				if !ok {
-					log.Printf("#### %s is NOT BlockedByGFW", req.Host)
+					logger.Debug("#### %s is NOT BlockedByGFW", req.Host)
 				}
 			} else {
 				ok = true
-				log.Printf("NIL GFWList object or request")
+				logger.Debug("NIL GFWList object or request")
 			}
 		} else if strings.EqualFold(rule, IsCNIPRule) {
 			if len(ip) == 0 || nil == cnIPRange {
-				log.Printf("NIL CNIP content  or IP/Domain")
+				logger.Debug("NIL CNIP content  or IP/Domain")
 				ok = false
 			} else {
 				var err error
@@ -229,14 +229,14 @@ func (pac *PACConfig) matchRules(ip string, req *http.Request) bool {
 				if nil == err {
 					_, err = cnIPRange.FindCountry(ip)
 				} else {
-					log.Printf("######err:%v", err)
+					logger.Error("######err:%v", err)
 				}
 				ok = (nil == err)
-				log.Printf("ip:%s is CNIP:%v", ip, ok)
+				logger.Debug("ip:%s is CNIP:%v", ip, ok)
 			}
 
 		} else {
-			log.Printf("###Invalid rule:%s", rule)
+			logger.Error("###Invalid rule:%s", rule)
 		}
 		if not {
 			ok = ok != true
@@ -256,7 +256,7 @@ func MatchPatterns(str string, rules []string) bool {
 	for _, pattern := range rules {
 		matched, err := filepath.Match(pattern, str)
 		if nil != err {
-			log.Printf("Invalid pattern:%s with reason:%v", pattern, err)
+			logger.Error("Invalid pattern:%s with reason:%v", pattern, err)
 			continue
 		}
 		if matched {
@@ -311,7 +311,7 @@ func (cfg *ProxyConfig) findProxyChannelByRequest(proto string, ip string, req *
 		}
 	}
 	if len(channel) == 0 {
-		log.Printf("No proxy channel found.")
+		logger.Error("No proxy channel found.")
 	}
 	return channel
 }
@@ -347,7 +347,7 @@ func (gw *UDPGWConfig) matchDNS(domain string) string {
 	for k, v := range gw.LocalDNSRecord {
 		matched, err := filepath.Match(k, domain)
 		if nil != err {
-			log.Printf("Invalid pattern:%s with reason:%v", k, err)
+			logger.Error("Invalid pattern:%s with reason:%v", k, err)
 			continue
 		}
 		if matched {
@@ -365,7 +365,7 @@ func (sni *SNIConfig) redirect(domain string) (string, bool) {
 	for k, v := range sni.Redirect {
 		matched, err := filepath.Match(k, domain)
 		if nil != err {
-			log.Printf("Invalid pattern:%s with reason:%v", k, err)
+			logger.Error("Invalid pattern:%s with reason:%v", k, err)
 			continue
 		}
 		if matched {
@@ -430,7 +430,7 @@ func (cfg *LocalConfig) init() error {
 	case pmux.CipherAES256GCM:
 	case pmux.CipherNone:
 	default:
-		log.Printf("Invalid encrypt method:%s, use 'chacha20poly1305' instead.", GConf.Cipher.Method)
+		logger.Error("Invalid encrypt method:%s, use 'chacha20poly1305' instead.", GConf.Cipher.Method)
 		GConf.Cipher.Method = pmux.CipherChacha20Poly1305
 	}
 	haveDirect := false

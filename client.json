@@ -1,6 +1,6 @@
 {
     //this is just a example
-	"Log": ["stdout", "gsnova.log"],
+	"Log": ["color", "gsnova.log"],
 	"UserAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/60.0.3112.101 Safari/537.36",
 	//encrypt method can choose from none/auto/salsa20/chacha20poly1305/aes256-gcm
 	//'auto' method would choose fastest encrypt method for current env

@@ -2,13 +2,13 @@ package direct
 
 import (
 	"io"
-	"log"
 	"net"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/yinqiwen/gsnova/common/helper"
+	"github.com/yinqiwen/gsnova/common/logger"
 	"github.com/yinqiwen/gsnova/common/mux"
 	"github.com/yinqiwen/gsnova/common/netx"
 	"github.com/yinqiwen/gsnova/local/hosts"
@@ -65,7 +65,7 @@ func (tc *directStream) Connect(network string, addr string) error {
 		}
 	}
 	if nil != err {
-		log.Printf("Failed to connect %s for %s with error:%v", addr, host, err)
+		logger.Error("Failed to connect %s for %s with error:%v", addr, host, err)
 		return err
 	}
 

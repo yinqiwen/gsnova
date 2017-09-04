@@ -4,7 +4,6 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"io"
-	"log"
 	"net"
 	"net/http"
 	"sync"
@@ -12,6 +11,7 @@ import (
 	"golang.org/x/net/http2"
 
 	"github.com/yinqiwen/gsnova/common/helper"
+	"github.com/yinqiwen/gsnova/common/logger"
 	"github.com/yinqiwen/gsnova/common/mux"
 	"github.com/yinqiwen/gsnova/remote"
 )
@@ -66,7 +66,7 @@ func (ss *http2Handler) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	rw.WriteHeader(200)
 	err := ss.session.OfferStream(s)
 	if nil != err {
-		log.Printf("%v", err)
+		logger.Error("%v", err)
 		return
 	}
 	<-s.closeCh
@@ -96,12 +96,12 @@ func servHTTP2(lp net.Listener, addr string, config *tls.Config) {
 			tlsconn := tls.Server(conn, config)
 			err = tlsconn.Handshake()
 			if nil != err {
-				log.Printf("TLS handshake failed:%v", err)
+				logger.Error("TLS handshake failed:%v", err)
 				muxSession.Close()
 				return
 			}
 			stateData, _ := json.MarshalIndent(tlsconn.ConnectionState(), "", "    ")
-			log.Printf("###Recv conn state : %s", string(stateData))
+			logger.Notice("Recv conn state : %s", string(stateData))
 			http2Server.ServeConn(tlsconn, opt)
 			muxSession.Close()
 		}()
@@ -111,10 +111,10 @@ func servHTTP2(lp net.Listener, addr string, config *tls.Config) {
 func StartHTTTP2ProxyServer(addr string, config *tls.Config) error {
 	lp, err := net.Listen("tcp", addr)
 	if nil != err {
-		log.Printf("[ERROR]Failed to listen TCP address:%s with reason:%v", addr, err)
+		logger.Error("[ERROR]Failed to listen TCP address:%s with reason:%v", addr, err)
 		return err
 	}
-	log.Printf("Listen on HTTP2 address:%s", addr)
+	logger.Info("Listen on HTTP2 address:%s", addr)
 	servHTTP2(lp, addr, config)
 	return nil
 }

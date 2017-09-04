@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	"net"
 	"net/url"
 	"sync"
@@ -12,6 +11,7 @@ import (
 
 	"golang.org/x/crypto/ssh"
 
+	"github.com/yinqiwen/gsnova/common/logger"
 	"github.com/yinqiwen/gsnova/common/mux"
 	"github.com/yinqiwen/gsnova/local/proxy"
 )
@@ -176,12 +176,12 @@ func (p *SSHProxy) CreateMuxSession(server string, conf *proxy.ProxyChannelConfi
 	} else {
 		if identify := u.Query().Get("key"); len(identify) > 0 {
 			if content, err := ioutil.ReadFile(identify); nil != err {
-				log.Printf("Invalid SSH identify path:%s for reason:%v", identify, err)
+				logger.Error("Invalid SSH identify path:%s for reason:%v", identify, err)
 				return nil, err
 			} else {
 				signer, err := ssh.ParsePrivateKey(content)
 				if nil != err {
-					log.Printf("Invalid pem content for path:%s with reason:%v\n", identify, err)
+					logger.Error("Invalid pem content for path:%s with reason:%v\n", identify, err)
 					return nil, err
 				}
 				sshConf = &ssh.ClientConfig{

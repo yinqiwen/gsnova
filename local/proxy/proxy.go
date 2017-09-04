@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"math"
 	"net/url"
 	"reflect"
@@ -80,7 +79,7 @@ type muxSessionHolder struct {
 func (s *muxSessionHolder) tryCloseRetiredSessions() {
 	for retiredSession := range s.retiredSessions {
 		if retiredSession.NumStreams() <= 0 {
-			log.Printf("Close retired mux session since it's has no active stream.")
+			logger.Debug("Close retired mux session since it's has no active stream.")
 			retiredSession.Close()
 			delete(s.retiredSessions, retiredSession)
 		}
@@ -137,14 +136,14 @@ func (s *muxSessionHolder) heartbeat(interval int) {
 			if nil != session {
 				duration, err := session.Ping()
 				if err != nil {
-					log.Printf("[ERR]: Ping remote:%s failed: %v", s.server, err)
+					logger.Error("[ERR]: Ping remote:%s failed: %v", s.server, err)
 					//s.exitErr(ErrKeepAliveTimeout)
 					if err == pmux.ErrSessionShutdown {
 						s.close()
 					}
 					//return
 				} else {
-					log.Printf("Cost %v to ping remote:%s", duration, s.server)
+					logger.Debug("Cost %v to ping remote:%s", duration, s.server)
 				}
 			} else {
 				s.init(true)
@@ -185,7 +184,7 @@ func (s *muxSessionHolder) init(lock bool) error {
 		if psession, ok := session.(*mux.ProxyMuxSession); ok {
 			err = psession.Session.ResetCryptoContext(cipherMethod, counter)
 			if nil != err {
-				log.Printf("[ERROR]Failed to reset cipher context with reason:%v, while cipher method:%s", err, cipherMethod)
+				logger.Error("[ERROR]Failed to reset cipher context with reason:%v, while cipher method:%s", err, cipherMethod)
 				return err
 			}
 		}
@@ -197,7 +196,7 @@ func (s *muxSessionHolder) init(lock bool) error {
 			if s.conf.ReconnectPeriod > 0 {
 				expireAfter = helper.RandBetween(s.conf.ReconnectPeriod-s.conf.RCPRandomAdjustment, s.conf.ReconnectPeriod+s.conf.RCPRandomAdjustment)
 			}
-			log.Printf("Mux session woulde expired after %d seconds.", expireAfter)
+			logger.Debug("Mux session woulde expired after %d seconds.", expireAfter)
 			s.expireTime = time.Now().Add(time.Duration(expireAfter) * time.Second)
 		}
 		if features.Pingable && s.conf.HeartBeatPeriod > 0 {
@@ -243,7 +242,7 @@ func (ch *proxyChannel) getMuxStream() (stream mux.MuxStream, err error) {
 			if err == pmux.ErrSessionShutdown {
 				holder.close()
 			}
-			log.Printf("Try to get next session since current session failed to open new stream with err:%v", err)
+			logger.Debug("Try to get next session since current session failed to open new stream with err:%v", err)
 		} else {
 			return
 		}
@@ -260,12 +259,12 @@ func (ch *proxyChannel) init() bool {
 	for _, server := range conf.ServerList {
 		u, err := url.Parse(server)
 		if nil != err {
-			log.Printf("Invalid server url:%s with reason:%v", server, err)
+			logger.Error("Invalid server url:%s with reason:%v", server, err)
 			continue
 		}
 		schema := strings.ToLower(u.Scheme)
 		if t, ok := proxyTypeTable[schema]; !ok {
-			log.Printf("[ERROR]No registe proxy for schema:%s", schema)
+			logger.Error("[ERROR]No registe proxy for schema:%s", schema)
 			continue
 		} else {
 			v := reflect.New(t)
@@ -273,7 +272,7 @@ func (ch *proxyChannel) init() bool {
 			for i := 0; i < conf.ConnsPerServer; i++ {
 				_, err := ch.createMuxSessionByProxy(p, server, i == 0)
 				if nil != err {
-					log.Printf("[ERROR]Failed to create mux session for %s:%d with reason:%v", server, i, err)
+					logger.Error("[ERROR]Failed to create mux session for %s:%d with reason:%v", server, i, err)
 					break
 				} else {
 					success = true
@@ -282,12 +281,12 @@ func (ch *proxyChannel) init() bool {
 		}
 	}
 	if success {
-		log.Printf("Proxy channel:%s init success", conf.Name)
+		logger.Notice("Proxy channel:%s init success", conf.Name)
 		proxyChannelMutex.Lock()
 		proxyChannelTable[conf.Name] = ch
 		proxyChannelMutex.Unlock()
 	} else {
-		log.Printf("[ERROR]Proxy channel:%s init failed", conf.Name)
+		logger.Error("[ERROR]Proxy channel:%s init failed", conf.Name)
 	}
 	return success
 }
@@ -325,18 +324,18 @@ func loadConf(conf string) error {
 	if strings.HasSuffix(conf, clientConfName) {
 		confdata, err := helper.ReadWithoutComment(conf, "//")
 		if nil != err {
-			log.Println(err)
+			logger.Error("Failed to load conf:%s with reason:%v", conf, err)
 		}
 		GConf = LocalConfig{}
 		err = json.Unmarshal(confdata, &GConf)
 		if nil != err {
-			fmt.Printf("Failed to unmarshal json:%s to config for reason:%v", string(confdata), err)
+			logger.Error("Failed to unmarshal json:%s to config for reason:%v", string(confdata), err)
 		}
 		return GConf.init()
 	}
 	err := hosts.Init(conf)
 	if nil != err {
-		log.Printf("Failed to init local hosts with reason:%v.", err)
+		logger.Error("Failed to init local hosts with reason:%v.", err)
 	}
 	return err
 }
@@ -347,11 +346,11 @@ func watchConf(watcher *fsnotify.Watcher) {
 		case event := <-watcher.Events:
 			//log.Println("event:", event)
 			if event.Op&fsnotify.Write == fsnotify.Write {
-				log.Println("modified file:", event.Name)
+				logger.Debug("modified file:%s", event.Name)
 				loadConf(event.Name)
 			}
 		case err := <-watcher.Errors:
-			log.Println("error:", err)
+			logger.Error("error:%v", err)
 		}
 	}
 }
@@ -359,7 +358,7 @@ func watchConf(watcher *fsnotify.Watcher) {
 func Start(home string, monitor InternalEventMonitor) error {
 	confWatcher, err := fsnotify.NewWatcher()
 	if err != nil {
-		log.Fatal(err)
+		logger.Fatal("%v", err)
 		return err
 	}
 	clientConf := home + "/" + clientConfName
@@ -377,7 +376,7 @@ func Start(home string, monitor InternalEventMonitor) error {
 	logger.InitLogger(GConf.Log)
 	go initDNS()
 
-	log.Printf("Allowed proxy channel with schema:%v", allowedSchema())
+	logger.Notice("Allowed proxy channel with schema:%v", allowedSchema())
 	singalCh := make(chan bool, len(GConf.Channel))
 	channelCount := 0
 	for _, conf := range GConf.Channel {
@@ -401,7 +400,7 @@ func Start(home string, monitor InternalEventMonitor) error {
 	channel.Conf.Name = directProxyChannelName
 	channel.sessions = make(map[*muxSessionHolder]bool)
 
-	log.Printf("Starting GSnova %s.", local.Version)
+	logger.Info("Started GSnova %s.", local.Version)
 
 	go startAdminServer()
 	startLocalServers()

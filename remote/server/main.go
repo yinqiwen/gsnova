@@ -4,9 +4,9 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io"
-	"log"
 
 	"github.com/yinqiwen/gsnova/common/helper"
+	"github.com/yinqiwen/gsnova/common/logger"
 
 	"github.com/yinqiwen/gotoolkit/ots"
 	"github.com/yinqiwen/gsnova/remote"
@@ -43,7 +43,7 @@ func main() {
 		ots.RegisterHandler("vstat", dumpServerStat, 0, 0, "VStat                                 Dump server stat")
 		err := ots.StartTroubleShootingServer(remote.ServerConf.AdminListen)
 		if nil != err {
-			log.Printf("Failed to start admin server with reason:%v", err)
+			logger.Error("Failed to start admin server with reason:%v", err)
 		}
 	}
 	var serverDone []chan bool
@@ -67,7 +67,7 @@ func main() {
 	if len(remote.ServerConf.TLS.Listen) > 0 {
 		tlscfg, err := generateTLSConfig(remote.ServerConf.TLS.Cert, remote.ServerConf.TLS.Key)
 		if nil != err {
-			log.Printf("Failed to create TLS config by cert/key: %s/%s", remote.ServerConf.TLS.Cert, remote.ServerConf.TLS.Key)
+			logger.Error("Failed to create TLS config by cert/key: %s/%s", remote.ServerConf.TLS.Cert, remote.ServerConf.TLS.Key)
 		} else {
 			done := make(chan bool)
 			serverDone = append(serverDone, done)
@@ -97,7 +97,7 @@ func main() {
 	if len(remote.ServerConf.HTTP2.Listen) > 0 {
 		tlscfg, err := generateTLSConfig(remote.ServerConf.TLS.Cert, remote.ServerConf.TLS.Key)
 		if nil != err {
-			log.Printf("Failed to create TLS config by cert/key: %s/%s", remote.ServerConf.TLS.Cert, remote.ServerConf.TLS.Key)
+			logger.Error("Failed to create TLS config by cert/key: %s/%s", remote.ServerConf.TLS.Cert, remote.ServerConf.TLS.Key)
 		} else {
 			done := make(chan bool)
 			serverDone = append(serverDone, done)

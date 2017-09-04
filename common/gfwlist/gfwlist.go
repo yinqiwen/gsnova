@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"net"
 	"net/http"
 	"os"
@@ -13,6 +12,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/yinqiwen/gsnova/common/logger"
 )
 
 type hostWildcardRule struct {
@@ -51,7 +52,7 @@ func (r *regexRule) match(req *http.Request) bool {
 	}
 	matched, err := regexp.MatchString(r.pattern, req.URL.String())
 	if nil != err {
-		log.Printf("Invalid regex pattern:%s wiuth reason:%v", r.pattern, err)
+		logger.Error("Invalid regex pattern:%s wiuth reason:%v", r.pattern, err)
 	}
 	return matched
 }
@@ -235,7 +236,7 @@ func NewGFWList(u string, hc *http.Client, userRules []string, cacheFile string,
 			if nil != err {
 				return "", err
 			}
-			log.Printf("Fetch latest GFWList success at %s", cacheFile)
+			logger.Notice("Fetch latest GFWList success at %s", cacheFile)
 			fetchFromRemote = true
 			gfwlistContent = string(plainTxt)
 			if len(userRules) > 0 {

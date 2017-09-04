@@ -3,12 +3,12 @@ package proxy
 import (
 	"crypto/tls"
 	"fmt"
-	"log"
 	"net"
 	"net/url"
 	"time"
 
 	"github.com/yinqiwen/gsnova/common/helper"
+	"github.com/yinqiwen/gsnova/common/logger"
 	"github.com/yinqiwen/gsnova/common/netx"
 	"github.com/yinqiwen/gsnova/local/hosts"
 )
@@ -78,7 +78,7 @@ func DialServerByConf(server string, conf *ProxyChannelConfig) (net.Conn, error)
 		}
 		conn, err = netx.DialTimeout("tcp", hostport, timeout)
 	} else {
-		log.Printf("Connect %s via proxy %s", hostport, conf.Proxy)
+		logger.Debug("Connect %s via proxy %s", hostport, conf.Proxy)
 		conn, err = helper.ProxyDial(conf.Proxy, hostport, timeout)
 	}
 	if nil == err {
@@ -95,9 +95,9 @@ func DialServerByConf(server string, conf *ProxyChannelConfig) (net.Conn, error)
 		}
 	}
 	if nil != err {
-		log.Printf("Connect %s failed with reason:%v.", server, err)
+		logger.Notice("Connect %s failed with reason:%v.", server, err)
 	} else {
-		log.Printf("Connect %s success.", server)
+		logger.Debug("Connect %s success.", server)
 	}
 	return conn, err
 }

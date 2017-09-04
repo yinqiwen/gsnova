@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/yinqiwen/gsnova/common/logger"
 	"github.com/yinqiwen/gsnova/local/gsnova"
 )
 
@@ -21,7 +22,7 @@ func main() {
 
 	err = gsnova.StartLocalProxy(*dir, nil)
 	if nil != err {
-		fmt.Printf("Start gsnova error:%v", err)
+		logger.Error("Start gsnova error:%v", err)
 	} else {
 		ch := make(chan int)
 		<-ch

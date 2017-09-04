@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -13,6 +12,7 @@ import (
 	"time"
 
 	"github.com/yinqiwen/gsnova/common/helper"
+	"github.com/yinqiwen/gsnova/common/logger"
 	"github.com/yinqiwen/pmux"
 	"golang.org/x/net/http2"
 )
@@ -152,7 +152,7 @@ func (q *HTTP2MuxSession) OpenStream() (MuxStream, error) {
 		res, err := q.h2Conn.RoundTrip(req)
 		//res, err := q.Client.Do(req)
 		if nil != err {
-			log.Printf("Failed to post http/2 with error:%v", err)
+			logger.Error("Failed to post http/2 with error:%v", err)
 			stream.Close()
 			q.Close()
 		} else {

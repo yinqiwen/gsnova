@@ -3,7 +3,8 @@ package helper
 import (
 	"bufio"
 	"errors"
-	"log"
+
+	"github.com/yinqiwen/gsnova/common/logger"
 )
 
 var ErrTLSIncomplete = errors.New("TLS header incomplete")
@@ -23,7 +24,7 @@ func PeekTLSServerName(reader *bufio.Reader) (string, error) {
 	tlsMajorVer := int(hbuf[1])
 	tlsMinorVer := int(hbuf[2])
 	if tlsMajorVer < 3 {
-		log.Printf("Invaid tls ver:%d.%v with %v", tlsMajorVer, tlsMinorVer, ErrNoSNI)
+		logger.Error("Invaid tls ver:%d.%v with %v", tlsMajorVer, tlsMinorVer, ErrNoSNI)
 		return "", ErrNoSNI
 	}
 	restLen := (int(hbuf[3]) << 8) + int(hbuf[4])

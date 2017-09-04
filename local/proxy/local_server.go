@@ -3,7 +3,6 @@ package proxy
 import (
 	"bufio"
 	"io"
-	"log"
 	"net"
 	"net/http"
 	"strings"
@@ -12,6 +11,7 @@ import (
 	"time"
 
 	"github.com/yinqiwen/gsnova/common/helper"
+	"github.com/yinqiwen/gsnova/common/logger"
 	"github.com/yinqiwen/gsnova/common/mux"
 	"github.com/yinqiwen/gsnova/local/socks"
 )
@@ -41,19 +41,19 @@ func serveProxyConn(conn net.Conn, proxy *ProxyConfig) {
 
 	if nil == err {
 		isSocksProxy = true
-		log.Printf("Local proxy recv %s proxy conn to %s", socksConn.Version(), socksConn.Req.Target)
+		logger.Debug("Local proxy recv %s proxy conn to %s", socksConn.Version(), socksConn.Req.Target)
 		socksConn.Grant(&net.TCPAddr{
 			IP: net.ParseIP("0.0.0.0"), Port: 0})
 		localConn = socksConn
 		if socksConn.Req.Target == GConf.UDPGW.Addr {
-			log.Printf("Handle udpgw conn for %v", socksConn.Req.Target)
+			logger.Debug("Handle udpgw conn for %v", socksConn.Req.Target)
 			handleUDPGatewayConn(localConn, proxy)
 			return
 		}
 
 		remoteHost, remotePort, err = net.SplitHostPort(socksConn.Req.Target)
 		if nil != err {
-			log.Printf("Invalid socks target addresss:%s with reason %v", socksConn.Req.Target, err)
+			logger.Error("Invalid socks target addresss:%s with reason %v", socksConn.Req.Target, err)
 			return
 		}
 	} else {
@@ -87,7 +87,7 @@ func serveProxyConn(conn net.Conn, proxy *ProxyConfig) {
 			if redirect, ok := GConf.SNI.redirect(sni); ok {
 				sni = redirect
 			}
-			log.Printf("Sniffed SNI:%s:%s for IP:%s:%s", sni, remotePort, remoteHost, remotePort)
+			logger.Debug("Sniffed SNI:%s:%s for IP:%s:%s", sni, remotePort, remoteHost, remotePort)
 			remoteHost = sni
 			trySniffDomain = false
 		}
@@ -125,7 +125,7 @@ func serveProxyConn(conn net.Conn, proxy *ProxyConfig) {
 		headChunk, err := bufconn.Peek(7)
 		if len(headChunk) != 7 {
 			if err != io.EOF {
-				log.Printf("Peek:%s %d %v", string(headChunk), len(headChunk), err)
+				logger.Error("Peek:%s %d %v", string(headChunk), len(headChunk), err)
 			}
 			return
 		}
@@ -160,7 +160,7 @@ func serveProxyConn(conn net.Conn, proxy *ProxyConfig) {
 		if isHttp11Proto {
 			initialHTTPReq, err = http.ReadRequest(bufconn)
 			if nil != err {
-				log.Printf("Read first request failed from proxy connection for reason:%v", err)
+				logger.Error("Read first request failed from proxy connection for reason:%v", err)
 				return
 			}
 			//log.Printf("Host:%s %v", initialHTTPReq.Host, initialHTTPReq.URL)
@@ -185,33 +185,33 @@ func serveProxyConn(conn net.Conn, proxy *ProxyConfig) {
 			}
 		} else {
 			if !isHttp11Proto && !isSocksProxy {
-				log.Printf("[ERROR]Can NOT handle non HTTP1.1 proto in non socks proxy mode.")
+				logger.Error("[ERROR]Can NOT handle non HTTP1.1 proto in non socks proxy mode.")
 				return
 			}
 		}
 	}
 START:
 	if len(remoteHost) == 0 || len(remotePort) == 0 {
-		log.Printf("Can NOT resolve remote host or port %s:%s", remoteHost, remotePort)
+		logger.Error("Can NOT resolve remote host or port %s:%s", remoteHost, remotePort)
 		return
 	}
 	proxyChannelName = proxy.getProxyChannelByHost(protocol, remoteHost)
 
 	if len(proxyChannelName) == 0 {
-		log.Printf("[ERROR]No proxy found for %s:%s", protocol, remoteHost)
+		logger.Error("[ERROR]No proxy found for %s:%s", protocol, remoteHost)
 		return
 	}
 	stream, conf, err := getMuxStreamByChannel(proxyChannelName)
 	if nil != err || nil == stream {
-		log.Printf("Failed to open stream for reason:%v by proxy:%s", err, proxyChannelName)
+		logger.Error("Failed to open stream for reason:%v by proxy:%s", err, proxyChannelName)
 		return
 	}
 	defer stream.Close()
 	ssid := stream.StreamID()
-	log.Printf("Stream[%d] select %s for proxy to %s:%s", ssid, proxyChannelName, remoteHost, remotePort)
+	logger.Notice("Proxy stream[%d] select %s for proxy to %s:%s", ssid, proxyChannelName, remoteHost, remotePort)
 	err = stream.Connect("tcp", net.JoinHostPort(remoteHost, remotePort))
 	if nil != err {
-		log.Printf("Connect failed from proxy connection for reason:%v", err)
+		logger.Error("Connect failed from proxy connection for reason:%v", err)
 		return
 	}
 
@@ -237,7 +237,7 @@ START:
 				proxyReq.Header.Del("Proxy-Authorization")
 				err = proxyReq.Write(streamWriter)
 				if nil != err {
-					log.Printf("Failed to write http request for reason:%v", err)
+					logger.Error("Failed to write http request for reason:%v", err)
 					return
 				}
 			}
@@ -246,12 +246,12 @@ START:
 			proxyReq, err = http.ReadRequest(bufconn)
 			if nil != err {
 				if err != io.EOF && !strings.Contains(err.Error(), "use of closed network connection") {
-					log.Printf("Failed to read proxy http request for reason:%v", err)
+					logger.Notice("Failed to read proxy http request for reason:%v", err)
 				}
 				return
 			}
 			if nil != prevReq && prevReq.Host != proxyReq.Host {
-				log.Printf("Switch to next stream since target host change from %s to %s", prevReq.Host, proxyReq.Host)
+				logger.Debug("Switch to next stream since target host change from %s to %s", prevReq.Host, proxyReq.Host)
 				stream.Close()
 				goto START
 			}
@@ -263,16 +263,16 @@ func startLocalProxyServer(proxyIdx int) (*net.TCPListener, error) {
 	proxyConf := &GConf.Proxy[proxyIdx]
 	tcpaddr, err := net.ResolveTCPAddr("tcp", proxyConf.Local)
 	if nil != err {
-		log.Fatalf("[ERROR]Local server address:%s error:%v", proxyConf.Local, err)
+		logger.Fatal("[ERROR]Local server address:%s error:%v", proxyConf.Local, err)
 		return nil, err
 	}
 	var lp *net.TCPListener
 	lp, err = net.ListenTCP("tcp", tcpaddr)
 	if nil != err {
-		log.Fatalf("Can NOT listen on address:%s", proxyConf.Local)
+		logger.Fatal("Can NOT listen on address:%s", proxyConf.Local)
 		return nil, err
 	}
-	log.Printf("Listen on address %s", proxyConf.Local)
+	logger.Info("Listen on address %s", proxyConf.Local)
 	go func() {
 		for proxyServerRunning {
 			conn, err := lp.AcceptTCP()

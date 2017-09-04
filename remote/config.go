@@ -3,7 +3,6 @@ package remote
 import (
 	"encoding/json"
 	"flag"
-	"log"
 	"os"
 	"strings"
 
@@ -86,7 +85,7 @@ func (conf *ServerConfig) VerifyUser(user string) bool {
 			return true
 		}
 	}
-	log.Printf("[ERROR]Invalid user:%s", user)
+	logger.Error("[ERROR]Invalid user:%s", user)
 	return false
 }
 
@@ -176,7 +175,7 @@ func init() {
 			err = json.Unmarshal(data, &ServerConf)
 		}
 		if nil != err {
-			log.Fatalf("Failed to load server config:%s for reason:%v", *conf, err)
+			logger.Error("Failed to load server config:%s for reason:%v", *conf, err)
 			return
 		}
 	}
@@ -199,10 +198,10 @@ func init() {
 	cipherKey := os.Getenv("GSNOVA_CIPHER_KEY")
 	if len(cipherKey) > 0 {
 		ServerConf.Cipher.Key = cipherKey
-		log.Printf("Server cipher key overide by env:GSNOVA_CIPHER_KEY")
+		logger.Notice("Server cipher key overide by env:GSNOVA_CIPHER_KEY")
 	}
 
-	log.Printf("Load server conf success.")
+	logger.Info("Load server conf success.")
 	confdata, _ := json.MarshalIndent(&ServerConf, "", "    ")
-	log.Printf("Server:%s start with config:\n%s", Version, string(confdata))
+	logger.Info("GSnova server:%s start with config:\n%s", Version, string(confdata))
 }

@@ -2,11 +2,11 @@ package quic
 
 import (
 	"crypto/tls"
-	"log"
 	"net"
 	"net/url"
 
 	quic "github.com/lucas-clemente/quic-go"
+	"github.com/yinqiwen/gsnova/common/logger"
 	"github.com/yinqiwen/gsnova/common/mux"
 	"github.com/yinqiwen/gsnova/common/netx"
 	"github.com/yinqiwen/gsnova/local/proxy"
@@ -55,7 +55,7 @@ func (tc *QUICProxy) CreateMuxSession(server string, conf *proxy.ProxyChannelCon
 	if err != nil {
 		return nil, err
 	}
-	log.Printf("Connect %s success.", server)
+	logger.Notice("Connect %s success.", server)
 	return &mux.QUICMuxSession{Session: quicSession}, nil
 }
 
