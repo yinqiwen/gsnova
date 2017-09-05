@@ -8,6 +8,7 @@ install:
 - go get -t github.com/yinqiwen/gsnova/remote/server
 - go get -t github.com/yinqiwen/gsnova/local/client
 script:
+- cd remote/server && godep save && tar cf ../../tmp-deploy.tar * .godir && cd ../.. && tar uf tmp-deploy.tar server.json && bzip2 tmp-deploy.tar && mv tmp-deploy.tar.bz2 gsnova-paas-deploy-with-dependencies-${TRAVIS_TAG}.tar.bz2
 - export CGO_ENABLED=0
 - GOOS=windows GOARCH=386 go build -o gsnova_client.exe github.com/yinqiwen/gsnova/local/client
 - tar cjf gsnova_client_windows_386-${TRAVIS_TAG}.tar.bz2 client.json hosts.json gsnova_client.exe
