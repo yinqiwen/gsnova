@@ -5,10 +5,10 @@ go:
 before_install:
 install:
 - go get github.com/tools/godep
-- go get -t github.com/yinqiwen/gsnova/remote/server
-- go get -t github.com/yinqiwen/gsnova/local/client
+- go get github.com/clipperhouse/{linkedlist,set,slice,stringer,typewriter}
+- go get -t github.com/yinqiwen/gsnova/remote/server github.com/yinqiwen/gsnova/local/client
 script:
-- echo $PWD && cd remote/server && godep save && tar cf ../../tmp-deploy.tar * .godir && cd ../.. && tar uf tmp-deploy.tar server.json && bzip2 tmp-deploy.tar && mv tmp-deploy.tar.bz2 gsnova-paas-deploy-with-dependencies-${TRAVIS_TAG}.tar.bz2
+- cd remote/server && godep save && tar cf ../../tmp-deploy.tar * .godir && cd ../.. && tar uf tmp-deploy.tar server.json && bzip2 tmp-deploy.tar && mv tmp-deploy.tar.bz2 gsnova-paas-deploy-with-dependencies-${TRAVIS_TAG}.tar.bz2
 - export CGO_ENABLED=0
 - GOOS=windows GOARCH=386 go build -o gsnova_client.exe github.com/yinqiwen/gsnova/local/client
 - tar cjf gsnova_client_windows_386-${TRAVIS_TAG}.tar.bz2 client.json hosts.json gsnova_client.exe
