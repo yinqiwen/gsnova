@@ -34,6 +34,7 @@ deploy:
   api_key:
     secure: YngDT2JlydCG+qb8Ww9wBFyWiLRQJczybNLeoFKluBXKoh1Vu+TZeReMK+rRUjOqOmYV8sNtOnEVSg4+ICeYDNp9fRRwcNKTkp0H+8pH0OynxdH2faCjx1H5U0WQuWqMLQoMSHZ90I0tL40kEJOChLY6WGvwY47YBqi/dsvmTfg=
   file: 
+    - “gsnova-paas-deploy-with-dependencies-${TRAVIS_TAG}.tar.bz2”
     - "gsnova_client_windows_386-${TRAVIS_TAG}.tar.bz2"
     - "gsnova_client_windows_amd64-${TRAVIS_TAG}.tar.bz2"
     - "gsnova_client_linux_386-${TRAVIS_TAG}.tar.bz2"
