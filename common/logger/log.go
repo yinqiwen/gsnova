@@ -6,23 +6,24 @@ import (
 	"log"
 	"os"
 	"strings"
-
-	"github.com/fatih/color"
+	//"github.com/fatih/color"
 	//"syscall"
 )
 
 type colorConsoleWriter struct {
-	color *color.Color
-	w     *os.File
+	prefix  string
+	postfix string
+	w       *os.File
 }
 
 func (writer *colorConsoleWriter) Write(p []byte) (n int, err error) {
-	if nil != writer.color {
-		writer.color.Fprintf(writer.w, "%s", string(p))
-	} else {
-		return writer.w.Write(p)
+	if len(writer.prefix) > 0 {
+		fmt.Fprint(writer.w, writer.prefix)
+		n, err = writer.w.Write(p)
+		fmt.Fprint(writer.w, writer.postfix)
+		return
 	}
-	return len(p), nil
+	return writer.w.Write(p)
 }
 
 type logFileWriter struct {
@@ -149,9 +150,9 @@ func Fatal(format string, v ...interface{}) {
 func init() {
 	logFlag := log.LstdFlags | log.Lshortfile
 	log.SetFlags(logFlag)
-	colorConsoleLogger[0] = log.New(&colorConsoleWriter{color: nil, w: os.Stdout}, "", logFlag)
-	colorConsoleLogger[1] = log.New(&colorConsoleWriter{color: color.New(color.Reset, color.FgYellow), w: os.Stdout}, "", logFlag)
-	colorConsoleLogger[2] = log.New(&colorConsoleWriter{color: color.New(color.Reset, color.FgGreen), w: os.Stdout}, "", logFlag)
-	colorConsoleLogger[3] = log.New(&colorConsoleWriter{color: color.New(color.Bold, color.FgRed), w: os.Stdout}, "", logFlag)
-	colorConsoleLogger[4] = log.New(&colorConsoleWriter{color: color.New(color.Bold, color.FgRed), w: os.Stdout}, "", logFlag)
+	colorConsoleLogger[0] = log.New(&colorConsoleWriter{w: os.Stdout}, "", logFlag)
+	colorConsoleLogger[1] = log.New(&colorConsoleWriter{prefix: "\x1b[33m", postfix: "\x1b[0m", w: os.Stdout}, "", logFlag)
+	colorConsoleLogger[2] = log.New(&colorConsoleWriter{prefix: "\x1b[32m\x1b[1m", postfix: "\x1b[21m\x1b[0m", w: os.Stdout}, "", logFlag)
+	colorConsoleLogger[3] = log.New(&colorConsoleWriter{prefix: "\x1b[31m\x1b[1m", postfix: "\x1b[21m\x1b[0m", w: os.Stdout}, "", logFlag)
+	colorConsoleLogger[4] = log.New(&colorConsoleWriter{prefix: "\x1b[31m\x1b[1m", postfix: "\x1b[21m\x1b[0m", w: os.Stdout}, "", logFlag)
 }

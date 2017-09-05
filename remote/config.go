@@ -118,13 +118,9 @@ func InitialPMuxConfig() *pmux.Config {
 
 func init() {
 	key := flag.String("key", "", "Crypto key setting")
-	// listen := flag.String("listen", "", "Server listen address")
-	logging := flag.String("log", "stdout", "Server log setting, , split by ','")
-	allow := flag.String("allow", "*", "Allowed users, split by ','")
-	// dps := flag.String("dps", "", "Candidate dynamic ports")
-	// ndp := flag.Uint("ndp", 0, "Max dynamic ports")
+	logging := flag.String("log", "", "Server log setting, , split by ','")
+	allow := flag.String("allow", "", "Allowed users, split by ','")
 	conf := flag.String("conf", "server.json", "Server config file")
-
 	httpServer := flag.String("http", "", "HTTP/Websocket listen address")
 	http2Server := flag.String("http2", "", "HTTP2 listen address")
 	tcpServer := flag.String("tcp", "", "TCP listen address")
@@ -135,40 +131,8 @@ func init() {
 	flag.Parse()
 
 	initDefaultConf()
-	if _, err := os.Stat(*conf); os.IsNotExist(err) {
-		if len(*key) == 0 {
-			flag.PrintDefaults()
-			return
-		}
-		// dpstrs := strings.Split(*dps, ",")
-		// for _, s := range dpstrs {
-		// 	i, err := strconv.Atoi(s)
-		// 	if nil == err && i > 1024 && i < 65535 {
-		// 		ServerConf.CandidateDynamicPort = append(ServerConf.CandidateDynamicPort, i)
-		// 	}
-		// }
-		ServerConf.Log = strings.Split(*logging, ",")
-		ServerConf.AllowedUser = strings.Split(*allow, ",")
-		ServerConf.TCP.Listen = *tcpServer
-		ServerConf.QUIC.Listen = *quicServer
-		ServerConf.KCP.Listen = *kcpServer
-		ServerConf.HTTP.Listen = *httpServer
-		ServerConf.HTTP2.Listen = *http2Server
-		ServerConf.TLS.Listen = *tlsServer
-		port := os.Getenv("PORT")
-		if port == "" {
-			port = os.Getenv("OPENSHIFT_GO_PORT")
-		}
-		if port == "" {
-			port = os.Getenv("VCAP_APP_PORT")
-		}
-		host := os.Getenv("OPENSHIFT_GO_IP")
-		if len(port) > 0 {
-			ServerConf.HTTP.Listen = host + ":" + port
-		}
-		ServerConf.Cipher.Key = *key
-		//ServerConf.MaxDynamicPort = int(*ndp)
-	} else {
+	if _, err := os.Stat(*conf); nil == err {
+		logger.Info("Load server conf from file:%s", *conf)
 		data, err := helper.ReadWithoutComment(*conf, "//")
 		//data, err := ioutil.ReadFile(file)
 		if nil == err {
@@ -178,6 +142,33 @@ func init() {
 			logger.Error("Failed to load server config:%s for reason:%v", *conf, err)
 			return
 		}
+	}
+	if len(*httpServer) > 0 {
+		ServerConf.HTTP.Listen = *httpServer
+	}
+	if len(*tcpServer) > 0 {
+		ServerConf.TCP.Listen = *tcpServer
+	}
+	if len(*quicServer) > 0 {
+		ServerConf.QUIC.Listen = *quicServer
+	}
+	if len(*kcpServer) > 0 {
+		ServerConf.KCP.Listen = *kcpServer
+	}
+	if len(*http2Server) > 0 {
+		ServerConf.HTTP2.Listen = *http2Server
+	}
+	if len(*tlsServer) > 0 {
+		ServerConf.TLS.Listen = *tlsServer
+	}
+	if len(*key) > 0 {
+		ServerConf.Cipher.Key = *key
+	}
+	if len(*allow) > 0 {
+		ServerConf.AllowedUser = strings.Split(*allow, ",")
+	}
+	if len(*logging) > 0 {
+		ServerConf.Log = strings.Split(*logging, ",")
 	}
 
 	if len(ServerConf.KCP.Listen) > 0 {
