@@ -98,14 +98,14 @@ func InitLogger(output []string) {
 
 var withColorConsole bool
 var withFile bool
-var colorConsoleLogger [5]*log.Logger
+var colorConsoleLogger *log.Logger
 
 func Debug(format string, v ...interface{}) {
 	if withFile {
 		log.Output(2, fmt.Sprintf(format, v...))
 	}
 	if withColorConsole {
-		colorConsoleLogger[0].Output(2, fmt.Sprintf(format, v...))
+		colorConsoleLogger.Output(2, fmt.Sprintf(format, v...))
 	}
 
 }
@@ -114,7 +114,9 @@ func Notice(format string, v ...interface{}) {
 		log.Output(2, fmt.Sprintf(format, v...))
 	}
 	if withColorConsole {
-		colorConsoleLogger[1].Output(2, fmt.Sprintf(format, v...))
+		setNoticeColor()
+		colorConsoleLogger.Output(2, fmt.Sprintf(format, v...))
+		unsetNoticeColor()
 	}
 }
 
@@ -124,7 +126,9 @@ func Info(format string, v ...interface{}) {
 	}
 
 	if withColorConsole {
-		colorConsoleLogger[2].Output(2, fmt.Sprintf(format, v...))
+		setINFOColor()
+		colorConsoleLogger.Output(2, fmt.Sprintf(format, v...))
+		unsetINFOColor()
 	}
 }
 
@@ -133,7 +137,9 @@ func Error(format string, v ...interface{}) {
 		log.Output(2, fmt.Sprintf(format, v...))
 	}
 	if withColorConsole {
-		colorConsoleLogger[3].Output(2, fmt.Sprintf(format, v...))
+		setErrorColor()
+		colorConsoleLogger.Output(2, fmt.Sprintf(format, v...))
+		unsetErrorColor()
 	}
 }
 
@@ -142,7 +148,9 @@ func Fatal(format string, v ...interface{}) {
 		log.Output(2, fmt.Sprintf(format, v...))
 	}
 	if withColorConsole {
-		colorConsoleLogger[4].Output(2, fmt.Sprintf(format, v...))
+		setErrorColor()
+		colorConsoleLogger.Output(2, fmt.Sprintf(format, v...))
+		unsetErrorColor()
 	}
 	os.Exit(1)
 }
@@ -150,9 +158,5 @@ func Fatal(format string, v ...interface{}) {
 func init() {
 	logFlag := log.LstdFlags | log.Lshortfile
 	log.SetFlags(logFlag)
-	colorConsoleLogger[0] = log.New(&colorConsoleWriter{w: os.Stdout}, "", logFlag)
-	colorConsoleLogger[1] = log.New(&colorConsoleWriter{prefix: "\x1b[33m", postfix: "\x1b[0m", w: os.Stdout}, "", logFlag)
-	colorConsoleLogger[2] = log.New(&colorConsoleWriter{prefix: "\x1b[32m\x1b[1m", postfix: "\x1b[21m\x1b[0m", w: os.Stdout}, "", logFlag)
-	colorConsoleLogger[3] = log.New(&colorConsoleWriter{prefix: "\x1b[31m\x1b[1m", postfix: "\x1b[21m\x1b[0m", w: os.Stdout}, "", logFlag)
-	colorConsoleLogger[4] = log.New(&colorConsoleWriter{prefix: "\x1b[31m\x1b[1m", postfix: "\x1b[21m\x1b[0m", w: os.Stdout}, "", logFlag)
+	colorConsoleLogger = log.New(&colorConsoleWriter{w: os.Stdout}, "", logFlag)
 }
