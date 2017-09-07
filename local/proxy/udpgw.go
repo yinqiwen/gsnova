@@ -6,12 +6,12 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"sync"
 	"time"
 
 	"github.com/google/btree"
+	"github.com/yinqiwen/gsnova/common/logger"
 	"github.com/yinqiwen/gsnova/common/mux"
 )
 
@@ -35,25 +35,6 @@ func (s *udpSessionId) Less(than btree.Item) bool {
 		return s.activeTime.Before(other.activeTime)
 	}
 	return s.id < other.id
-}
-
-type udpSession struct {
-	udpSessionId
-	addr       udpgwAddr
-	targetAddr string
-	localConn  net.Conn
-}
-
-func (u *udpSession) Write(content []byte) error {
-	var packet udpgwPacket
-	packet.content = content
-	packet.addr = u.addr
-	packet.conid = u.udpSessionId.id
-	if len(u.addr.ip) == 16 {
-		packet.flags = flagIPv6
-	}
-	return packet.write(u.localConn)
-
 }
 
 type udpgwAddr struct {
@@ -126,6 +107,100 @@ func (u *udpgwPacket) read(r *bufio.Reader) error {
 	return nil
 }
 
+type udpSession struct {
+	udpSessionId
+	addr             udpgwAddr
+	targetAddr       string
+	localConn        net.Conn
+	stream           mux.MuxStream
+	streamWriter     io.Writer
+	streamReader     io.Reader
+	proxyChannelName string
+}
+
+func (u *udpSession) closeStream() {
+	if nil != u.stream {
+		u.stream.Close()
+		u.stream = nil
+		u.streamWriter = nil
+		u.streamReader = nil
+	}
+}
+
+func (u *udpSession) Write(content []byte) error {
+	var packet udpgwPacket
+	packet.content = content
+	packet.addr = u.addr
+	packet.conid = u.udpSessionId.id
+	if len(u.addr.ip) == 16 {
+		packet.flags = flagIPv6
+	}
+	return packet.write(u.localConn)
+}
+
+func (u *udpSession) handlePacket(proxy *ProxyConfig, packet *udpgwPacket) error {
+	if nil != u.streamWriter {
+		u.streamWriter.Write(packet.content)
+		return nil
+	}
+
+	remoteAddr := packet.address()
+	if packet.addr.port == 53 {
+		selectProxy := proxy.findProxyChannelByRequest("dns", packet.addr.ip.String(), nil)
+		if selectProxy == directProxyChannelName {
+			res, err := dnsQueryRaw(packet.content, true)
+			if nil == err {
+				err = u.Write(res)
+			}
+			if nil != err {
+				logger.Error("[ERROR]Failed to query dns with reason:%v", err)
+			}
+			return err
+		}
+		u.proxyChannelName = selectProxy
+		if len(GConf.RemoteDNS.TrustedDNS) > 0 {
+			remoteAddr = selectDNSServer(GConf.RemoteDNS.TrustedDNS)
+		}
+	}
+	if len(u.proxyChannelName) == 0 {
+		u.proxyChannelName = proxy.findProxyChannelByRequest("udp", packet.addr.ip.String(), nil)
+	}
+	if len(u.proxyChannelName) == 0 {
+		logger.Error("[ERROR]No proxy found for udp to %s", packet.addr.ip.String())
+		return nil
+	}
+
+	if len(u.targetAddr) > 0 {
+		if u.targetAddr != packet.address() {
+			u.closeStream()
+		}
+	}
+	stream, conf, err := getMuxStreamByChannel(u.proxyChannelName)
+	if nil != err {
+		logger.Error("[ERROR]Failed to create mux stream:%v for proxy:%s by address:%v", err, u.proxyChannelName, packet.addr)
+		return err
+	}
+	stream.Connect("udp", remoteAddr)
+	u.stream = stream
+	u.streamReader, u.streamWriter = mux.GetCompressStreamReaderWriter(stream, conf.Compressor)
+	go func() {
+		b := make([]byte, 8192)
+		for {
+			n, err := u.streamReader.Read(b)
+			if n > 0 {
+				err = u.Write(b[0:n])
+			}
+			if nil != err {
+				break
+			}
+		}
+		u.closeStream()
+		removeUdpSession(&u.udpSessionId)
+	}()
+	u.streamWriter.Write(packet.content)
+	return nil
+}
+
 var udpSessionTable = make(map[uint16]*udpSession)
 var udpSessionIdSet = btree.New(4)
 var cidTable = make(map[uint32]uint16)
@@ -144,7 +219,7 @@ func closeAllUDPSession() {
 func removeUdpSession(id *udpSessionId) {
 	s, exist := udpSessionTable[id.id]
 	if exist {
-		log.Printf("Delete %d udpsession", id.id)
+		logger.Debug("Delete %d udpsession", id.id)
 		delete(udpSessionTable, s.id)
 	}
 }
@@ -213,22 +288,15 @@ func getCid(sid uint32) (uint16, bool) {
 }
 
 func handleUDPGatewayConn(localConn net.Conn, proxy *ProxyConfig) {
-	var proxyChannelName string
 	bufconn := bufio.NewReader(localConn)
-	var stream mux.MuxStream
-	var streamReader io.Reader
-	var streamWriter io.Writer
 	defer func() {
 		localConn.Close()
-		if nil != stream {
-			stream.Close()
-		}
 	}()
 	for {
 		var packet udpgwPacket
 		err := packet.read(bufconn)
 		if nil != err {
-			log.Printf("Failed to read udpgw packet:%v", err)
+			logger.Error("Failed to read udpgw packet:%v", err)
 			localConn.Close()
 			return
 		}
@@ -240,59 +308,6 @@ func handleUDPGatewayConn(localConn net.Conn, proxy *ProxyConfig) {
 		usession := getUDPSession(packet.conid, localConn, true)
 		usession.addr = packet.addr
 		updateUdpSession(usession)
-
-		if packet.addr.port == 53 {
-			selectProxy := proxy.findProxyChannelByRequest("dns", packet.addr.ip.String(), nil)
-			if selectProxy == directProxyChannelName {
-				res, err := dnsQueryRaw(packet.content, true)
-				if nil == err {
-					err = usession.Write(res)
-				}
-				if nil != err {
-					log.Printf("[ERROR]Failed to query dns with reason:%v", err)
-				}
-				continue
-			}
-			proxyChannelName = selectProxy
-		}
-
-		if len(usession.targetAddr) > 0 {
-			if usession.targetAddr != packet.address() {
-				if nil != stream {
-					stream.Close()
-					stream = nil
-				}
-			}
-		}
-
-		if nil == stream {
-			proxyChannelName = proxy.findProxyChannelByRequest("udp", packet.addr.ip.String(), nil)
-			if len(proxyChannelName) == 0 {
-				log.Printf("[ERROR]No proxy found for udp to %s", packet.addr.ip.String())
-				return
-			}
-			stream, conf, err := getMuxStreamByChannel(proxyChannelName)
-			if nil != err {
-				log.Printf("[ERROR]Failed to create mux stream:%v for proxy:%s by address:%v", err, proxyChannelName, packet.addr)
-				return
-			}
-			stream.Connect("udp", packet.address())
-			streamReader, streamWriter = mux.GetCompressStreamReaderWriter(stream, conf.Compressor)
-			go func() {
-				b := make([]byte, 8192)
-				for {
-					n, err := streamReader.Read(b)
-					if n > 0 {
-						err = usession.Write(b[0:n])
-					}
-					if nil != err {
-						stream.Close()
-						return
-					}
-				}
-			}()
-		} else {
-			streamWriter.Write(packet.content)
-		}
+		go usession.handlePacket(proxy, &packet)
 	}
 }

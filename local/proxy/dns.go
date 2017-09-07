@@ -61,8 +61,13 @@ func newDNSCacheRecord(record *dnsCacheRecord, res *dns.Msg) *dnsCacheRecord {
 }
 
 func selectDNSServer(servers []string) string {
+	var server string
 	serverLen := len(servers)
-	server := servers[rand.Intn(serverLen)]
+	if serverLen == 1 {
+		server = servers[0]
+	} else {
+		server = servers[rand.Intn(serverLen)]
+	}
 	if !strings.Contains(server, ":") {
 		server = net.JoinHostPort(server, "53")
 	}
