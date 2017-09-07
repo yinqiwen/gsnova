@@ -329,6 +329,10 @@ type LocalDNSConfig struct {
 	CacheSize  int
 }
 
+type RemoteDNSConfig struct {
+	TrustedDNS []string
+}
+
 type AdminConfig struct {
 	Listen        string
 	BroadcastAddr string
@@ -387,6 +391,7 @@ type LocalConfig struct {
 	UserAgent string
 	User      string
 	LocalDNS  LocalDNSConfig
+	RemoteDNS RemoteDNSConfig
 	UDPGW     UDPGWConfig
 	SNI       SNIConfig
 	Admin     AdminConfig

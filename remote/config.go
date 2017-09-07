@@ -59,20 +59,18 @@ type TCPServerConfig struct {
 }
 
 type ServerConfig struct {
-	AdminListen          string
-	DialTimeout          int
-	MaxDynamicPort       int
-	DynamicPortLifeCycle int
-	CandidateDynamicPort []int
-	AllowedUser          []string
-	Cipher               CipherConfig
-	Log                  []string
-	TLS                  TLServerConfig
-	KCP                  KCPServerConfig
-	QUIC                 QUICServerConfig
-	HTTP                 HTTPServerConfig
-	TCP                  TCPServerConfig
-	HTTP2                HTTP2ServerConfig
+	AdminListen    string
+	DialTimeout    int
+	UDPReadTimeout int
+	AllowedUser    []string
+	Cipher         CipherConfig
+	Log            []string
+	TLS            TLServerConfig
+	KCP            KCPServerConfig
+	QUIC           QUICServerConfig
+	HTTP           HTTPServerConfig
+	TCP            TCPServerConfig
+	HTTP2          HTTP2ServerConfig
 }
 
 func (conf *ServerConfig) VerifyUser(user string) bool {

@@ -3,6 +3,7 @@ package remote
 import (
 	"io"
 	"net"
+	"strings"
 	"time"
 
 	"github.com/yinqiwen/gsnova/common/logger"
@@ -28,6 +29,14 @@ func handleProxyStream(stream mux.MuxStream, compresor string) {
 		return
 	}
 	streamReader, streamWriter := mux.GetCompressStreamReaderWriter(stream, compresor)
+	if strings.EqualFold(creq.Network, "udp") {
+		//udp connection need to set read timeout to avoid hang forever
+		udpReadTimeout := 30 * time.Second
+		if ServerConf.UDPReadTimeout > 0 {
+			udpReadTimeout = time.Duration(ServerConf.UDPReadTimeout) * time.Second
+		}
+		c.SetReadDeadline(time.Now().Add(udpReadTimeout))
+	}
 	defer c.Close()
 	go func() {
 		io.Copy(c, streamReader)

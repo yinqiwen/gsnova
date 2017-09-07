@@ -91,32 +91,6 @@ func serveProxyConn(conn net.Conn, proxy *ProxyConfig) {
 			remoteHost = sni
 			trySniffDomain = false
 		}
-		// sniChunkPeekSize := 512
-		// for {
-		// 	conn.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
-		// 	sniChunk, _ := bufconn.Peek(sniChunkPeekSize)
-		// 	if len(sniChunk) > 0 {
-		// 		sni, err := helper.TLSParseSNI(sniChunk)
-		// 		if err != nil {
-		// 			if err != helper.ErrTLSIncomplete {
-		// 				break
-		// 			}
-		// 			sniChunkPeekSize = sniChunkPeekSize * 2
-		// 			continue
-		// 		} else {
-		// 			if redirect, ok := GConf.SNI.redirect(sni); ok {
-		// 				sni = redirect
-		// 			}
-		// 			log.Printf("Sniffed SNI:%s:%s for IP:%s:%s", sni, remotePort, remoteHost, remotePort)
-		// 			remoteHost = sni
-		// 			trySniffDomain = false
-		// 			break
-		// 		}
-		// 	} else {
-		// 		//try next round
-		// 		break
-		// 	}
-		// }
 	}
 
 	//2. sniff domain via http
@@ -275,10 +249,15 @@ func startLocalProxyServer(proxyIdx int) (*net.TCPListener, error) {
 	logger.Info("Listen on address %s", proxyConf.Local)
 	go func() {
 		for proxyServerRunning {
-			conn, err := lp.AcceptTCP()
+			var conn net.Conn
+			conn, err = lp.AcceptTCP()
 			if nil != err {
+				if nil != conn {
+					conn.Close()
+				}
 				continue
 			}
+
 			go serveProxyConn(conn, &GConf.Proxy[proxyIdx])
 		}
 		lp.Close()

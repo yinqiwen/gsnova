@@ -17,6 +17,11 @@
     	"TrustedDNS": ["208.67.222.222:443", "208.67.220.220:443"],
     	"CacheSize":1024,
     	"TCPConnect": false 
+	},
+	
+	//used to replace forward dns query's target DNS server addr 
+	"RemoteDNS":{
+    	"TrustedDNS": ["8.8.8.8", "8.8.4.4"]
     },
 
 	"UDPGW":{
