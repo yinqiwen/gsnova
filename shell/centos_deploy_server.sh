@@ -55,7 +55,10 @@ function  build_gsnova_server(){
     echo ">>>>> Building gsnova server"
     mkdir -p $GSNOVA_SERVICE_DIR; cd $GSNOVA_SERVICE_DIR
     go build  -v github.com/yinqiwen/gsnova/remote/server
-    cp $GOPATH/src/github.com/yinqiwen/gsnova/server.json ./
+    if [ ! -f server.json ]; then
+        cp $GOPATH/src/github.com/yinqiwen/gsnova/server.json ./
+    fi
+    
     echo "<<<<< Done building gsnova server"
     echo "Please edit $GSNOVA_SERVICE_DIR/server.json before start gsnova_server."
     cd ..
