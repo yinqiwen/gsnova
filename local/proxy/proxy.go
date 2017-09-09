@@ -61,6 +61,7 @@ func InitialPMuxConfig(conf *ProxyChannelConfig) *pmux.Config {
 	cfg.CipherMethod = mux.DefaultMuxCipherMethod
 	cfg.CipherInitialCounter = mux.DefaultMuxInitialCipherCounter
 	cfg.EnableKeepAlive = false
+	cfg.PingTimeout = 5 * time.Second
 	return cfg
 }
 
@@ -138,9 +139,7 @@ func (s *muxSessionHolder) heartbeat(interval int) {
 				if err != nil {
 					logger.Error("[ERR]: Ping remote:%s failed: %v", s.server, err)
 					//s.exitErr(ErrKeepAliveTimeout)
-					if err == pmux.ErrSessionShutdown {
-						s.close()
-					}
+					s.close()
 					//return
 				} else {
 					logger.Debug("Cost %v to ping remote:%s", duration, s.server)
