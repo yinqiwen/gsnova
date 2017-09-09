@@ -74,6 +74,8 @@ stdout_logfile=$(pwd)/gsnova_server.log" > gsnova_server_supervise.conf
 
    echo "Plase add $(pwd)/gsnova_server_supervise.conf into /etc/supervisord.conf include section first."
    echo "Then exec \"supervisord -c /etc/supervisord.conf\" to run gsnova server."
+   #kill existing process
+   kill -9 `cat .gsnova.pid 2>/dev/null` 2>/dev/null
 }
 
 install_dependencies

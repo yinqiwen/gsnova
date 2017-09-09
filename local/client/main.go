@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 
@@ -32,6 +33,7 @@ func main() {
 	}
 	home, _ := filepath.Split(path)
 	dir := flag.String("dir", home, "Specify running dir for gsnova")
+	pid := flag.String("pid", ".gsnova.pid", "PID file")
 	flag.Parse()
 
 	printASCIILogo()
@@ -40,6 +42,9 @@ func main() {
 	if nil != err {
 		logger.Error("Start gsnova error:%v", err)
 	} else {
+		if len(*pid) > 0 {
+			ioutil.WriteFile(*pid, []byte(fmt.Sprintf("%d", os.Getpid())), os.ModePerm)
+		}
 		ch := make(chan int)
 		<-ch
 	}

@@ -3,6 +3,8 @@ package remote
 import (
 	"encoding/json"
 	"flag"
+	"fmt"
+	"io/ioutil"
 	"os"
 	"strings"
 
@@ -125,6 +127,7 @@ func init() {
 	quicServer := flag.String("quic", "", "QUIC listen address")
 	kcpServer := flag.String("kcp", "", "KCP listen address")
 	tlsServer := flag.String("tls", "", "TLS listen address")
+	pid := flag.String("pid", ".gsnova.pid", "PID file")
 
 	flag.Parse()
 
@@ -193,4 +196,8 @@ func init() {
 	logger.Info("Load server conf success.")
 	confdata, _ := json.MarshalIndent(&ServerConf, "", "    ")
 	logger.Info("GSnova server:%s start with config:\n%s", Version, string(confdata))
+
+	if len(*pid) > 0 {
+		ioutil.WriteFile(*pid, []byte(fmt.Sprintf("%d", os.Getpid())), os.ModePerm)
+	}
 }
