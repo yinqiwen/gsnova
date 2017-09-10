@@ -13,12 +13,12 @@ import (
 	"github.com/yinqiwen/gsnova/local/proxy"
 )
 
-type testProc struct {
-}
+// type testProc struct {
+// }
 
-func (t *testProc) Protect(fileDescriptor int) error {
-	return nil
-}
+// func (t *testProc) Protect(fileDescriptor int) error {
+// 	return nil
+// }
 
 func StartLocalProxy(home string, conf string, hosts string, watchConf bool) error {
 	options := proxy.ProxyOptions{
@@ -27,7 +27,7 @@ func StartLocalProxy(home string, conf string, hosts string, watchConf bool) err
 		Hosts:     hosts,
 		WatchConf: watchConf,
 	}
-	ProtectConnections("114.114.114.114", &testProc{})
+	// ProtectConnections("114.114.114.114", &testProc{})
 	return proxy.Start(options)
 }
 
