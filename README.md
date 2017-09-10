@@ -47,7 +47,7 @@ GSnova: Private Proxy Solution.
 ```shell
    go get -t -u -v github.com/yinqiwen/gsnova/remote/server
    go build github.com/yinqiwen/gsnova/remote/server
-   ./server -tcp :48100 -quic :48100 -tls :48101 -kcp :48102 -http :48102 -http2 :48102  -key 809240d3a021449f6e67aa73221d42df942a308a -allow "*"
+   ./server -tcp :48100 -quic :48100 -tls :48101 -kcp :48101 -http :48102 -http2 :48103  -key 809240d3a021449f6e67aa73221d42df942a308a -allow "*"
 ```
 This would launch a running instance listening at serveral ports with different transport protocol.  
 
@@ -60,7 +60,7 @@ The server can also be deployed to serveral PAAS service like heroku/openshift a
    go build github.com/yinqiwen/gsnova/local/client
    cp $GOPATH/github.com/yinqiwen/gsnova/*.json ./
    #...edit client.json...
-   ./client
+   ./client -conf ./client.json
 ```
 This is a sample for client.json, the `Key` and the `ServerList` need to be modified to match your server.
 ```json

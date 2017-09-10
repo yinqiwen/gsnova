@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"os"
@@ -56,21 +57,18 @@ func (conn *ProtectedConnBase) connectSocket() error {
 type ProtectedPacketConn struct {
 	ProtectedConnBase
 	net.PacketConn
-	C       net.Conn
 	rawFile *os.File
 }
 
 func (c *ProtectedPacketConn) Write(b []byte) (int, error) {
-	if nil == c.C {
+	writer, ok := c.PacketConn.(io.Writer)
+	if !ok {
 		return 0, syscall.EINVAL
 	}
-	return c.C.Write(b)
+	return writer.Write(b)
 }
 
 func (c *ProtectedPacketConn) Close() error {
-	if nil == c.C {
-		c.C.Close()
-	}
 	return c.PacketConn.Close()
 }
 
@@ -82,7 +80,6 @@ func (conn *ProtectedPacketConn) convert() error {
 	conn.rawFile = file
 	// dup the fd and return a copy
 	fileConn, err := net.FilePacketConn(file)
-	fc, _ := net.FileConn(file)
 	// closes the original fd
 	file.Close()
 	conn.socketFd = socketError
@@ -90,7 +87,6 @@ func (conn *ProtectedPacketConn) convert() error {
 		conn.mutex.Unlock()
 		return err
 	}
-	conn.C = fc
 	conn.PacketConn = fileConn
 	conn.mutex.Unlock()
 	return nil
