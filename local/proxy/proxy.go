@@ -23,8 +23,6 @@ import (
 
 var proxyHome string
 
-type InternalEventMonitor func(code int, desc string) error
-
 type ProxyFeatureSet struct {
 	AutoExpire bool
 	Pingable   bool
@@ -309,9 +307,7 @@ func RegisterProxyType(str string, p Proxy) error {
 }
 
 func getMuxStreamByChannel(name string) (mux.MuxStream, *ProxyChannelConfig, error) {
-
 	pch, exist := proxyChannelTable[name]
-
 	if !exist {
 		return nil, nil, fmt.Errorf("No proxy found to get mux session")
 	}
@@ -354,19 +350,30 @@ func watchConf(watcher *fsnotify.Watcher) {
 	}
 }
 
-func Start(home string, monitor InternalEventMonitor) error {
-	confWatcher, err := fsnotify.NewWatcher()
-	if err != nil {
-		logger.Fatal("%v", err)
-		return err
+type ProxyOptions struct {
+	Config    string
+	Hosts     string
+	Home      string
+	WatchConf bool
+}
+
+func Start(options ProxyOptions) error {
+	clientConf := options.Config
+	hostsConf := options.Hosts
+	proxyHome = options.Home
+
+	if options.WatchConf {
+		confWatcher, err := fsnotify.NewWatcher()
+		if err != nil {
+			logger.Fatal("%v", err)
+			return err
+		}
+		confWatcher.Add(clientConf)
+		confWatcher.Add(hostsConf)
+		go watchConf(confWatcher)
 	}
-	clientConf := home + "/" + clientConfName
-	hostsConf := home + "/" + hostsConfName
-	proxyHome = home
-	confWatcher.Add(clientConf)
-	confWatcher.Add(hostsConf)
-	go watchConf(confWatcher)
-	err = loadConf(clientConf)
+
+	err := loadConf(clientConf)
 	if nil != err {
 		//log.Println(err)
 		return err
@@ -411,7 +418,7 @@ func Stop() error {
 	//proxyChannelMutex.Lock()
 	for _, pch := range proxyChannelTable {
 		for holder := range pch.sessions {
-			if nil != holder {
+			if nil != holder && nil != holder.muxSession {
 				holder.muxSession.Close()
 			}
 		}

@@ -61,19 +61,16 @@
 	"Proxy":[
 		{
 			"Local": ":48100",
-			//sniff sni for non 80 port(http) traffic instead of real target address, default is false
-			"SNISniff": true,
 			"PAC":[
-				//// 'Direct/TLSDirect' MUST  proxy channel names confgiured below 
-				//{"Protocol":["dns", "udp"],"Remote":"Direct"},
+				//{"Protocol":["dns", "udp"],"Remote":"direct"},
 				// Support rules 'IsCNIP/InHosts/BlockedByGFW'
-				//{"Rule":["InHosts"],"Remote":"TLSDirect"},
+				//{"Rule":["InHosts"],"Remote":"direct"},
 				//{"Rule":["!IsCNIP"],"Remote":"heroku"},
 				//{"Rule":["BlockedByGFW"],"Remote":"heroku"},
 				//{"Host":["*notexist_domain.com"],"Remote":"Reject"},
-				//{"Host":["*"],"Remote":"Direct"},
-				//{"URL":["*"],"Remote":"Direct"},
-				//{"Method":["CONNECT"],"Remote":"Direct"}
+				//{"Host":["*"],"Remote":"direct"},
+				//{"URL":["*"],"Remote":"direct"},
+				//{"Method":["CONNECT"],"Remote":"direct"}
 				{"Remote":"Default"}
 			]
 		},

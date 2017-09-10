@@ -247,14 +247,12 @@ func startLocalProxyServer(proxyIdx int) (*net.TCPListener, error) {
 		return nil, err
 	}
 	logger.Info("Listen on address %s", proxyConf.Local)
+	runningServers[proxyIdx] = lp
 	go func() {
 		for proxyServerRunning {
 			var conn net.Conn
 			conn, err = lp.AcceptTCP()
 			if nil != err {
-				if nil != conn {
-					conn.Close()
-				}
 				continue
 			}
 
@@ -269,12 +267,9 @@ var runningServers []*net.TCPListener
 
 func startLocalServers() error {
 	proxyServerRunning = true
-	runningServers = make([]*net.TCPListener, 0)
+	runningServers = make([]*net.TCPListener, len(GConf.Proxy))
 	for i, _ := range GConf.Proxy {
-		l, _ := startLocalProxyServer(i)
-		if nil != l {
-			runningServers = append(runningServers, l)
-		}
+		startLocalProxyServer(i)
 	}
 	return nil
 }
@@ -282,7 +277,9 @@ func startLocalServers() error {
 func stopLocalServers() {
 	proxyServerRunning = false
 	for _, l := range runningServers {
-		l.Close()
+		if nil != l {
+			l.Close()
+		}
 	}
 	//closeAllProxySession()
 	closeAllUDPSession()

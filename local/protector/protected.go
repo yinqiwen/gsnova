@@ -56,6 +56,22 @@ func (conn *ProtectedConnBase) connectSocket() error {
 type ProtectedPacketConn struct {
 	ProtectedConnBase
 	net.PacketConn
+	C       net.Conn
+	rawFile *os.File
+}
+
+func (c *ProtectedPacketConn) Write(b []byte) (int, error) {
+	if nil == c.C {
+		return 0, syscall.EINVAL
+	}
+	return c.C.Write(b)
+}
+
+func (c *ProtectedPacketConn) Close() error {
+	if nil == c.C {
+		c.C.Close()
+	}
+	return c.PacketConn.Close()
 }
 
 // converts the protected connection specified by
@@ -63,8 +79,10 @@ type ProtectedPacketConn struct {
 func (conn *ProtectedPacketConn) convert() error {
 	conn.mutex.Lock()
 	file := os.NewFile(uintptr(conn.socketFd), "")
+	conn.rawFile = file
 	// dup the fd and return a copy
 	fileConn, err := net.FilePacketConn(file)
+	fc, _ := net.FileConn(file)
 	// closes the original fd
 	file.Close()
 	conn.socketFd = socketError
@@ -72,6 +90,7 @@ func (conn *ProtectedPacketConn) convert() error {
 		conn.mutex.Unlock()
 		return err
 	}
+	conn.C = fc
 	conn.PacketConn = fileConn
 	conn.mutex.Unlock()
 	return nil
@@ -79,8 +98,8 @@ func (conn *ProtectedPacketConn) convert() error {
 
 // connectSocket makes the connection to the given IP address port
 // for the given socket fd
-func (conn *ProtectedPacketConn) listenSocket() error {
-	sockAddr := syscall.SockaddrInet4{Addr: conn.ip, Port: conn.port}
+func (conn *ProtectedPacketConn) listenSocket(ip [4]byte, port int) error {
+	sockAddr := syscall.SockaddrInet4{Addr: ip, Port: port}
 	err := syscall.Bind(conn.socketFd, &sockAddr)
 	if nil != err {
 		return err
@@ -319,7 +338,8 @@ func SplitHostPort(addr string) (string, int, error) {
 func ListenUDP(network string, laddr *net.UDPAddr) (net.PacketConn, error) {
 	conn := &ProtectedPacketConn{}
 	conn.ProtectedConnBase.port = laddr.Port
-	copy(conn.ip[:], laddr.IP.To4())
+	var ip [4]byte
+	copy(ip[:], laddr.IP.To4())
 	socketFd, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_DGRAM, 0)
 	if err != nil {
 		log.Printf("Could not create udp socket: %v", err)
@@ -334,7 +354,7 @@ func ListenUDP(network string, laddr *net.UDPAddr) (net.PacketConn, error) {
 		return nil, fmt.Errorf("Could not bind socket to system device: %v", err)
 	}
 
-	err = conn.listenSocket()
+	err = conn.listenSocket(ip, laddr.Port)
 	if err != nil {
 		log.Printf("Could not listen udp socket: %v", err)
 		return nil, err
@@ -365,7 +385,11 @@ func DialUDP(network string, laddr, raddr *net.UDPAddr) (net.PacketConn, error) 
 	if err != nil {
 		return nil, fmt.Errorf("Could not bind socket to system device: %v", err)
 	}
-
+	if nil != laddr {
+		var ip [4]byte
+		copy(ip[:], laddr.IP.To4())
+		conn.listenSocket(ip, laddr.Port)
+	}
 	err = conn.connectSocket()
 	if err != nil {
 		log.Printf("Could not connect to %s socket: %v", raddr, err)

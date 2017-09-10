@@ -195,32 +195,37 @@ func (u *udpSession) handlePacket(proxy *ProxyConfig, packet *udpgwPacket) error
 			}
 		}
 		u.closeStream()
-		removeUdpSession(&u.udpSessionId)
+		removeUdpSession(&u.udpSessionId, 0)
+		updateUdpSession(u, true)
 	}()
 	u.streamWriter.Write(packet.content)
 	return nil
 }
 
-var udpSessionTable = make(map[uint16]*udpSession)
+var udpSessionTable sync.Map
 var udpSessionIdSet = btree.New(4)
 var cidTable = make(map[uint32]uint16)
 var udpSessionMutex sync.Mutex
 
 func closeAllUDPSession() {
-	udpSessionMutex.Lock()
-	defer udpSessionMutex.Unlock()
-	for id, _ := range udpSessionTable {
-		delete(udpSessionTable, id)
-		//closeProxySession(session.session.id)
-	}
+	udpSessionTable.Range(func(key, value interface{}) bool {
+		session := value.(*udpSession)
+		session.closeStream()
+		return true
+	})
+	udpSessionTable = sync.Map{}
 	cidTable = make(map[uint32]uint16)
 }
 
-func removeUdpSession(id *udpSessionId) {
-	s, exist := udpSessionTable[id.id]
+func removeUdpSession(id *udpSessionId, expireTime time.Duration) {
+	v, exist := udpSessionTable.Load(id.id)
 	if exist {
-		logger.Debug("Delete %d udpsession", id.id)
-		delete(udpSessionTable, s.id)
+		if expireTime > 0 {
+			logger.Debug("Delete udpsession:%d since it's not active since %v ago.", id.id, expireTime)
+		}
+		v.(*udpSession).closeStream()
+		udpSessionTable.Delete(id.id)
+		//delete(udpSessionTable, s.id)
 	}
 }
 
@@ -237,8 +242,10 @@ func expireUdpSessions() {
 			tmp := udpSessionIdSet.Min()
 			if nil != tmp {
 				id := tmp.(*udpSessionId)
-				if id.activeTime.Add(20 * time.Second).Before(time.Now()) {
-					removeUdpSession(id)
+				expireTime := time.Now().Sub(id.activeTime)
+				if expireTime >= 30*time.Second {
+					udpSessionIdSet.Delete(id)
+					removeUdpSession(id, expireTime)
 				} else {
 					return
 				}
@@ -253,32 +260,34 @@ func expireUdpSessions() {
 	}
 }
 
-func updateUdpSession(u *udpSession) {
+func updateUdpSession(u *udpSession, remove bool) {
 	udpSessionMutex.Lock()
 	defer udpSessionMutex.Unlock()
-	if u.activeTime.Unix() != 0 {
+	if !u.activeTime.IsZero() {
 		udpSessionIdSet.Delete(&u.udpSessionId)
 	}
-	u.activeTime = time.Now()
-	udpSessionIdSet.ReplaceOrInsert(&u.udpSessionId)
+	if !remove {
+		u.activeTime = time.Now()
+		udpSessionIdSet.ReplaceOrInsert(&u.udpSessionId)
+	}
 }
 
 func getUDPSession(id uint16, conn net.Conn, createIfMissing bool) *udpSession {
 	udpSessionMutex.Lock()
 	defer udpSessionMutex.Unlock()
-	usession, exist := udpSessionTable[id]
+	usession, exist := udpSessionTable.Load(id)
 	if !exist {
 		if createIfMissing {
 			s := new(udpSession)
 			s.localConn = conn
 			s.id = id
-			udpSessionTable[id] = s
+			udpSessionTable.Store(id, s)
 			//cidTable[s.session.id] = id
 			return s
 		}
 		return nil
 	}
-	return usession
+	return usession.(*udpSession)
 }
 func getCid(sid uint32) (uint16, bool) {
 	udpSessionMutex.Lock()
@@ -307,7 +316,7 @@ func handleUDPGatewayConn(localConn net.Conn, proxy *ProxyConfig) {
 
 		usession := getUDPSession(packet.conid, localConn, true)
 		usession.addr = packet.addr
-		updateUdpSession(usession)
+		updateUdpSession(usession, false)
 		go usession.handlePacket(proxy, &packet)
 	}
 }

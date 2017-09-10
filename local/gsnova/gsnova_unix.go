@@ -23,4 +23,5 @@ func ProtectConnections(dnsServer string, p SocketProtector) {
 	netx.OverrideDial(protector.DialContext)
 	netx.OverrideResolve(protector.Resolve)
 	netx.OverrideListenUDP(protector.ListenUDP)
+	netx.OverrideDialUDP(protector.DialUDP)
 }

@@ -1,6 +1,7 @@
 package kcp
 
 import (
+	"io"
 	"net"
 	"net/url"
 
@@ -15,10 +16,16 @@ import (
 // connectedUDPConn is a wrapper for net.UDPConn which converts WriteTo syscalls
 // to Write syscalls that are 4 times faster on some OS'es. This should only be
 // used for connections that were produced by a net.Dial* call.
-type connectedUDPConn struct{ *net.UDPConn }
+type connectedUDPConn struct{ net.PacketConn }
 
 // WriteTo redirects all writes to the Write syscall, which is 4 times faster.
-func (c *connectedUDPConn) WriteTo(b []byte, addr net.Addr) (int, error) { return c.Write(b) }
+func (c *connectedUDPConn) WriteTo(b []byte, addr net.Addr) (int, error) {
+	writer, ok := c.PacketConn.(io.Writer)
+	if ok {
+		return writer.Write(b)
+	}
+	return c.PacketConn.WriteTo(b, addr)
+}
 
 type KCPProxy struct {
 	//proxy.BaseProxy
@@ -51,11 +58,11 @@ func (tc *KCPProxy) CreateMuxSession(server string, conf *proxy.ProxyChannelConf
 	if err != nil {
 		return nil, err
 	}
-	udpconn, err := netx.DialUDP("udp", nil, udpaddr)
+	udpconn, err := netx.DialUDP("udp", &net.UDPAddr{IP: net.IPv4zero, Port: 0}, udpaddr)
 	if err != nil {
 		return nil, err
 	}
-	kcpconn, err := kcp.NewConn(hostport, block, conf.KCP.DataShard, conf.KCP.ParityShard, &connectedUDPConn{udpconn.(*net.UDPConn)})
+	kcpconn, err := kcp.NewConn(hostport, block, conf.KCP.DataShard, conf.KCP.ParityShard, &connectedUDPConn{udpconn})
 	//kcpconn, err := kcp.NewConn(hostport, block, conf.KCP.DataShard, conf.KCP.ParityShard, udpconn)
 	//kcpconn, err := kcp.DialWithOptions(hostport, block, conf.KCP.DataShard, conf.KCP.ParityShard)
 	if err != nil {

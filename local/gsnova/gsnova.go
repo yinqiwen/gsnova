@@ -13,25 +13,22 @@ import (
 	"github.com/yinqiwen/gsnova/local/proxy"
 )
 
-type EventMonitor interface {
-	OnEvent(code int, desc string) error
-}
+// type testProc struct {
+// }
 
-type testProc struct {
-}
+// func (t *testProc) Protect(fileDescriptor int) error {
+// 	return nil
+// }
 
-func (t *testProc) Protect(fileDescriptor int) error {
-	return nil
-}
-
-func StartLocalProxy(dir string, monitor EventMonitor) error {
-	//ProtectConnections("114.114.114.114", &testProc{})
-	if nil != monitor {
-		return proxy.Start(dir, monitor.OnEvent)
-	} else {
-		return proxy.Start(dir, nil)
+func StartLocalProxy(home string, conf string, hosts string, watchConf bool) error {
+	options := proxy.ProxyOptions{
+		Home:      home,
+		Config:    conf,
+		Hosts:     hosts,
+		WatchConf: watchConf,
 	}
-
+	//ProtectConnections("114.114.114.114", &testProc{})
+	return proxy.Start(options)
 }
 
 func StopLocalProxy() error {
