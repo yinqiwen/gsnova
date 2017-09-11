@@ -1,0 +1,7 @@
+gsnova.log*
+my.json
+.DS_Store
+Godeps
+.exe
+vendor
+.DS_Store

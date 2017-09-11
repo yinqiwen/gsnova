@@ -1,0 +1,9 @@
+---
+applications:
+- disk_quota: 1024M
+  buildpack: go_buildpack
+  name: paas
+  path: .
+  domain: mybluemix.net
+  instances: 1
+  memory: 128M

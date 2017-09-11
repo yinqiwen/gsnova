@@ -1,0 +1,28 @@
+{
+	//this is just a example, do not use the ip in your env
+	
+	//"sni_proxy":["10.10.10.10", "11.11.11.11"],
+	// "cn_sni_proxy" :["10.10.10.10", "11.11.11.11"],
+	// "google_https":["sni_proxy"],
+	// "*.appspot.com":["sni_proxy"],
+	// "*.google.com":["google_https"],
+	// "*.googlevideo.com":["google_https"],
+	// "*.gstatic.com":["google_https"],
+	// "*.googleusercontent.com":["google_https"],
+	// "*.ytimg.com":["google_https"],
+	// "*.ggpht.com":["google_https"],
+	// "*.blogspot.com":["google_https"],
+	// "*.blogger.com":["google_https"],
+	// "*.blogblog.com":["google_https"],
+	// "*.google.co.*":["google_https"],
+	// "*.googleapis.com":["google_https"],
+	// "*.youtube-nocookie.com":["google_https"],
+	// "*.google-analytics.com":["google_https"],
+	// "golang.org":["google_https"],
+	// "*.golang.org":["google_https"],
+	// "android.com":["google_https"],
+	// "*.android.com":["google_https"],
+	// "*.googlecode.com":["google_https"],
+	// "*.doubleclick.net":["google_https"],
+	// "*.youtube.com":["google_https"]
+}

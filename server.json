@@ -1,0 +1,35 @@
+{
+	"AdminListen": "127.0.0.1:60000",
+	"DialTimeout": 15,
+	"UDPReadTimeout": 30,
+	//user name auth
+	"AllowedUser":["*", "gsnova"],
+	"Cipher":{"Key":"809240d3a021449f6e67aa73221d42df942a308a"},
+	"TCP":{
+		"Listen":":48100"
+	},
+	"QUIC":{
+		"Listen":":48100"
+	},
+	"HTTP":{
+		"Listen":":48101"
+	},
+	"KCP":{
+		"Listen":":48101",
+		"Mode":"fast"
+	},
+	//If u want to listen with TLS, add the key/cert configuration
+    "TLS":{
+       //"Key":"/etc/letsencrypt/live/testdomain.tk/privkey.pem",
+	   //"Cert":"/etc/letsencrypt/live/testdomain.tk/fullchain.pem"
+	   "Listen":"48102",
+       "Key": "",
+       "Cert":""
+	},
+	"HTTP2":{
+		"Listen":":48103",
+		"Key": "",
+		"Cert":""
+	},
+	"Log": ["server.log"]
+}

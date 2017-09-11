@@ -1,0 +1,138 @@
+{
+    //this is just a example
+	"Log": ["color", "gsnova.log"],
+	"UserAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/60.0.3112.101 Safari/537.36",
+	//encrypt method can choose from none/auto/salsa20/chacha20poly1305/aes256-gcm
+	//'auto' method would choose fastest encrypt method for current env
+	"Cipher":{"Method":"auto", "Key":"809240d3a021449f6e67aa73221d42df942a308a"},
+	
+	 //user name auth
+	 "User": "gsnova",
+
+    "LocalDNS":{
+    	//only listen UDP
+    	"Listen": "127.0.0.1:48100",
+    	//for PAC rule 'IsCNIP', it would resolve the domain by 'TrustedDNS' if 'BlockedByGFW', and resolve the rest by 'FastDNS'
+    	"FastDNS":["114.114.114.114"],
+    	"TrustedDNS": ["208.67.222.222:443", "208.67.220.220:443"],
+    	"CacheSize":1024,
+    	"TCPConnect": false 
+	},
+	
+	//used to replace forward dns query's target DNS server addr 
+	"RemoteDNS":{
+    	"TrustedDNS": ["8.8.8.8", "8.8.4.4"]
+    },
+
+	"UDPGW":{
+		//fake address, only used as udp protocol indicator
+		"Addr":"20.20.20.20:1111",
+		//since gsnova sniff SNI for https, 'Host' for http, return fake record for dns query would make it run faster for http/https traffic
+		"LocalDNSRecord":{
+			"*" : "111.111.111.111"
+		}
+	},
+
+	"SNI":{
+		//Used to redirect SNI host to another for sniffed SNI
+		"Redirect":{
+			//This fix "DF-DFERH-01" error in HW phone for google play 
+			"services.googleapis.cn":"services.googleapis.com"
+		}
+	},
+
+    //used to handle admin command from http client    
+    "Admin":{
+    	//a local http server, do NOT expose this http server to public
+    	//listen on private IP instead of the default config 
+    	//eg: "Listen": "192.168.1.1:7788",
+		"Listen": ":7788",
+		//used to broadcast admin server address.
+		"BroadcastAddr":"224.0.0.1:48100",
+    	"ConfigDir":"./android"
+    },
+
+    "GFWList":{
+    	"URL":"https://raw.githubusercontent.com/gfwlist/gfwlist/master/gfwlist.txt",
+    	"Proxy":"",
+    	"UserRule":[]
+    },
+
+	"Proxy":[
+		{
+			"Local": ":48100",
+			"PAC":[
+				//{"Protocol":["dns", "udp"],"Remote":"direct"},
+				// Support rules 'IsCNIP/InHosts/BlockedByGFW'
+				//{"Rule":["InHosts"],"Remote":"direct"},
+				//{"Rule":["!IsCNIP"],"Remote":"heroku"},
+				//{"Rule":["BlockedByGFW"],"Remote":"heroku"},
+				//{"Host":["*notexist_domain.com"],"Remote":"Reject"},
+				//{"Host":["*"],"Remote":"direct"},
+				//{"URL":["*"],"Remote":"direct"},
+				//{"Method":["CONNECT"],"Remote":"direct"}
+				{"Remote":"Default"}
+			]
+		},
+		{
+			"Local": ":48101",
+			"PAC":[
+				{"Remote":"heroku-websocket"}
+			]
+		},
+		{
+			"Local": ":48102",
+			"PAC":[
+				{"Remote":"vps-quic"}
+			]
+		}
+	],
+
+	"Channel":[
+		{
+		    "Enable":false,
+			"Name":"heroku-websocket",
+			//Allowed server url with schema 'http/http2/https/ws/wss/tcp/tls/quic/kcp/ssh'
+			//"ServerList":["quic://1.1.1.1:48101"],
+			"ServerList":["wss://xyz.herokuapp.com"],
+			//"ServerList":["tcp://127.0.0.1:18080"],
+			//"ServerList":["ssh://root@1.1.1.1:22?key=./PPP"],
+	        //if u are behind a HTTP proxy
+	        "Proxy":"",
+		    "ConnsPerServer":3,
+		    //Unit: second
+		    "DialTimeout":5,
+		    //Unit: second
+		    "ReadTimeout":15,
+		    //Reconnect after 120s
+		    "ReconnectPeriod": 300,
+		    //ReconnectPeriod rand adjustment, the real reconnect period is random value between [P - adjust, P + adjust] 
+		    "RCPRandomAdjustment" : 10,
+		    //Send heartbeat msg to keep alive 
+			"HeartBeatPeriod": 30,
+			"Compressor":"none"
+		},
+		{
+		    "Enable":false,
+			"Name":"vps-quic",
+			"ServerList":["quic://1.1.1.1:8080"],
+	        //if u are behind a HTTP proxy
+	        "Proxy":"",
+		    "ConnsPerServer":3,
+		    //Unit: second
+		    "DialTimeout":5,
+		    //Unit: second
+		    "ReadTimeout":15,
+		    //Reconnect after 120s
+		    "ReconnectPeriod": 1800,
+		    //ReconnectPeriod rand adjustment, the real reconnect period is random value between [P - adjust, P + adjust] 
+		    "RCPRandomAdjustment" : 60,
+		    //Send heartbeat msg to keep alive 
+			"HeartBeatPeriod": 30,
+			"Compressor":"none",
+			"KCP":{
+				"Mode":"fast"
+			}
+		}
+	]
+}
