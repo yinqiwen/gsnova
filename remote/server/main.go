@@ -49,12 +49,18 @@ func main() {
 	var serverDone []chan bool
 
 	if len(remote.ServerConf.QUIC.Listen) > 0 {
-		done := make(chan bool)
-		serverDone = append(serverDone, done)
-		go func() {
-			quic.StartQuicProxyServer(remote.ServerConf.QUIC.Listen)
-			done <- true
-		}()
+		tlscfg, err := generateTLSConfig(remote.ServerConf.QUIC.Cert, remote.ServerConf.QUIC.Key)
+		if nil != err {
+			logger.Error("Failed to create TLS config by cert/key: %s/%s", remote.ServerConf.QUIC.Cert, remote.ServerConf.QUIC.Key)
+		} else {
+			done := make(chan bool)
+			serverDone = append(serverDone, done)
+			go func() {
+				quic.StartQuicProxyServer(remote.ServerConf.QUIC.Listen, tlscfg)
+				done <- true
+			}()
+		}
+
 	}
 	if len(remote.ServerConf.KCP.Listen) > 0 {
 		done := make(chan bool)

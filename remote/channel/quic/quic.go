@@ -1,8 +1,9 @@
 package quic
 
 import (
+	"crypto/tls"
+
 	quic "github.com/lucas-clemente/quic-go"
-	"github.com/yinqiwen/gsnova/common/helper"
 	"github.com/yinqiwen/gsnova/common/logger"
 	"github.com/yinqiwen/gsnova/common/mux"
 	"github.com/yinqiwen/gsnova/remote"
@@ -20,8 +21,8 @@ func servQUIC(lp quic.Listener) {
 	//ws.WriteMessage(websocket.CloseMessage, []byte{})
 }
 
-func StartQuicProxyServer(addr string) error {
-	lp, err := quic.ListenAddr(addr, helper.GenerateTLSConfig(), nil)
+func StartQuicProxyServer(addr string, config *tls.Config) error {
+	lp, err := quic.ListenAddr(addr, config, nil)
 	if nil != err {
 		logger.Error("[ERROR]Failed to listen QUIC address:%s with reason:%v", addr, err)
 		return err

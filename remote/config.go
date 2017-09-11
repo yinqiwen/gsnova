@@ -45,6 +45,8 @@ type KCPServerConfig struct {
 
 type QUICServerConfig struct {
 	Listen string
+	Cert   string
+	Key    string
 }
 
 type HTTPServerConfig struct {

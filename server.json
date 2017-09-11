@@ -9,7 +9,9 @@
 		"Listen":":48100"
 	},
 	"QUIC":{
-		"Listen":":48100"
+		"Listen":":48100",
+		"Key": "",
+		"Cert":""
 	},
 	"HTTP":{
 		"Listen":":48101"
