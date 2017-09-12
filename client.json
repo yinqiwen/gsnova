@@ -61,6 +61,8 @@
 	"Proxy":[
 		{
 			"Local": ":48100",
+			//used to indicate if it's serving as a transparent proxy(work with iptables)
+			"Transparent": false,
 			"PAC":[
 				//{"Protocol":["dns", "udp"],"Remote":"direct"},
 				// Support rules 'IsCNIP/InHosts/BlockedByGFW'

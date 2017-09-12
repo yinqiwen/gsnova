@@ -289,8 +289,9 @@ func (pac *PACConfig) Match(protocol string, ip string, req *http.Request) bool 
 }
 
 type ProxyConfig struct {
-	Local string
-	PAC   []PACConfig
+	Local       string
+	Transparent bool
+	PAC         []PACConfig
 }
 
 func (cfg *ProxyConfig) getProxyChannelByHost(proto string, host string) string {

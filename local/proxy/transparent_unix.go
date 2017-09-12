@@ -1,0 +1,54 @@
+// +build !windows
+
+package proxy
+
+import (
+	"fmt"
+	"net"
+	"syscall"
+)
+
+const (
+	SO_ORIGINAL_DST      = 80
+	IP6T_SO_ORIGINAL_DST = 80
+)
+
+func getOrinalTCPRemoteAddr(conn net.Conn) (net.Conn, net.IP, uint16, error) {
+	tcpConn, ok := conn.(*net.TCPConn)
+	if !ok {
+		return nil, nil, 0, fmt.Errorf("Invalid connection with type:%T", conn)
+	}
+
+	clientConnFile, err := tcpConn.File()
+	if err != nil {
+		return nil, nil, 0, err
+	} else {
+		tcpConn.Close()
+	}
+	fd := int(clientConnFile.Fd())
+	var port uint16
+	var ip net.IP
+	//the trick way to get orginal ip/port by syscall
+	ipv6Addr, err := syscall.GetsockoptIPv6MTUInfo(fd, syscall.IPPROTO_IPV6, IP6T_SO_ORIGINAL_DST)
+	if err != nil {
+		ipv4Addr, err := syscall.GetsockoptIPMreq(fd, syscall.IPPROTO_IP, SO_ORIGINAL_DST)
+		if nil != err {
+			clientConnFile.Close()
+			return nil, nil, 0, err
+		}
+		port = uint16(ipv4Addr.Multiaddr[2])<<8 + uint16(ipv4Addr.Multiaddr[3])
+		ip = net.IPv4(ipv4Addr.Interface[0], ipv4Addr.Interface[1], ipv4Addr.Interface[2], ipv4Addr.Interface[3])
+	} else {
+		port = ipv6Addr.Addr.Port
+		ip = make(net.IP, net.IPv6len)
+		copy(ip, ipv6Addr.Addr.Addr[:])
+	}
+
+	newConn, err := net.FileConn(clientConnFile)
+	if err != nil {
+		clientConnFile.Close()
+		return nil, nil, 0, err
+	}
+
+	return newConn, ip, port, nil
+}

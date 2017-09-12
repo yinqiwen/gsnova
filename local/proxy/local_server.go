@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"bufio"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -21,7 +22,7 @@ var proxyServerRunning = true
 var runningProxyStreamCount int64
 var runningProxyConns sync.Map
 
-func serveProxyConn(conn net.Conn, proxy *ProxyConfig) {
+func serveProxyConn(conn net.Conn, remoteHost, remotePort string, proxy *ProxyConfig) {
 	var proxyChannelName string
 	protocol := "tcp"
 	localConn := conn
@@ -31,35 +32,38 @@ func serveProxyConn(conn net.Conn, proxy *ProxyConfig) {
 	defer atomic.AddInt64(&runningProxyStreamCount, -1)
 	defer runningProxyConns.Delete(conn)
 
-	remoteHost := ""
-	remotePort := ""
 	isSocksProxy := false
 	isHttpsProxy := false
 	isHttp11Proto := false
+	isTransparentProxy := len(remoteHost) > 0
 	var initialHTTPReq *http.Request
-	socksConn, bufconn, err := socks.NewSocksConn(conn)
 
-	if nil == err {
-		isSocksProxy = true
-		logger.Debug("Local proxy recv %s proxy conn to %s", socksConn.Version(), socksConn.Req.Target)
-		socksConn.Grant(&net.TCPAddr{
-			IP: net.ParseIP("0.0.0.0"), Port: 0})
-		localConn = socksConn
-		if socksConn.Req.Target == GConf.UDPGW.Addr {
-			logger.Debug("Handle udpgw conn for %v", socksConn.Req.Target)
-			handleUDPGatewayConn(localConn, proxy)
-			return
-		}
+	var bufconn *bufio.Reader
+	if !isTransparentProxy {
+		socksConn, sbufconn, err := socks.NewSocksConn(conn)
+		if nil == err {
+			isSocksProxy = true
+			logger.Debug("Local proxy recv %s proxy conn to %s", socksConn.Version(), socksConn.Req.Target)
+			socksConn.Grant(&net.TCPAddr{
+				IP: net.ParseIP("0.0.0.0"), Port: 0})
+			localConn = socksConn
+			if socksConn.Req.Target == GConf.UDPGW.Addr {
+				logger.Debug("Handle udpgw conn for %v", socksConn.Req.Target)
+				handleUDPGatewayConn(localConn, proxy)
+				return
+			}
 
-		remoteHost, remotePort, err = net.SplitHostPort(socksConn.Req.Target)
-		if nil != err {
-			logger.Error("Invalid socks target addresss:%s with reason %v", socksConn.Req.Target, err)
-			return
-		}
-	} else {
-		if nil == bufconn {
-			localConn.Close()
-			return
+			remoteHost, remotePort, err = net.SplitHostPort(socksConn.Req.Target)
+			if nil != err {
+				logger.Error("Invalid socks target addresss:%s with reason %v", socksConn.Req.Target, err)
+				return
+			}
+			bufconn = sbufconn
+		} else {
+			if nil == sbufconn {
+				localConn.Close()
+				return
+			}
 		}
 	}
 
@@ -255,8 +259,18 @@ func startLocalProxyServer(proxyIdx int) (*net.TCPListener, error) {
 			if nil != err {
 				continue
 			}
-
-			go serveProxyConn(conn, &GConf.Proxy[proxyIdx])
+			var originalHost, originalPort string
+			if proxyConf.Transparent {
+				newConn, remoteIP, remotePort, err := getOrinalTCPRemoteAddr(conn)
+				if nil != err {
+					logger.Error("Failed to get original address for transparent proxy:%v", err)
+					continue
+				}
+				conn = newConn
+				originalHost = remoteIP.String()
+				originalPort = fmt.Sprintf("%d", remotePort)
+			}
+			go serveProxyConn(conn, originalHost, originalPort, &GConf.Proxy[proxyIdx])
 		}
 		lp.Close()
 	}()
