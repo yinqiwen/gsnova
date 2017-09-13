@@ -64,6 +64,7 @@ func serveProxyConn(conn net.Conn, remoteHost, remotePort string, proxy *ProxyCo
 				localConn.Close()
 				return
 			}
+			bufconn = sbufconn
 		}
 	}
 
@@ -78,7 +79,7 @@ func serveProxyConn(conn net.Conn, remoteHost, remotePort string, proxy *ProxyCo
 	}
 
 	//1. sniff SNI first
-	if isSocksProxy && trySniffDomain {
+	if (isSocksProxy || isTransparentProxy) && trySniffDomain {
 		if remotePort == "80" {
 			conn.SetReadDeadline(time.Now().Add(10 * time.Millisecond))
 		} else {
@@ -162,7 +163,7 @@ func serveProxyConn(conn net.Conn, remoteHost, remotePort string, proxy *ProxyCo
 				protocol = "http"
 			}
 		} else {
-			if !isHttp11Proto && !isSocksProxy {
+			if !isHttp11Proto && !isSocksProxy && !isTransparentProxy {
 				logger.Error("[ERROR]Can NOT handle non HTTP1.1 proto in non socks proxy mode.")
 				return
 			}
@@ -201,7 +202,7 @@ START:
 	go func() {
 		io.Copy(localConn, streamReader)
 	}()
-	if isSocksProxy || isHttpsProxy {
+	if isSocksProxy || isHttpsProxy || isTransparentProxy {
 		io.Copy(streamWriter, bufconn)
 		if close, ok := streamWriter.(io.Closer); ok {
 			close.Close()

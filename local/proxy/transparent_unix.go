@@ -4,6 +4,7 @@ package proxy
 
 import (
 	"fmt"
+	"log"
 	"net"
 	"syscall"
 )
@@ -21,6 +22,7 @@ func getOrinalTCPRemoteAddr(conn net.Conn) (net.Conn, net.IP, uint16, error) {
 
 	clientConnFile, err := tcpConn.File()
 	if err != nil {
+		log.Printf("####%v", err)
 		return nil, nil, 0, err
 	} else {
 		tcpConn.Close()
@@ -31,13 +33,13 @@ func getOrinalTCPRemoteAddr(conn net.Conn) (net.Conn, net.IP, uint16, error) {
 	//the trick way to get orginal ip/port by syscall
 	ipv6Addr, err := syscall.GetsockoptIPv6MTUInfo(fd, syscall.IPPROTO_IPV6, IP6T_SO_ORIGINAL_DST)
 	if err != nil {
-		ipv4Addr, err := syscall.GetsockoptIPMreq(fd, syscall.IPPROTO_IP, SO_ORIGINAL_DST)
+		ipv4Addr, err := syscall.GetsockoptIPv6Mreq(fd, syscall.IPPROTO_IP, SO_ORIGINAL_DST)
 		if nil != err {
 			clientConnFile.Close()
 			return nil, nil, 0, err
 		}
-		port = uint16(ipv4Addr.Multiaddr[2])<<8 + uint16(ipv4Addr.Multiaddr[3])
-		ip = net.IPv4(ipv4Addr.Interface[0], ipv4Addr.Interface[1], ipv4Addr.Interface[2], ipv4Addr.Interface[3])
+		port = uint16(addr.Multiaddr[2])<<8 + uint16(addr.Multiaddr[3])
+		ip = net.IPv4(ipv4Addr.Multiaddr[4], ipv4Addr.Multiaddr[5], ipv4Addr.Multiaddr[6], ipv4Addr.Multiaddr[7])
 	} else {
 		port = ipv6Addr.Addr.Port
 		ip = make(net.IP, net.IPv6len)
