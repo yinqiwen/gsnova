@@ -38,7 +38,7 @@ func getOrinalTCPRemoteAddr(conn net.Conn) (net.Conn, net.IP, uint16, error) {
 			clientConnFile.Close()
 			return nil, nil, 0, err
 		}
-		port = uint16(addr.Multiaddr[2])<<8 + uint16(addr.Multiaddr[3])
+		port = uint16(ipv4Addr.Multiaddr[2])<<8 + uint16(ipv4Addr.Multiaddr[3])
 		ip = net.IPv4(ipv4Addr.Multiaddr[4], ipv4Addr.Multiaddr[5], ipv4Addr.Multiaddr[6], ipv4Addr.Multiaddr[7])
 	} else {
 		port = ipv6Addr.Addr.Port

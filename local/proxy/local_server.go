@@ -202,7 +202,7 @@ START:
 	go func() {
 		io.Copy(localConn, streamReader)
 	}()
-	if isSocksProxy || isHttpsProxy || isTransparentProxy {
+	if (isSocksProxy || isHttpsProxy || isTransparentProxy) && nil == initialHTTPReq {
 		io.Copy(streamWriter, bufconn)
 		if close, ok := streamWriter.(io.Closer); ok {
 			close.Close()
