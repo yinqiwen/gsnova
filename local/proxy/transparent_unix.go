@@ -6,12 +6,16 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"strconv"
 	"syscall"
+
+	"github.com/yinqiwen/gsnova/common/logger"
 )
 
 const (
 	SO_ORIGINAL_DST      = 80
 	IP6T_SO_ORIGINAL_DST = 80
+	IPV6_RECVORIGDSTADDR = 74
 )
 
 func getOrinalTCPRemoteAddr(conn net.Conn) (net.Conn, net.IP, uint16, error) {
@@ -53,4 +57,157 @@ func getOrinalTCPRemoteAddr(conn net.Conn) (net.Conn, net.IP, uint16, error) {
 	}
 
 	return newConn, ip, port, nil
+}
+
+func startTransparentUDProxy(addr string, proxy *ProxyConfig) {
+	lhost, lport, err := net.SplitHostPort(addr)
+	if nil != err {
+		logger.Error("Split error:%v", err)
+		return
+	}
+	port, err := strconv.Atoi(lport)
+	if nil != err {
+		logger.Error("Split port error:%v", err)
+		return
+	}
+	family := syscall.AF_INET
+	var ip net.IP
+	isIPv4 := true
+	if len(lhost) > 0 {
+		ip = net.ParseIP(lhost)
+		if ip.To4() != nil {
+			family = syscall.AF_INET
+		} else {
+			family = syscall.AF_INET6
+			isIPv4 = false
+		}
+	} else {
+		ip = net.IPv4zero
+	}
+	//logger.Debug("1 : %d %d %s", len(lhost), len(ip), lhost)
+	socketFd, err := syscall.Socket(family, syscall.SOCK_DGRAM, 0)
+	if nil != err {
+		logger.Error("Failed to create udp listen socket:%v", err)
+		return
+	}
+	syscall.SetsockoptInt(socketFd, syscall.SOL_SOCKET, syscall.SO_REUSEADDR, 1)
+	err = syscall.SetsockoptInt(socketFd, syscall.SOL_IP, syscall.IP_TRANSPARENT, 1)
+	if nil != err {
+		logger.Error("Failed to set transparent udp  socket:%v", err)
+		return
+	}
+	var sockAddr syscall.Sockaddr
+	if isIPv4 {
+		addr4 := &syscall.SockaddrInet4{Port: port}
+		sockAddr = addr4
+		copy(addr4.Addr[:], ip.To4())
+	} else {
+		addr6 := &syscall.SockaddrInet6{Port: port}
+		sockAddr = addr6
+		copy(addr6.Addr[:], ip.To16())
+	}
+	logger.Debug("Bind udp socket to %s:%d", ip.String(), port)
+	err = syscall.Bind(socketFd, sockAddr)
+	if nil != err {
+		logger.Error("Bind udp socket  error:%v with addr:%v", err, sockAddr)
+		return
+	}
+	for proxyServerRunning {
+		data, local, remote, err := recvTransparentUDP(socketFd)
+		if nil != err {
+			continue
+		}
+
+		go func(p []byte, laddr, raddr syscall.Sockaddr) {
+			protocol := "udp"
+			remoteHost := ""
+			remotePort := ""
+			if _, ok := raddr.(*syscall.SockaddrInet4); ok {
+				remotePort = fmt.Sprintf("%d", raddr.(*syscall.SockaddrInet4).Port)
+				ip := make(net.IP, net.IPv4len)
+				copy(ip, raddr.(*syscall.SockaddrInet4).Addr[:])
+				remoteHost = ip.String()
+			} else {
+				remotePort = fmt.Sprintf("%d", raddr.(*syscall.SockaddrInet6).Port)
+				ip := make(net.IP, net.IPv6len)
+				copy(ip, raddr.(*syscall.SockaddrInet6).Addr[:])
+				remoteHost = ip.String()
+			}
+			if remotePort == "53" {
+				protocol = "dns"
+			}
+			proxyChannelName := proxy.getProxyChannelByHost(protocol, remoteHost)
+			if len(proxyChannelName) == 0 {
+				logger.Error("[ERROR]No proxy found for %s:%s", protocol, remoteHost)
+				return
+			}
+			stream, _, err := getMuxStreamByChannel(proxyChannelName)
+			if nil != err || nil == stream {
+				logger.Error("Failed to open stream for reason:%v by proxy:%s", err, proxyChannelName)
+				return
+			}
+			stream.Connect("udp", net.JoinHostPort(remoteHost, remotePort))
+			buf := make([]byte, 4096)
+			stream.Write(p)
+			n, _ := stream.Read(buf)
+			if n > 0 {
+				writeBackUDPData(buf[0:n], laddr, raddr)
+			}
+			stream.Close()
+		}(data, local, remote)
+	}
+}
+
+func recvTransparentUDP(fd int) ([]byte, syscall.Sockaddr, syscall.Sockaddr, error) {
+	buf := make([]byte, 4096)
+	oob := make([]byte, 64)
+	n, cn, _, local, err := syscall.Recvmsg(fd, buf, oob, 0)
+	if nil != err {
+		return nil, nil, nil, err
+	}
+	ctrlMsgs, err := syscall.ParseSocketControlMessage(oob[0:cn])
+	if nil != err {
+		return nil, nil, nil, err
+	}
+	for _, cmsg := range ctrlMsgs {
+		if cmsg.Header.Level == syscall.SOL_IP && cmsg.Header.Type == syscall.IP_RECVORIGDSTADDR {
+			//memcpy(dstaddr, CMSG_DATA(cmsg), sizeof(struct sockaddr_in));
+			//dstaddr->ss_family = AF_INET;
+			remote := &syscall.SockaddrInet4{}
+			remote.Port = int(cmsg.Data[2])<<8 + int(cmsg.Data[3])
+			copy(remote.Addr[:], cmsg.Data[4:8])
+			return buf[0:n], local, remote, nil
+		} else if cmsg.Header.Level == syscall.SOL_IPV6 && cmsg.Header.Type == IPV6_RECVORIGDSTADDR {
+			remote := &syscall.SockaddrInet6{}
+			remote.Port = int(cmsg.Data[2])<<8 + int(cmsg.Data[3])
+			copy(remote.Addr[:], cmsg.Data[8:24])
+			return buf[0:n], local, remote, nil
+		}
+	}
+	return nil, nil, nil, fmt.Errorf("Can NOT get orgin remote address")
+}
+
+func writeBackUDPData(data []byte, local, remote syscall.Sockaddr) error {
+	family := syscall.AF_INET
+	if _, ok := local.(*syscall.SockaddrInet6); ok {
+		family = syscall.AF_INET6
+	}
+	socketFd, err := syscall.Socket(family, syscall.SOCK_DGRAM, 0)
+	if err != nil {
+		log.Printf("Could not create udp socket: %v", err)
+		return err
+	}
+	defer syscall.Close(socketFd)
+	err = syscall.SetsockoptInt(socketFd, syscall.SOL_IP, syscall.IP_TRANSPARENT, 1)
+	if nil == err {
+		syscall.SetsockoptInt(socketFd, syscall.SOL_IP, syscall.SO_REUSEADDR, 1)
+	} else {
+		return err
+	}
+	err = syscall.Bind(socketFd, remote)
+	if nil != err {
+		return err
+	}
+	err = syscall.Sendto(socketFd, data, 0, local)
+	return err
 }

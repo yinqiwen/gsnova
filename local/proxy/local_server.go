@@ -240,6 +240,9 @@ START:
 
 func startLocalProxyServer(proxyIdx int) (*net.TCPListener, error) {
 	proxyConf := &GConf.Proxy[proxyIdx]
+	if proxyConf.Transparent {
+		go startTransparentUDProxy(proxyConf.Local, proxyConf)
+	}
 	tcpaddr, err := net.ResolveTCPAddr("tcp", proxyConf.Local)
 	if nil != err {
 		logger.Fatal("[ERROR]Local server address:%s error:%v", proxyConf.Local, err)
