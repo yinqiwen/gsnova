@@ -17,7 +17,7 @@ import (
 )
 
 type sshStream struct {
-	conn    net.Conn
+	net.Conn
 	conf    *proxy.ProxyChannelConfig
 	addr    string
 	session *sshMuxSession
@@ -43,7 +43,7 @@ func (tc *sshStream) Connect(network string, addr string) error {
 		tc.session.Close()
 		return err
 	}
-	tc.conn = conn
+	tc.Conn = conn
 	tc.addr = addr
 	return nil
 }
@@ -53,23 +53,23 @@ func (tc *sshStream) StreamID() uint32 {
 }
 
 func (tc *sshStream) Read(p []byte) (int, error) {
-	if nil == tc.conn {
+	if nil == tc.Conn {
 		return 0, io.EOF
 	}
-	return tc.conn.Read(p)
+	return tc.Conn.Read(p)
 }
 func (tc *sshStream) Write(p []byte) (int, error) {
-	if nil == tc.conn {
+	if nil == tc.Conn {
 		return 0, io.EOF
 	}
-	return tc.conn.Write(p)
+	return tc.Conn.Write(p)
 }
 
 func (tc *sshStream) Close() error {
-	conn := tc.conn
+	conn := tc.Conn
 	if nil != conn {
 		conn.Close()
-		tc.conn = nil
+		tc.Conn = nil
 	}
 	tc.session.closeStream(tc)
 	return nil

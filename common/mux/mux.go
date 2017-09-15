@@ -17,6 +17,11 @@ import (
 
 var streamIDSeed int64
 
+type TimeoutReadWriteCloser interface {
+	io.ReadWriteCloser
+	SetReadDeadline(t time.Time) error
+	SetWriteDeadline(t time.Time) error
+}
 type ConnectRequest struct {
 	//ProxySID uint32
 	Network string
@@ -86,6 +91,8 @@ type MuxStream interface {
 	Connect(network string, addr string) error
 	Auth(req *AuthRequest) error
 	StreamID() uint32
+	SetReadDeadline(t time.Time) error
+	SetWriteDeadline(t time.Time) error
 }
 
 type MuxSession interface {
@@ -98,15 +105,15 @@ type MuxSession interface {
 }
 
 type ProxyMuxStream struct {
-	io.ReadWriteCloser
+	TimeoutReadWriteCloser
 	session   MuxSession
 	sessionID int64
 }
 
 func (s *ProxyMuxStream) StreamID() uint32 {
-	if ps, ok := s.ReadWriteCloser.(*pmux.Stream); ok {
+	if ps, ok := s.TimeoutReadWriteCloser.(*pmux.Stream); ok {
 		return ps.ID()
-	} else if qs, ok := s.ReadWriteCloser.(quic.Stream); ok {
+	} else if qs, ok := s.TimeoutReadWriteCloser.(quic.Stream); ok {
 		return uint32(qs.StreamID())
 	}
 	if 0 == s.sessionID {
@@ -119,7 +126,7 @@ func (s *ProxyMuxStream) Close() error {
 	if nil != s.session {
 		s.session.CloseStream(s)
 	}
-	return s.ReadWriteCloser.Close()
+	return s.TimeoutReadWriteCloser.Close()
 }
 
 func (s *ProxyMuxStream) Connect(network string, addr string) error {
@@ -162,7 +169,7 @@ func (s *ProxyMuxSession) OpenStream() (MuxStream, error) {
 	if nil != err {
 		return nil, err
 	}
-	return &ProxyMuxStream{ReadWriteCloser: ss}, nil
+	return &ProxyMuxStream{TimeoutReadWriteCloser: ss}, nil
 }
 
 func (s *ProxyMuxSession) AcceptStream() (MuxStream, error) {
@@ -170,7 +177,7 @@ func (s *ProxyMuxSession) AcceptStream() (MuxStream, error) {
 	if nil != err {
 		return nil, err
 	}
-	return &ProxyMuxStream{ReadWriteCloser: ss}, nil
+	return &ProxyMuxStream{TimeoutReadWriteCloser: ss}, nil
 }
 
 func init() {

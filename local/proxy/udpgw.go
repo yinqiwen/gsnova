@@ -143,9 +143,10 @@ func (u *udpSession) handlePacket(proxy *ProxyConfig, packet *udpgwPacket) error
 		u.streamWriter.Write(packet.content)
 		return nil
 	}
-
+	readTimeout := time.Duration(proxy.UDPReadMSTimeout) * time.Millisecond
 	remoteAddr := packet.address()
 	if packet.addr.port == 53 {
+		readTimeout = time.Duration(proxy.DNSReadMSTimeout) * time.Millisecond
 		selectProxy := proxy.findProxyChannelByRequest("dns", packet.addr.ip.String(), nil)
 		if selectProxy == directProxyChannelName {
 			res, err := dnsQueryRaw(packet.content, true)
@@ -176,16 +177,20 @@ func (u *udpSession) handlePacket(proxy *ProxyConfig, packet *udpgwPacket) error
 		}
 	}
 	stream, conf, err := getMuxStreamByChannel(u.proxyChannelName)
+	if nil != stream {
+		err = stream.Connect("udp", remoteAddr)
+	}
 	if nil != err {
 		logger.Error("[ERROR]Failed to create mux stream:%v for proxy:%s by address:%v", err, u.proxyChannelName, packet.addr)
 		return err
 	}
-	stream.Connect("udp", remoteAddr)
+
 	u.stream = stream
 	u.streamReader, u.streamWriter = mux.GetCompressStreamReaderWriter(stream, conf.Compressor)
 	go func() {
 		b := make([]byte, 8192)
 		for {
+			stream.SetReadDeadline(time.Now().Add(readTimeout))
 			n, err := u.streamReader.Read(b)
 			if n > 0 {
 				err = u.Write(b[0:n])

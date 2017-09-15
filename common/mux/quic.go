@@ -27,7 +27,7 @@ func (q *QUICMuxSession) OpenStream() (MuxStream, error) {
 		return nil, err
 	}
 	atomic.AddInt64(&q.streamCounter, 1)
-	return &ProxyMuxStream{ReadWriteCloser: s, session: q}, nil
+	return &ProxyMuxStream{TimeoutReadWriteCloser: s, session: q}, nil
 }
 
 func (q *QUICMuxSession) AcceptStream() (MuxStream, error) {
@@ -35,7 +35,7 @@ func (q *QUICMuxSession) AcceptStream() (MuxStream, error) {
 	if nil != err {
 		return nil, err
 	}
-	return &ProxyMuxStream{ReadWriteCloser: s}, nil
+	return &ProxyMuxStream{TimeoutReadWriteCloser: s}, nil
 }
 
 func (q *QUICMuxSession) NumStreams() int {

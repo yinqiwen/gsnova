@@ -8,6 +8,7 @@ import (
 	"net"
 	"strconv"
 	"syscall"
+	"time"
 
 	"github.com/yinqiwen/gsnova/common/logger"
 )
@@ -144,8 +145,10 @@ func startTransparentUDProxy(addr string, proxy *ProxyConfig) {
 				copy(ip, raddr.(*syscall.SockaddrInet6).Addr[:])
 				remoteHost = ip.String()
 			}
+			readTimeout := time.Duration(proxy.UDPReadMSTimeout) * time.Millisecond
 			if remotePort == "53" {
 				protocol = "dns"
+				readTimeout = time.Duration(proxy.DNSReadMSTimeout) * time.Millisecond
 			}
 			proxyChannelName := proxy.getProxyChannelByHost(protocol, remoteHost)
 			if len(proxyChannelName) == 0 {
@@ -154,13 +157,16 @@ func startTransparentUDProxy(addr string, proxy *ProxyConfig) {
 			}
 			logger.Debug("Select %s to proxy udp packet to %s:%s", proxyChannelName, remoteHost, remotePort)
 			stream, _, err := getMuxStreamByChannel(proxyChannelName)
+			if nil != stream {
+				err = stream.Connect("udp", net.JoinHostPort(remoteHost, remotePort))
+			}
 			if nil != err || nil == stream {
 				logger.Error("Failed to open stream for reason:%v by proxy:%s", err, proxyChannelName)
 				return
 			}
-			stream.Connect("udp", net.JoinHostPort(remoteHost, remotePort))
 			buf := make([]byte, 4096)
 			stream.Write(p)
+			stream.SetReadDeadline(time.Now().Add(readTimeout))
 			n, _ := stream.Read(buf)
 			if n > 0 {
 				writeBackUDPData(buf[0:n], laddr, raddr)

@@ -289,9 +289,11 @@ func (pac *PACConfig) Match(protocol string, ip string, req *http.Request) bool 
 }
 
 type ProxyConfig struct {
-	Local       string
-	Transparent bool
-	PAC         []PACConfig
+	Local            string
+	Transparent      bool
+	DNSReadMSTimeout int
+	UDPReadMSTimeout int
+	PAC              []PACConfig
 }
 
 func (cfg *ProxyConfig) getProxyChannelByHost(proto string, host string) string {
@@ -415,6 +417,12 @@ func (cfg *LocalConfig) init() error {
 					cnIPEnable = true
 				}
 			}
+		}
+		if 0 == cfg.Proxy[i].DNSReadMSTimeout {
+			cfg.Proxy[i].DNSReadMSTimeout = 800
+		}
+		if 0 == cfg.Proxy[i].UDPReadMSTimeout {
+			cfg.Proxy[i].UDPReadMSTimeout = 15 * 1000
 		}
 	}
 	if gfwlistEnable {

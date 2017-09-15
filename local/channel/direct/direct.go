@@ -16,7 +16,7 @@ import (
 )
 
 type directStream struct {
-	conn    net.Conn
+	net.Conn
 	conf    *proxy.ProxyChannelConfig
 	addr    string
 	session *directMuxSession
@@ -69,40 +69,33 @@ func (tc *directStream) Connect(network string, addr string) error {
 		return err
 	}
 
-	tc.conn = c
+	tc.Conn = c
 	tc.addr = addr
 	return nil
 }
 
-func (tc *directStream) ReadTimeout() time.Duration {
-	readTimeout := tc.conf.ReadTimeout
-	if 0 == readTimeout {
-		readTimeout = 15
-	}
-	return time.Duration(readTimeout) * time.Second
-}
 func (tc *directStream) StreamID() uint32 {
 	return 0
 }
 
 func (tc *directStream) Read(p []byte) (int, error) {
-	if nil == tc.conn {
+	if nil == tc.Conn {
 		return 0, io.EOF
 	}
-	return tc.conn.Read(p)
+	return tc.Conn.Read(p)
 }
 func (tc *directStream) Write(p []byte) (int, error) {
-	if nil == tc.conn {
+	if nil == tc.Conn {
 		return 0, io.EOF
 	}
-	return tc.conn.Write(p)
+	return tc.Conn.Write(p)
 }
 
 func (tc *directStream) Close() error {
-	conn := tc.conn
+	conn := tc.Conn
 	if nil != conn {
 		conn.Close()
-		tc.conn = nil
+		tc.Conn = nil
 	}
 	tc.session.closeStream(tc)
 	return nil

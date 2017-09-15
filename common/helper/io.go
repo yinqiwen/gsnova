@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"io"
 	"net"
+	"time"
 )
 
 type BufferChunkReader struct {
@@ -38,4 +39,60 @@ func IsTimeoutError(err error) bool {
 		return true
 	}
 	return false
+}
+
+type TimeoutReadWriteCloser struct {
+	io.ReadWriteCloser
+	readDeadline  time.Time
+	writeDeadline time.Time
+}
+
+func (s *TimeoutReadWriteCloser) SetReadDeadline(t time.Time) error {
+	s.readDeadline = t
+	return nil
+}
+func (s *TimeoutReadWriteCloser) SetWriteDeadline(t time.Time) error {
+	s.writeDeadline = t
+	return nil
+}
+func (s *TimeoutReadWriteCloser) Read(p []byte) (n int, err error) {
+	var timeout <-chan time.Time
+	if !s.readDeadline.IsZero() {
+		delay := s.readDeadline.Sub(time.Now())
+		timeout = time.After(delay)
+	} else {
+		return s.ReadWriteCloser.Read(p)
+	}
+	done := make(chan bool, 1)
+	go func() {
+		n, err = s.ReadWriteCloser.Read(p)
+		done <- true
+	}()
+	select {
+	case <-done:
+		return
+	case <-timeout:
+		return 0, ErrReadTimeout
+	}
+}
+
+func (s *TimeoutReadWriteCloser) Write(p []byte) (n int, err error) {
+	var timeout <-chan time.Time
+	if !s.writeDeadline.IsZero() {
+		delay := s.writeDeadline.Sub(time.Now())
+		timeout = time.After(delay)
+	} else {
+		return s.ReadWriteCloser.Write(p)
+	}
+	done := make(chan bool, 1)
+	go func() {
+		n, err = s.ReadWriteCloser.Write(p)
+		done <- true
+	}()
+	select {
+	case <-done:
+		return
+	case <-timeout:
+		return 0, ErrWriteTimeout
+	}
 }

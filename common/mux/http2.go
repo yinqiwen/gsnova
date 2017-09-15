@@ -107,8 +107,8 @@ func (q *HTTP2MuxSession) CloseStream(stream MuxStream) error {
 	return nil
 }
 
-func (q *HTTP2MuxSession) OfferStream(stream io.ReadWriteCloser) error {
-	s := &ProxyMuxStream{ReadWriteCloser: stream, session: q}
+func (q *HTTP2MuxSession) OfferStream(stream TimeoutReadWriteCloser) error {
+	s := &ProxyMuxStream{TimeoutReadWriteCloser: stream, session: q}
 	select {
 	case q.AcceptCh <- s:
 		return nil
@@ -159,7 +159,7 @@ func (q *HTTP2MuxSession) OpenStream() (MuxStream, error) {
 			stream.setReader(res.Body)
 		}
 	}()
-	muxStream := &ProxyMuxStream{ReadWriteCloser: stream, session: q}
+	muxStream := &ProxyMuxStream{TimeoutReadWriteCloser: &helper.TimeoutReadWriteCloser{ReadWriteCloser: stream}, session: q}
 	atomic.AddInt64(&q.streamCounter, 1)
 	q.streams.Store(muxStream, true)
 	return muxStream, nil
