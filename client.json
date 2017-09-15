@@ -11,7 +11,7 @@
 
     "LocalDNS":{
     	//only listen UDP
-    	"Listen": "127.0.0.1:48100",
+    	"Listen": "127.0.0.1:5300",
     	//for PAC rule 'IsCNIP', it would resolve the domain by 'TrustedDNS' if 'BlockedByGFW', and resolve the rest by 'FastDNS'
     	"FastDNS":["114.114.114.114"],
     	"TrustedDNS": ["208.67.222.222:443", "208.67.220.220:443"],

@@ -38,6 +38,8 @@ GSnova: Private Proxy Solution.
     - AES128
 - HTTP/Socks4/Socks5 Proxy
     - Local client running as HTTP/Socks4/Socks5 Proxy
+- Transparent TCP/UDP Proxy
+	- Transparent tcp/udp proxy implementation in pure golang
 
 
 # Usage
@@ -78,7 +80,7 @@ This is a sample for client.json, the `Key` and the `ServerList` need to be modi
 	"User": "gsnova",
 	"LocalDNS": {
 		//only listen UDP
-		"Listen": "127.0.0.1:48100",
+		"Listen": "127.0.0.1:5300",
 		//for PAC rule 'IsCNIP', it would resolve the domain by 'TrustedDNS' if 'BlockedByGFW', and resolve the rest by 'FastDNS'
 		"FastDNS": [
 			"114.114.114.114"
@@ -130,6 +132,8 @@ This is a sample for client.json, the `Key` and the `ServerList` need to be modi
 	"Proxy": [
 		{
 			"Local": ":48100",
+			//Transparent proxy only works in linux system
+			"Transparent": false,
 			"PAC": [
 				//// 'Direct/TLSDirect' MUST  proxy channel names confgiured below 
 				//{"Protocol":["dns", "udp"],"Remote":"Direct"},

@@ -96,6 +96,15 @@ func startTransparentUDProxy(addr string, proxy *ProxyConfig) {
 		logger.Error("Failed to set transparent udp  socket:%v", err)
 		return
 	}
+	if isIPv4 {
+		err = syscall.SetsockoptInt(socketFd, syscall.SOL_IP, syscall.IP_RECVORIGDSTADDR, 1)
+	} else {
+		err = syscall.SetsockoptInt(socketFd, syscall.SOL_IPV6, IPV6_RECVORIGDSTADDR, 1)
+	}
+	if nil != err {
+		logger.Error("Failed to set socket opt 'RECVORIGDSTADDR' with reason:%v", err)
+		return
+	}
 	var sockAddr syscall.Sockaddr
 	if isIPv4 {
 		addr4 := &syscall.SockaddrInet4{Port: port}
@@ -106,18 +115,20 @@ func startTransparentUDProxy(addr string, proxy *ProxyConfig) {
 		sockAddr = addr6
 		copy(addr6.Addr[:], ip.To16())
 	}
-	logger.Debug("Bind udp socket to %s:%d", ip.String(), port)
+
 	err = syscall.Bind(socketFd, sockAddr)
 	if nil != err {
 		logger.Error("Bind udp socket  error:%v with addr:%v", err, sockAddr)
 		return
 	}
+	logger.Info("Listen transparent UDP proxy on %s:%d", ip.String(), port)
 	for proxyServerRunning {
 		data, local, remote, err := recvTransparentUDP(socketFd)
 		if nil != err {
+			logger.Error("Recv msg error:%v", err)
 			continue
 		}
-		logger.Debug("Recv msg from %v to %v", local, remote)
+
 		go func(p []byte, laddr, raddr syscall.Sockaddr) {
 			protocol := "udp"
 			remoteHost := ""
@@ -141,6 +152,7 @@ func startTransparentUDProxy(addr string, proxy *ProxyConfig) {
 				logger.Error("[ERROR]No proxy found for %s:%s", protocol, remoteHost)
 				return
 			}
+			logger.Debug("Select %s to proxy udp packet to %s:%s", proxyChannelName, remoteHost, remotePort)
 			stream, _, err := getMuxStreamByChannel(proxyChannelName)
 			if nil != err || nil == stream {
 				logger.Error("Failed to open stream for reason:%v by proxy:%s", err, proxyChannelName)
