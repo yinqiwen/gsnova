@@ -43,7 +43,7 @@ GSnova: Private Proxy Solution.
 
 
 # Usage
-
+**go1.9 is requied.**
 ## Deploy Server
 
 ```shell
@@ -189,5 +189,8 @@ Users can develop there own app by using the generated `gsnova.aar`.
 There is a very simple andorid app [gsnova-android-v0.27.3.1.zip](https://github.com/yinqiwen/gsnova/releases/download/v0.27.3/gsnova-android-v0.27.3.1.zip) which use `tun2socks` + `gsnova` to build. 
 
 
-
+## Transparent Proxy
+- Edit iptables rules.
+- Edit `client.json` to enable `Transparent` to true.
+- It's only works on linux
 
