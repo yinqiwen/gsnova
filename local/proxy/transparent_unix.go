@@ -1,4 +1,4 @@
-// +build !windows
+// +build linux
 
 package proxy
 
@@ -117,7 +117,7 @@ func startTransparentUDProxy(addr string, proxy *ProxyConfig) {
 		if nil != err {
 			continue
 		}
-
+		logger.Debug("Recv msg from %v to %v", local, remote)
 		go func(p []byte, laddr, raddr syscall.Sockaddr) {
 			protocol := "udp"
 			remoteHost := ""
