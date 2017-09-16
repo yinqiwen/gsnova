@@ -18,8 +18,18 @@ script:
 - tar cjf gsnova_client_linux_386-${TRAVIS_TAG}.tar.bz2 client.json hosts.json gsnova_client
 - GOOS=linux GOARCH=amd64 go build -o gsnova_client github.com/yinqiwen/gsnova/local/client
 - tar cjf gsnova_client_linux_amd64-${TRAVIS_TAG}.tar.bz2 client.json hosts.json gsnova_client
-- GOOS=linux GOARCH=arm go build -o gsnova_client github.com/yinqiwen/gsnova/local/client
-- tar cjf gsnova_client_linux_arm-${TRAVIS_TAG}.tar.bz2 client.json hosts.json gsnova_client
+- GOOS=linux GOARCH=arm GOARM=5 go build -o gsnova_client github.com/yinqiwen/gsnova/local/client
+- tar cjf gsnova_client_linux_armv5-${TRAVIS_TAG}.tar.bz2 client.json hosts.json gsnova_client
+- GOOS=linux GOARCH=arm GOARM=6 go build -o gsnova_client github.com/yinqiwen/gsnova/local/client
+- tar cjf gsnova_client_linux_armv6-${TRAVIS_TAG}.tar.bz2 client.json hosts.json gsnova_client
+- GOOS=linux GOARCH=arm GOARM=7 go build -o gsnova_client github.com/yinqiwen/gsnova/local/client
+- tar cjf gsnova_client_linux_armv7-${TRAVIS_TAG}.tar.bz2 client.json hosts.json gsnova_client
+- GOOS=linux GOARCH=arm64  go build -o gsnova_client github.com/yinqiwen/gsnova/local/client
+- tar cjf gsnova_client_linux_arm64-${TRAVIS_TAG}.tar.bz2 client.json hosts.json gsnova_client
+- GOOS=linux GOARCH=mipsle  go build -o gsnova_client github.com/yinqiwen/gsnova/local/client
+- tar cjf gsnova_client_linux_mipsle-${TRAVIS_TAG}.tar.bz2 client.json hosts.json gsnova_client
+- GOOS=linux GOARCH=mips  go build -o gsnova_client github.com/yinqiwen/gsnova/local/client
+- tar cjf gsnova_client_linux_mips-${TRAVIS_TAG}.tar.bz2 client.json hosts.json gsnova_client
 - GOOS=darwin GOARCH=amd64 go build -o gsnova_client github.com/yinqiwen/gsnova/local/client
 - tar cjf gsnova_client_macos_amd64-${TRAVIS_TAG}.tar.bz2 client.json hosts.json gsnova_client
 - GOOS=linux GOARCH=386 go build -o gsnova_server github.com/yinqiwen/gsnova/remote/server
@@ -39,7 +49,12 @@ deploy:
     - "gsnova_client_windows_amd64-${TRAVIS_TAG}.tar.bz2"
     - "gsnova_client_linux_386-${TRAVIS_TAG}.tar.bz2"
     - "gsnova_client_linux_amd64-${TRAVIS_TAG}.tar.bz2"
-    - "gsnova_client_linux_arm-${TRAVIS_TAG}.tar.bz2"
+    - "gsnova_client_linux_armv5-${TRAVIS_TAG}.tar.bz2"
+    - "gsnova_client_linux_armv6-${TRAVIS_TAG}.tar.bz2"
+    - "gsnova_client_linux_armv7-${TRAVIS_TAG}.tar.bz2"
+    - "gsnova_client_linux_arm64-${TRAVIS_TAG}.tar.bz2"
+    - "gsnova_client_linux_mips-${TRAVIS_TAG}.tar.bz2"
+    - "gsnova_client_linux_mipsle-${TRAVIS_TAG}.tar.bz2"
     - "gsnova_client_macos_amd64-${TRAVIS_TAG}.tar.bz2"
     - "gsnova_server_linux_amd64-${TRAVIS_TAG}.tar.bz2"
     - "gsnova_server_linux_386-${TRAVIS_TAG}.tar.bz2"
