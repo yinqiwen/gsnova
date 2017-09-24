@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/yinqiwen/gsnova/common/logger"
+	"github.com/yinqiwen/gsnova/common/netx"
+	"github.com/yinqiwen/gsnova/local/protector"
 )
 
 const (
@@ -27,7 +29,6 @@ func getOrinalTCPRemoteAddr(conn net.Conn) (net.Conn, net.IP, uint16, error) {
 
 	clientConnFile, err := tcpConn.File()
 	if err != nil {
-		log.Printf("####%v", err)
 		return nil, nil, 0, err
 	} else {
 		tcpConn.Close()
@@ -156,6 +157,16 @@ func startTransparentUDProxy(addr string, proxy *ProxyConfig) {
 				return
 			}
 			logger.Debug("Select %s to proxy udp packet to %s:%s", proxyChannelName, remoteHost, remotePort)
+			if proxyChannelName == directProxyChannelName {
+				res, err := dnsQueryRaw(p, true)
+				if nil == err {
+					writeBackUDPData(res, laddr, raddr)
+				}
+				if nil != err {
+					logger.Error("[ERROR]Failed to query dns with reason:%v", err)
+				}
+				return
+			}
 			stream, _, err := getMuxStreamByChannel(proxyChannelName)
 			if nil != stream {
 				err = stream.Connect("udp", net.JoinHostPort(remoteHost, remotePort))
@@ -228,4 +239,11 @@ func writeBackUDPData(data []byte, local, remote syscall.Sockaddr) error {
 	}
 	err = syscall.Sendto(socketFd, data, 0, local)
 	return err
+}
+
+func enableTransparentSocketMark(v int) {
+	protector.SocketMark = v
+	netx.OverrideDial(protector.DialContext)
+	netx.OverrideListenUDP(protector.ListenUDP)
+	netx.OverrideDialUDP(protector.DialUDP)
 }

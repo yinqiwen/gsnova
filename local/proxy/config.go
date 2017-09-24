@@ -389,18 +389,19 @@ type GFWListConfig struct {
 }
 
 type LocalConfig struct {
-	Log       []string
-	Cipher    CipherConfig
-	UserAgent string
-	User      string
-	LocalDNS  LocalDNSConfig
-	RemoteDNS RemoteDNSConfig
-	UDPGW     UDPGWConfig
-	SNI       SNIConfig
-	Admin     AdminConfig
-	GFWList   GFWListConfig
-	Proxy     []ProxyConfig
-	Channel   []ProxyChannelConfig
+	Log             []string
+	Cipher          CipherConfig
+	UserAgent       string
+	User            string
+	LocalDNS        LocalDNSConfig
+	RemoteDNS       RemoteDNSConfig
+	UDPGW           UDPGWConfig
+	SNI             SNIConfig
+	Admin           AdminConfig
+	GFWList         GFWListConfig
+	TransparentMark int
+	Proxy           []ProxyConfig
+	Channel         []ProxyChannelConfig
 }
 
 func (cfg *LocalConfig) init() error {

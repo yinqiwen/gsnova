@@ -100,11 +100,11 @@ func serveProxyConn(conn net.Conn, remoteHost, remotePort string, proxy *ProxyCo
 
 	//2. sniff domain via http
 	if trySniffDomain {
-		localConn.SetReadDeadline(time.Now().Add(60 * time.Second))
+		localConn.SetReadDeadline(time.Now().Add(5 * time.Second))
 		headChunk, err := bufconn.Peek(7)
 		if len(headChunk) != 7 {
 			if err != io.EOF {
-				logger.Error("Peek:%s %d %v", string(headChunk), len(headChunk), err)
+				logger.Error("Peek:%s %d %v to %s:%s", string(headChunk), len(headChunk), err, remoteHost, remotePort)
 			}
 			return
 		}
@@ -164,7 +164,7 @@ func serveProxyConn(conn net.Conn, remoteHost, remotePort string, proxy *ProxyCo
 			}
 		} else {
 			if !isHttp11Proto && !isSocksProxy && !isTransparentProxy {
-				logger.Error("[ERROR]Can NOT handle non HTTP1.1 proto in non socks proxy mode.")
+				logger.Error("[ERROR]Can NOT handle non HTTP1.1 proto in non socks proxy mode %v:%v:%v  %v to %v", isHttp11Proto, isSocksProxy, isTransparentProxy, conn.LocalAddr(), conn.RemoteAddr())
 				return
 			}
 		}
@@ -221,7 +221,7 @@ START:
 				}
 			}
 			prevReq := proxyReq
-			localConn.SetReadDeadline(time.Now().Add(60 * time.Second))
+			localConn.SetReadDeadline(time.Now().Add(10 * time.Second))
 			proxyReq, err = http.ReadRequest(bufconn)
 			if nil != err {
 				if err != io.EOF && !strings.Contains(err.Error(), "use of closed network connection") {

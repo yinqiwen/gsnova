@@ -18,12 +18,19 @@ import (
 	"time"
 )
 
+const (
+	SO_MARK = 0x24
+)
+
+var SocketMark int
+
 type ProtectedConnBase struct {
 	mutex    sync.Mutex
 	isClosed bool
 	socketFd int
-	ip       [4]byte
-	port     int
+	ip       net.IP
+	//ip       [4]byte
+	port int
 }
 
 // cleanup is ran whenever we encounter a socket error
@@ -42,13 +49,33 @@ func (conn *ProtectedConnBase) cleanup() {
 // connectSocket makes the connection to the given IP address port
 // for the given socket fd
 func (conn *ProtectedConnBase) connectSocket() error {
-	sockAddr := syscall.SockaddrInet4{Addr: conn.ip, Port: conn.port}
+	if nil == conn.ip {
+		return fmt.Errorf("Empty IP to connect")
+	}
+	var sockAddr syscall.Sockaddr
+	//bindAddr := &syscall.SockaddrInet4{Port: 0}
+	// lip := net.ParseIP("27.38.173.96")
+	// copy(bindAddr.Addr[:], lip[0:4])
+	if conn.ip.To4() != nil {
+		sockAddr4 := &syscall.SockaddrInet4{Port: conn.port}
+		copy(sockAddr4.Addr[:], conn.ip.To4()[:])
+		sockAddr = sockAddr4
+	} else {
+		sockAddr6 := &syscall.SockaddrInet6{Port: conn.port}
+		copy(sockAddr6.Addr[:], conn.ip.To16()[0:16])
+		sockAddr = sockAddr6
+		//bindAddr = &syscall.SockaddrInet6{Port: 0}
+	}
+	// err := syscall.Bind(conn.socketFd, bindAddr)
+	// if nil != err {
+	// 	return err
+	// }
 	errCh := make(chan error, 2)
 	time.AfterFunc(connectTimeOut, func() {
 		errCh <- errors.New("connect timeout")
 	})
 	go func() {
-		errCh <- syscall.Connect(conn.socketFd, &sockAddr)
+		errCh <- syscall.Connect(conn.socketFd, sockAddr)
 	}()
 	err := <-errCh
 	return err
@@ -94,9 +121,18 @@ func (conn *ProtectedPacketConn) convert() error {
 
 // connectSocket makes the connection to the given IP address port
 // for the given socket fd
-func (conn *ProtectedPacketConn) listenSocket(ip [4]byte, port int) error {
-	sockAddr := syscall.SockaddrInet4{Addr: ip, Port: port}
-	err := syscall.Bind(conn.socketFd, &sockAddr)
+func (conn *ProtectedPacketConn) listenSocket(ip net.IP, port int, ipv6 bool) error {
+	var sockAddr syscall.Sockaddr
+	if !ipv6 {
+		sockAddr4 := &syscall.SockaddrInet4{Port: conn.port}
+		copy(sockAddr4.Addr[:], ip.To4()[0:4])
+		sockAddr = sockAddr4
+	} else {
+		sockAddr6 := &syscall.SockaddrInet6{Port: conn.port}
+		copy(sockAddr6.Addr[:], ip.To16()[0:16])
+		sockAddr = sockAddr6
+	}
+	err := syscall.Bind(conn.socketFd, sockAddr)
 	if nil != err {
 		return err
 	}
@@ -210,27 +246,37 @@ func DialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 		log.Printf("Couldn't parse IP address %v while port:%d", host, port)
 		return nil, err
 	}
+	conn.ip = IPAddr
 
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	default:
 	}
-
-	copy(conn.ip[:], IPAddr.To4())
+	family := syscall.AF_INET
+	if IPAddr.To4() == nil {
+		family = syscall.AF_INET6
+	}
+	//copy(conn.ip[:], IPAddr.To4())
 	var socketFd int
 	//var err error
 	switch network {
 	case "udp", "udp4", "udp6":
-		socketFd, err = syscall.Socket(syscall.AF_INET, syscall.SOCK_DGRAM, 0)
+		socketFd, err = syscall.Socket(family, syscall.SOCK_DGRAM, 0)
 	default:
-		socketFd, err = syscall.Socket(syscall.AF_INET, syscall.SOCK_STREAM, 0)
+		socketFd, err = syscall.Socket(family, syscall.SOCK_STREAM, syscall.IPPROTO_TCP)
 	}
-	//socketFd, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_STREAM, 0)
+	if nil == err && SocketMark > 0 {
+		err = syscall.SetsockoptInt(socketFd, syscall.SOL_SOCKET, SO_MARK, SocketMark)
+	}
 	if err != nil {
 		log.Printf("Could not create socket: %v", err)
+		if socketFd > 0 {
+			syscall.Close(socketFd)
+		}
 		return nil, err
 	}
+	syscall.SetsockoptInt(socketFd, syscall.SOL_SOCKET, syscall.SO_REUSEADDR, 1)
 	conn.socketFd = socketFd
 
 	defer conn.cleanup()
@@ -334,14 +380,23 @@ func SplitHostPort(addr string) (string, int, error) {
 func ListenUDP(network string, laddr *net.UDPAddr) (net.PacketConn, error) {
 	conn := &ProtectedPacketConn{}
 	conn.ProtectedConnBase.port = laddr.Port
-	var ip [4]byte
-	copy(ip[:], laddr.IP.To4())
-	socketFd, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_DGRAM, 0)
+	family := syscall.AF_INET
+	if laddr.IP.To4() == nil {
+		family = syscall.AF_INET6
+	}
+	socketFd, err := syscall.Socket(family, syscall.SOCK_DGRAM, 0)
+	if nil == err && SocketMark > 0 {
+		err = syscall.SetsockoptInt(socketFd, syscall.SOL_SOCKET, SO_MARK, SocketMark)
+	}
 	if err != nil {
 		log.Printf("Could not create udp socket: %v", err)
+		if socketFd > 0 {
+			syscall.Close(socketFd)
+		}
 		return nil, err
 	}
 	conn.socketFd = socketFd
+
 	defer conn.cleanup()
 
 	// Actually protect the underlying socket here
@@ -350,7 +405,7 @@ func ListenUDP(network string, laddr *net.UDPAddr) (net.PacketConn, error) {
 		return nil, fmt.Errorf("Could not bind socket to system device: %v", err)
 	}
 
-	err = conn.listenSocket(ip, laddr.Port)
+	err = conn.listenSocket(laddr.IP, laddr.Port, family == syscall.AF_INET6)
 	if err != nil {
 		log.Printf("Could not listen udp socket: %v", err)
 		return nil, err
@@ -368,10 +423,20 @@ func ListenUDP(network string, laddr *net.UDPAddr) (net.PacketConn, error) {
 func DialUDP(network string, laddr, raddr *net.UDPAddr) (net.PacketConn, error) {
 	conn := &ProtectedPacketConn{}
 	conn.ProtectedConnBase.port = raddr.Port
-	copy(conn.ip[:], raddr.IP.To4())
-	socketFd, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_DGRAM, 0)
+	conn.ip = raddr.IP
+	family := syscall.AF_INET
+	if raddr.IP.To4() == nil {
+		family = syscall.AF_INET6
+	}
+	socketFd, err := syscall.Socket(family, syscall.SOCK_DGRAM, 0)
+	if nil == err && SocketMark > 0 {
+		err = syscall.SetsockoptInt(socketFd, syscall.SOL_SOCKET, SO_MARK, SocketMark)
+	}
 	if err != nil {
 		log.Printf("Could not create udp socket: %v", err)
+		if socketFd > 0 {
+			syscall.Close(socketFd)
+		}
 		return nil, err
 	}
 	conn.socketFd = socketFd
@@ -381,11 +446,9 @@ func DialUDP(network string, laddr, raddr *net.UDPAddr) (net.PacketConn, error) 
 	if err != nil {
 		return nil, fmt.Errorf("Could not bind socket to system device: %v", err)
 	}
-	if nil != laddr {
-		var ip [4]byte
-		copy(ip[:], laddr.IP.To4())
-		conn.listenSocket(ip, laddr.Port)
-	}
+	// if nil != laddr {
+	// 	conn.listenSocket(laddr.IP, laddr.Port, family == syscall.AF_INET6)
+	// }
 	err = conn.connectSocket()
 	if err != nil {
 		log.Printf("Could not connect to %s socket: %v", raddr, err)

@@ -76,6 +76,7 @@ func DialServerByConf(server string, conf *ProxyChannelConfig) (net.Conn, error)
 			}
 			hostport = net.JoinHostPort(iphost, tcpPort)
 		}
+
 		conn, err = netx.DialTimeout("tcp", hostport, timeout)
 	} else {
 		logger.Debug("Connect %s via proxy %s", hostport, conf.Proxy)
@@ -89,6 +90,7 @@ func DialServerByConf(server string, conf *ProxyChannelConfig) (net.Conn, error)
 			tlsconn := tls.Client(conn, tlscfg)
 			err = tlsconn.Handshake()
 			if err != nil {
+				logger.Notice("#### Handshake Failed %v", err)
 				return nil, err
 			}
 			conn = tlsconn

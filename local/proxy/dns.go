@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"math/rand"
@@ -29,6 +30,11 @@ func pickIP(res *dns.Msg) string {
 	for _, answer := range res.Answer {
 		if a, ok := answer.(*dns.A); ok {
 			return a.A.String()
+		}
+	}
+	for _, answer := range res.Answer {
+		if aaaa, ok := answer.(*dns.AAAA); ok {
+			return aaaa.AAAA.String()
 		}
 	}
 	return ""
@@ -83,6 +89,7 @@ func dnsQuery(r *dns.Msg, viaGW bool) (*dns.Msg, error) {
 	var record *dnsCacheRecord
 	var domain string
 	useTrustedDNS := true
+
 	if len(r.Question) == 1 && dns.IsFqdn(r.Question[0].Name) {
 		domain = r.Question[0].Name
 		domain = domain[0 : len(domain)-1]
@@ -200,6 +207,13 @@ func DnsGetDoaminIP(domain string) (string, error) {
 	m.RecursionDesired = true
 	res, err := dnsQuery(m, false)
 	if nil != err {
+		if err == errNoDNServer {
+			addrs, err := net.DefaultResolver.LookupHost(context.Background(), domain)
+			if nil == err {
+				return addrs[0], nil
+			}
+			return "", nil
+		}
 		return "", err
 	}
 	return pickIP(res), nil

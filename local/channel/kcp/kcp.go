@@ -58,7 +58,7 @@ func (tc *KCPProxy) CreateMuxSession(server string, conf *proxy.ProxyChannelConf
 	if err != nil {
 		return nil, err
 	}
-	udpconn, err := netx.DialUDP("udp", &net.UDPAddr{IP: net.IPv4zero, Port: 0}, udpaddr)
+	udpconn, err := netx.DialUDP("udp", nil, udpaddr)
 	if err != nil {
 		return nil, err
 	}

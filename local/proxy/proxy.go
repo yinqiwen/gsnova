@@ -339,9 +339,9 @@ func watchConf(watcher *fsnotify.Watcher) {
 	for {
 		select {
 		case event := <-watcher.Events:
-			//log.Println("event:", event)
-			if event.Op&fsnotify.Write == fsnotify.Write {
-				logger.Debug("modified file:%s", event.Name)
+			logger.Debug("fsnotify event:%v", event)
+			if (event.Op & fsnotify.Write) == fsnotify.Write {
+				logger.Debug("modified file:%s %v", event)
 				loadConf(event.Name)
 			}
 		case err := <-watcher.Errors:
@@ -357,29 +357,14 @@ type ProxyOptions struct {
 	WatchConf bool
 }
 
-func Start(options ProxyOptions) error {
-	clientConf := options.Config
-	hostsConf := options.Hosts
-	proxyHome = options.Home
-
-	if options.WatchConf {
-		confWatcher, err := fsnotify.NewWatcher()
-		if err != nil {
-			logger.Fatal("%v", err)
-			return err
-		}
-		confWatcher.Add(clientConf)
-		confWatcher.Add(hostsConf)
-		go watchConf(confWatcher)
-	}
-
-	err := loadConf(clientConf)
-	if nil != err {
-		//log.Println(err)
-		return err
-	}
-	loadConf(hostsConf)
+func StartProxy() error {
+	GConf.init()
 	logger.InitLogger(GConf.Log)
+
+	if GConf.TransparentMark > 0 {
+		enableTransparentSocketMark(GConf.TransparentMark)
+	}
+
 	go initDNS()
 
 	logger.Notice("Allowed proxy channel with schema:%v", allowedSchema())
@@ -411,6 +396,31 @@ func Start(options ProxyOptions) error {
 	go startAdminServer()
 	startLocalServers()
 	return nil
+}
+
+func Start(options ProxyOptions) error {
+	clientConf := options.Config
+	hostsConf := options.Hosts
+	proxyHome = options.Home
+
+	if options.WatchConf {
+		confWatcher, err := fsnotify.NewWatcher()
+		if err != nil {
+			logger.Fatal("%v", err)
+			return err
+		}
+		confWatcher.Add(clientConf)
+		confWatcher.Add(hostsConf)
+		go watchConf(confWatcher)
+	}
+
+	err := loadConf(clientConf)
+	if nil != err {
+		//log.Println(err)
+		return err
+	}
+	loadConf(hostsConf)
+	return StartProxy()
 }
 
 func Stop() error {
