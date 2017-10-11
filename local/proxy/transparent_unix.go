@@ -76,12 +76,12 @@ type tudpSession struct {
 	localPort  string
 }
 
-func (t *tudpSession) close() {
+func (t *tudpSession) close(err error) {
 	if nil != t.stream {
 		t.stream.Close()
 	}
 	tudpSessions.Delete(t.key)
-	logger.Debug("Close transparent udp session:%s", t.key)
+	logger.Debug("Close transparent udp session:%s for reason:%v", t.key, err)
 }
 
 func (t *tudpSession) handle(p []byte) {
@@ -95,7 +95,7 @@ func (t *tudpSession) handle(p []byte) {
 		proxyChannelName := t.conf.getProxyChannelByHost(protocol, t.remoteHost)
 		if len(proxyChannelName) == 0 {
 			logger.Error("[ERROR]No proxy found for %s:%s", protocol, t.remoteHost)
-			t.close()
+			t.close(nil)
 			return
 		}
 		logger.Debug("Select %s to proxy udp packet to %s:%s", proxyChannelName, t.remoteHost, t.remotePort)
@@ -105,19 +105,21 @@ func (t *tudpSession) handle(p []byte) {
 		}
 		if nil != err || nil == stream {
 			logger.Error("Failed to open stream for reason:%v by proxy:%s", err, proxyChannelName)
-			t.close()
+			t.close(err)
 			return
 		}
 		t.stream = stream
 		//u.streamReader, u.streamWriter = mux.GetCompressStreamReaderWriter(stream, conf.Compressor)
 		go func() {
 			b := make([]byte, 8192)
+			var uerr error
 			for {
 				stream.SetReadDeadline(time.Now().Add(readTimeout))
 				n, err := stream.Read(b)
 				if n > 0 {
 					err = writeBackUDPData(b[0:n], t.local, t.remote)
 				}
+				uerr = err
 				if nil != err {
 					break
 				}
@@ -125,11 +127,11 @@ func (t *tudpSession) handle(p []byte) {
 					break
 				}
 			}
-			t.close()
+			t.close(uerr)
 		}()
 	}
 	if nil == t.stream {
-		t.close()
+		t.close(nil)
 		return
 	}
 	t.stream.Write(p)

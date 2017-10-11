@@ -199,8 +199,10 @@ START:
 	localConn.SetReadDeadline(zero)
 	streamReader, streamWriter := mux.GetCompressStreamReaderWriter(stream, conf.Compressor)
 
+	closeCh := make(chan int, 1)
 	go func() {
 		io.Copy(localConn, streamReader)
+		closeCh <- 1
 	}()
 	if (isSocksProxy || isHttpsProxy || isTransparentProxy) && nil == initialHTTPReq {
 		io.Copy(streamWriter, bufconn)
@@ -221,11 +223,11 @@ START:
 				}
 			}
 			prevReq := proxyReq
-			localConn.SetReadDeadline(time.Now().Add(10 * time.Second))
+			localConn.SetReadDeadline(time.Now().Add(5 * time.Second))
 			proxyReq, err = http.ReadRequest(bufconn)
 			if nil != err {
 				if err != io.EOF && !strings.Contains(err.Error(), "use of closed network connection") {
-					logger.Notice("Failed to read proxy http request for reason:%v", err)
+					logger.Notice("Failed to read proxy http request to %s:%s for reason:%v", remoteHost, remotePort, err)
 				}
 				return
 			}
@@ -236,6 +238,7 @@ START:
 			}
 		}
 	}
+	<-closeCh
 }
 
 func startLocalProxyServer(proxyIdx int) (*net.TCPListener, error) {
@@ -286,7 +289,7 @@ var runningServers []*net.TCPListener
 func startLocalServers() error {
 	proxyServerRunning = true
 	runningServers = make([]*net.TCPListener, len(GConf.Proxy))
-	for i, _ := range GConf.Proxy {
+	for i := range GConf.Proxy {
 		startLocalProxyServer(i)
 	}
 	return nil
