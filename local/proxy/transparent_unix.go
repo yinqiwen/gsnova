@@ -7,10 +7,12 @@ import (
 	"log"
 	"net"
 	"strconv"
+	"sync"
 	"syscall"
 	"time"
 
 	"github.com/yinqiwen/gsnova/common/logger"
+	"github.com/yinqiwen/gsnova/common/mux"
 	"github.com/yinqiwen/gsnova/common/netx"
 	"github.com/yinqiwen/gsnova/local/protector"
 )
@@ -59,6 +61,108 @@ func getOrinalTCPRemoteAddr(conn net.Conn) (net.Conn, net.IP, uint16, error) {
 	}
 
 	return newConn, ip, port, nil
+}
+
+type tudpSession struct {
+	local  syscall.Sockaddr
+	remote syscall.Sockaddr
+	conf   *ProxyConfig
+	stream mux.MuxStream
+
+	key        string
+	remoteHost string
+	remotePort string
+	localHost  string
+	localPort  string
+}
+
+func (t *tudpSession) close() {
+	if nil != t.stream {
+		t.stream.Close()
+	}
+	tudpSessions.Delete(t.key)
+	logger.Debug("Close transparent udp session:%s", t.key)
+}
+
+func (t *tudpSession) handle(p []byte) {
+	if nil == t.stream {
+		protocol := "udp"
+		readTimeout := time.Duration(t.conf.UDPReadMSTimeout) * time.Millisecond
+		if t.remotePort == "53" {
+			protocol = "dns"
+			readTimeout = time.Duration(t.conf.DNSReadMSTimeout) * time.Millisecond
+		}
+		proxyChannelName := t.conf.getProxyChannelByHost(protocol, t.remoteHost)
+		if len(proxyChannelName) == 0 {
+			logger.Error("[ERROR]No proxy found for %s:%s", protocol, t.remoteHost)
+			t.close()
+			return
+		}
+		logger.Debug("Select %s to proxy udp packet to %s:%s", proxyChannelName, t.remoteHost, t.remotePort)
+		stream, _, err := getMuxStreamByChannel(proxyChannelName)
+		if nil != stream {
+			err = stream.Connect("udp", net.JoinHostPort(t.remoteHost, t.remotePort))
+		}
+		if nil != err || nil == stream {
+			logger.Error("Failed to open stream for reason:%v by proxy:%s", err, proxyChannelName)
+			t.close()
+			return
+		}
+		t.stream = stream
+		//u.streamReader, u.streamWriter = mux.GetCompressStreamReaderWriter(stream, conf.Compressor)
+		go func() {
+			b := make([]byte, 8192)
+			for {
+				stream.SetReadDeadline(time.Now().Add(readTimeout))
+				n, err := stream.Read(b)
+				if n > 0 {
+					err = writeBackUDPData(b[0:n], t.local, t.remote)
+				}
+				if nil != err {
+					break
+				}
+				if t.remotePort == "53" {
+					break
+				}
+			}
+			t.close()
+		}()
+	}
+	if nil == t.stream {
+		t.close()
+		return
+	}
+	t.stream.Write(p)
+}
+
+var tudpSessions sync.Map
+
+func getTUDPSession(proxy *ProxyConfig, laddr, raddr syscall.Sockaddr) *tudpSession {
+	t := &tudpSession{
+		local:  laddr,
+		remote: raddr,
+		conf:   proxy,
+	}
+	if _, ok := raddr.(*syscall.SockaddrInet4); ok {
+		t.remotePort = fmt.Sprintf("%d", raddr.(*syscall.SockaddrInet4).Port)
+		t.localPort = fmt.Sprintf("%d", laddr.(*syscall.SockaddrInet4).Port)
+		ip := make(net.IP, net.IPv4len)
+		copy(ip, raddr.(*syscall.SockaddrInet4).Addr[:])
+		t.remoteHost = ip.String()
+		copy(ip, laddr.(*syscall.SockaddrInet4).Addr[:])
+		t.localHost = ip.String()
+	} else {
+		t.remotePort = fmt.Sprintf("%d", raddr.(*syscall.SockaddrInet6).Port)
+		t.localPort = fmt.Sprintf("%d", laddr.(*syscall.SockaddrInet6).Port)
+		ip := make(net.IP, net.IPv6len)
+		copy(ip, raddr.(*syscall.SockaddrInet6).Addr[:])
+		t.remoteHost = ip.String()
+		copy(ip, laddr.(*syscall.SockaddrInet6).Addr[:])
+		t.localHost = ip.String()
+	}
+	t.key = fmt.Sprintf("%s:%s-%s:%s", t.localHost, t.localPort, t.remoteHost, t.remotePort)
+	actual, _ := tudpSessions.LoadOrStore(t.key, t)
+	return actual.(*tudpSession)
 }
 
 func startTransparentUDProxy(addr string, proxy *ProxyConfig) {
@@ -130,60 +234,8 @@ func startTransparentUDProxy(addr string, proxy *ProxyConfig) {
 			logger.Error("Recv msg error:%v", err)
 			continue
 		}
-
-		go func(p []byte, laddr, raddr syscall.Sockaddr) {
-			protocol := "udp"
-			remoteHost := ""
-			remotePort := ""
-			if _, ok := raddr.(*syscall.SockaddrInet4); ok {
-				remotePort = fmt.Sprintf("%d", raddr.(*syscall.SockaddrInet4).Port)
-				ip := make(net.IP, net.IPv4len)
-				copy(ip, raddr.(*syscall.SockaddrInet4).Addr[:])
-				remoteHost = ip.String()
-			} else {
-				remotePort = fmt.Sprintf("%d", raddr.(*syscall.SockaddrInet6).Port)
-				ip := make(net.IP, net.IPv6len)
-				copy(ip, raddr.(*syscall.SockaddrInet6).Addr[:])
-				remoteHost = ip.String()
-			}
-			readTimeout := time.Duration(proxy.UDPReadMSTimeout) * time.Millisecond
-			if remotePort == "53" {
-				protocol = "dns"
-				readTimeout = time.Duration(proxy.DNSReadMSTimeout) * time.Millisecond
-			}
-			proxyChannelName := proxy.getProxyChannelByHost(protocol, remoteHost)
-			if len(proxyChannelName) == 0 {
-				logger.Error("[ERROR]No proxy found for %s:%s", protocol, remoteHost)
-				return
-			}
-			logger.Debug("Select %s to proxy udp packet to %s:%s", proxyChannelName, remoteHost, remotePort)
-			if proxyChannelName == directProxyChannelName {
-				res, err := dnsQueryRaw(p, true)
-				if nil == err {
-					writeBackUDPData(res, laddr, raddr)
-				}
-				if nil != err {
-					logger.Error("[ERROR]Failed to query dns with reason:%v", err)
-				}
-				return
-			}
-			stream, _, err := getMuxStreamByChannel(proxyChannelName)
-			if nil != stream {
-				err = stream.Connect("udp", net.JoinHostPort(remoteHost, remotePort))
-			}
-			if nil != err || nil == stream {
-				logger.Error("Failed to open stream for reason:%v by proxy:%s", err, proxyChannelName)
-				return
-			}
-			buf := make([]byte, 4096)
-			stream.Write(p)
-			stream.SetReadDeadline(time.Now().Add(readTimeout))
-			n, _ := stream.Read(buf)
-			if n > 0 {
-				writeBackUDPData(buf[0:n], laddr, raddr)
-			}
-			stream.Close()
-		}(data, local, remote)
+		u := getTUDPSession(proxy, local, remote)
+		u.handle(data)
 	}
 }
 
