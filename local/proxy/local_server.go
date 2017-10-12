@@ -266,8 +266,18 @@ func startLocalProxyServer(proxyIdx int) (*net.TCPListener, error) {
 			if nil != err {
 				continue
 			}
+			isTransparent := false
+			tcpAddr, ok := conn.RemoteAddr().(*net.TCPAddr)
+			if ok {
+				_, exist := helper.GetLocalIPSet()[tcpAddr.IP.String()]
+				if !exist {
+					isTransparent = true
+				}
+			}
+			//s1 := conn.RemoteAddr().String()
+			//logger.Debug("####%T", conn.RemoteAddr())
 			var originalHost, originalPort string
-			if proxyConf.Transparent {
+			if isTransparent {
 				newConn, remoteIP, remotePort, err := getOrinalTCPRemoteAddr(conn)
 				if nil != err {
 					logger.Error("Failed to get original address for transparent proxy:%v", err)
