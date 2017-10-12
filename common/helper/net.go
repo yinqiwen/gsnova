@@ -456,6 +456,7 @@ func Socks5ProxyDial(proxyURL string, addr string, timeout time.Duration) (net.C
 	return c, nil
 }
 
+var localIPSet = make(map[string]bool)
 var localIPv4 []string
 
 func GetLocalIPv4() []string {
@@ -475,6 +476,22 @@ func GetLocalIPv4() []string {
 		}
 	}
 	return localIPv4
+}
+func GetLocalIPSet() map[string]bool {
+	if len(localIPSet) > 0 {
+		return localIPSet
+	}
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		logger.Error("[ERROR]Failed to get local ip:%v", err)
+		return localIPSet
+	}
+	for _, a := range addrs {
+		if ipnet, ok := a.(*net.IPNet); ok {
+			localIPSet[ipnet.IP.String()] = true
+		}
+	}
+	return localIPSet
 }
 
 // Setup a bare-bones TLS config for the server
