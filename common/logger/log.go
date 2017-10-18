@@ -75,6 +75,7 @@ func IsDebugEnable() bool {
 }
 
 func InitLogger(output []string) {
+	withFile = false
 	ws := make([]io.Writer, 0)
 	for _, name := range output {
 		if strings.EqualFold(name, "stdout") {
@@ -158,5 +159,7 @@ func Fatal(format string, v ...interface{}) {
 func init() {
 	logFlag := log.LstdFlags | log.Lshortfile
 	log.SetFlags(logFlag)
+	log.SetOutput(os.Stdout)
+	withFile = true
 	colorConsoleLogger = log.New(&colorConsoleWriter{w: os.Stdout}, "", logFlag)
 }

@@ -20,11 +20,12 @@ import (
 // 	return nil
 // }
 
-func StartLocalProxy(home string, conf string, hosts string, watchConf bool) error {
+func StartLocalProxy(home string, conf string, hosts string, cnip string, watchConf bool) error {
 	options := proxy.ProxyOptions{
 		Home:      home,
 		Config:    conf,
 		Hosts:     hosts,
+		CNIP:      cnip,
 		WatchConf: watchConf,
 	}
 	// ProtectConnections("114.114.114.114", &testProc{})

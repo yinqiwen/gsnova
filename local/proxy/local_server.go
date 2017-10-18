@@ -243,7 +243,7 @@ START:
 
 func startLocalProxyServer(proxyIdx int) (*net.TCPListener, error) {
 	proxyConf := &GConf.Proxy[proxyIdx]
-	if proxyConf.Transparent {
+	if supportTransparentProxy() {
 		go startTransparentUDProxy(proxyConf.Local, proxyConf)
 	}
 	tcpaddr, err := net.ResolveTCPAddr("tcp", proxyConf.Local)
@@ -267,15 +267,15 @@ func startLocalProxyServer(proxyIdx int) (*net.TCPListener, error) {
 				continue
 			}
 			isTransparent := false
-			tcpAddr, ok := conn.RemoteAddr().(*net.TCPAddr)
-			if ok {
-				_, exist := helper.GetLocalIPSet()[tcpAddr.IP.String()]
-				if !exist {
-					isTransparent = true
+			if supportTransparentProxy() {
+				tcpAddr, ok := conn.RemoteAddr().(*net.TCPAddr)
+				if ok {
+					_, exist := helper.GetLocalIPSet()[tcpAddr.IP.String()]
+					if !exist {
+						isTransparent = true
+					}
 				}
 			}
-			//s1 := conn.RemoteAddr().String()
-			//logger.Debug("####%T", conn.RemoteAddr())
 			var originalHost, originalPort string
 			if isTransparent {
 				newConn, remoteIP, remotePort, err := getOrinalTCPRemoteAddr(conn)

@@ -19,7 +19,6 @@ import (
 
 var GConf LocalConfig
 var mygfwlist *gfwlist.GFWList
-var cnIPRange *IPRangeHolder
 
 const (
 	BlockedByGFWRule = "BlockedByGFW"
@@ -218,7 +217,7 @@ func (pac *PACConfig) matchRules(ip string, req *http.Request) bool {
 				logger.Debug("NIL GFWList object or request")
 			}
 		} else if strings.EqualFold(rule, IsCNIPRule) {
-			if len(ip) == 0 || nil == cnIPRange {
+			if len(ip) == 0 || nil == chinaIPSet {
 				logger.Debug("NIL CNIP content  or IP/Domain")
 				ok = false
 			} else {
@@ -227,14 +226,10 @@ func (pac *PACConfig) matchRules(ip string, req *http.Request) bool {
 					ip, err = DnsGetDoaminIP(ip)
 				}
 				if nil == err {
-					_, err = cnIPRange.FindCountry(ip)
-				} else {
-					logger.Error("######err:%v", err)
+					ok = chinaIPSet.IsInCountry(net.ParseIP(ip), "CN")
 				}
-				ok = (nil == err)
 				logger.Debug("ip:%s is CNIP:%v", ip, ok)
 			}
-
 		} else {
 			logger.Error("###Invalid rule:%s", rule)
 		}
@@ -290,7 +285,6 @@ func (pac *PACConfig) Match(protocol string, ip string, req *http.Request) bool 
 
 type ProxyConfig struct {
 	Local            string
-	Transparent      bool
 	DNSReadMSTimeout int
 	UDPReadMSTimeout int
 	PAC              []PACConfig
@@ -328,8 +322,6 @@ type LocalDNSConfig struct {
 	Listen     string
 	TrustedDNS []string
 	FastDNS    []string
-	TCPConnect bool
-	CacheSize  int
 }
 
 type RemoteDNSConfig struct {
@@ -343,25 +335,7 @@ type AdminConfig struct {
 }
 
 type UDPGWConfig struct {
-	Addr           string
-	LocalDNSRecord map[string]string
-}
-
-func (gw *UDPGWConfig) matchDNS(domain string) string {
-	if nil == gw.LocalDNSRecord {
-		return ""
-	}
-	for k, v := range gw.LocalDNSRecord {
-		matched, err := filepath.Match(k, domain)
-		if nil != err {
-			logger.Error("Invalid pattern:%s with reason:%v", k, err)
-			continue
-		}
-		if matched {
-			return v
-		}
-	}
-	return ""
+	Addr string
 }
 
 type SNIConfig struct {
@@ -406,16 +380,12 @@ type LocalConfig struct {
 
 func (cfg *LocalConfig) init() error {
 	gfwlistEnable := false
-	cnIPEnable := false
 	for i, _ := range cfg.Proxy {
 		for j, _ := range cfg.Proxy[i].PAC {
 			rules := cfg.Proxy[i].PAC[j].Rule
 			for _, r := range rules {
 				if strings.Contains(r, BlockedByGFWRule) || strings.Contains(r, IsCNIPRule) {
 					gfwlistEnable = true
-				}
-				if strings.Contains(r, IsCNIPRule) {
-					cnIPEnable = true
 				}
 			}
 		}
@@ -428,9 +398,6 @@ func (cfg *LocalConfig) init() error {
 	}
 	if gfwlistEnable {
 		go syncGFWList()
-	}
-	if cnIPEnable {
-		go syncIPRangeFile()
 	}
 
 	switch GConf.Cipher.Method {

@@ -110,7 +110,7 @@ func Init(confile string) error {
 		err = json.Unmarshal(data, &hs)
 	}
 	if nil != err {
-		//fmt.Printf("Failed to load hosts config:%s for reason:%v", file, err)
+		//fmt.Printf("Failed to load hosts config:%s for reason:%v", string(data), err)
 		return err
 	}
 	mappingMutex.Lock()

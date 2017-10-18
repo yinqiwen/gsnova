@@ -395,7 +395,8 @@ func (p *HTTPProxy) Features() proxy.ProxyFeatureSet {
 func (ws *HTTPProxy) CreateMuxSession(server string, conf *proxy.ProxyChannelConfig) (mux.MuxSession, error) {
 	conn := &httpDuplexConn{}
 	conn.conf = conf
-	conn.client, _ = proxy.NewHTTPClient(conf)
+	u, _ := url.Parse(server)
+	conn.client, _ = proxy.NewHTTPClient(conf, u.Scheme)
 	err := conn.init(server, conf.HTTP.HTTPPushRateLimitPerSec)
 	if nil != err {
 		return nil, err

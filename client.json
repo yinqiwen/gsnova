@@ -12,11 +12,8 @@
     "LocalDNS":{
     	//only listen UDP
     	"Listen": "127.0.0.1:5300",
-    	//for PAC rule 'IsCNIP', it would resolve the domain by 'TrustedDNS' if 'BlockedByGFW', and resolve the rest by 'FastDNS'
-    	"FastDNS":["114.114.114.114"],
-    	"TrustedDNS": ["208.67.222.222:443", "208.67.220.220:443"],
-    	"CacheSize":1024,
-    	"TCPConnect": false 
+    	"FastDNS":["223.5.5.5","180.76.76.76"],
+    	"TrustedDNS": ["208.67.222.222", "208.67.220.220"]
 	},
 	
 	//used to replace forward dns query's target DNS server addr 
@@ -26,11 +23,7 @@
 
 	"UDPGW":{
 		//fake address, only used as udp protocol indicator
-		"Addr":"20.20.20.20:1111",
-		//since gsnova sniff SNI for https, 'Host' for http, return fake record for dns query would make it run faster for http/https traffic
-		"LocalDNSRecord":{
-			"*" : "111.111.111.111"
-		}
+		"Addr":"20.20.20.20:1111"
 	},
 
 	"SNI":{

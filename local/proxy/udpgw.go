@@ -149,7 +149,7 @@ func (u *udpSession) handlePacket(proxy *ProxyConfig, packet *udpgwPacket) error
 		readTimeout = time.Duration(proxy.DNSReadMSTimeout) * time.Millisecond
 		selectProxy := proxy.findProxyChannelByRequest("dns", packet.addr.ip.String(), nil)
 		if selectProxy == directProxyChannelName {
-			res, err := dnsQueryRaw(packet.content, true)
+			res, err := localDNS.QueryRaw(packet.content)
 			if nil == err {
 				err = u.Write(res)
 			}

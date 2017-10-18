@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -315,19 +316,20 @@ func getMuxStreamByChannel(name string) (mux.MuxStream, *ProxyChannelConfig, err
 	return stream, &pch.Conf, err
 }
 
-func loadConf(conf string) error {
-	if strings.HasSuffix(conf, clientConfName) {
-		confdata, err := helper.ReadWithoutComment(conf, "//")
-		if nil != err {
-			logger.Error("Failed to load conf:%s with reason:%v", conf, err)
-		}
-		GConf = LocalConfig{}
-		err = json.Unmarshal(confdata, &GConf)
-		if nil != err {
-			logger.Error("Failed to unmarshal json:%s to config for reason:%v", string(confdata), err)
-		}
-		return GConf.init()
+func loadClientConf(conf string) error {
+	confdata, err := helper.ReadWithoutComment(conf, "//")
+	if nil != err {
+		logger.Error("Failed to load conf:%s with reason:%v", conf, err)
 	}
+	GConf = LocalConfig{}
+	err = json.Unmarshal(confdata, &GConf)
+	if nil != err {
+		logger.Error("Failed to unmarshal json:%s to config for reason:%v", string(confdata), err)
+	}
+	return GConf.init()
+}
+
+func loadHostsConf(conf string) error {
 	err := hosts.Init(conf)
 	if nil != err {
 		logger.Error("Failed to init local hosts with reason:%v.", err)
@@ -341,8 +343,7 @@ func watchConf(watcher *fsnotify.Watcher) {
 		case event := <-watcher.Events:
 			logger.Debug("fsnotify event:%v", event)
 			if (event.Op & fsnotify.Write) == fsnotify.Write {
-				logger.Debug("modified file:%s %v", event)
-				loadConf(event.Name)
+				loadClientConf(event.Name)
 			}
 		case err := <-watcher.Errors:
 			logger.Error("error:%v", err)
@@ -353,6 +354,7 @@ func watchConf(watcher *fsnotify.Watcher) {
 type ProxyOptions struct {
 	Config    string
 	Hosts     string
+	CNIP      string
 	Home      string
 	WatchConf bool
 }
@@ -365,7 +367,7 @@ func StartProxy() error {
 		enableTransparentSocketMark(GConf.TransparentMark)
 	}
 
-	go initDNS()
+	initDNS()
 
 	logger.Notice("Allowed proxy channel with schema:%v", allowedSchema())
 	singalCh := make(chan bool, len(GConf.Channel))
@@ -410,16 +412,24 @@ func Start(options ProxyOptions) error {
 			return err
 		}
 		confWatcher.Add(clientConf)
-		confWatcher.Add(hostsConf)
+		//confWatcher.Add(hostsConf)
 		go watchConf(confWatcher)
 	}
 
-	err := loadConf(clientConf)
-	if nil != err {
-		//log.Println(err)
-		return err
+	if len(clientConf) > 0 {
+		err := loadClientConf(clientConf)
+		if nil != err {
+			//log.Println(err)
+			return err
+		}
+	} else {
+		if len(GConf.Proxy) == 0 {
+			return errors.New("Can NOT start proxy without any config")
+		}
 	}
-	loadConf(hostsConf)
+
+	loadHostsConf(hostsConf)
+	cnipConf = options.CNIP
 	return StartProxy()
 }
 
@@ -436,8 +446,5 @@ func Stop() error {
 	proxyChannelTable = make(map[string]*proxyChannel)
 	//proxyChannelMutex.Unlock()
 	hosts.Clear()
-	if nil != cnIPRange {
-		cnIPRange.Clear()
-	}
 	return nil
 }

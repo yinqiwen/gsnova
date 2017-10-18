@@ -1,4 +1,4 @@
-// +build linux
+// +build linux,!android
 
 package proxy
 
@@ -70,9 +70,9 @@ type tudpSession struct {
 	stream mux.MuxStream
 
 	key        string
-	remoteHost string
+	remoteIP   net.IP
+	localIP    net.IP
 	remotePort string
-	localHost  string
 	localPort  string
 }
 
@@ -81,27 +81,33 @@ func (t *tudpSession) close(err error) {
 		t.stream.Close()
 	}
 	tudpSessions.Delete(t.key)
-	logger.Debug("Close transparent udp session:%s for reason:%v", t.key, err)
+	if nil != err {
+		logger.Debug("Close transparent udp session:%s for reason:%v", t.key, err)
+	}
 }
 
 func (t *tudpSession) handle(p []byte) {
 	if nil == t.stream {
+		if t.remoteIP.IsMulticast() {
+			t.close(nil)
+			return
+		}
 		protocol := "udp"
 		readTimeout := time.Duration(t.conf.UDPReadMSTimeout) * time.Millisecond
 		if t.remotePort == "53" {
 			protocol = "dns"
 			readTimeout = time.Duration(t.conf.DNSReadMSTimeout) * time.Millisecond
 		}
-		proxyChannelName := t.conf.getProxyChannelByHost(protocol, t.remoteHost)
+		proxyChannelName := t.conf.getProxyChannelByHost(protocol, t.remoteIP.String())
 		if len(proxyChannelName) == 0 {
-			logger.Error("[ERROR]No proxy found for %s:%s", protocol, t.remoteHost)
+			logger.Error("[ERROR]No proxy found for %s:%s", protocol, t.remoteIP.String())
 			t.close(nil)
 			return
 		}
-		logger.Debug("Select %s to proxy udp packet to %s:%s", proxyChannelName, t.remoteHost, t.remotePort)
+		logger.Debug("Select %s to proxy udp packet to %s:%s", proxyChannelName, t.remoteIP.String(), t.remotePort)
 		stream, _, err := getMuxStreamByChannel(proxyChannelName)
 		if nil != stream {
-			err = stream.Connect("udp", net.JoinHostPort(t.remoteHost, t.remotePort))
+			err = stream.Connect("udp", net.JoinHostPort(t.remoteIP.String(), t.remotePort))
 		}
 		if nil != err || nil == stream {
 			logger.Error("Failed to open stream for reason:%v by proxy:%s", err, proxyChannelName)
@@ -148,21 +154,19 @@ func getTUDPSession(proxy *ProxyConfig, laddr, raddr syscall.Sockaddr) *tudpSess
 	if _, ok := raddr.(*syscall.SockaddrInet4); ok {
 		t.remotePort = fmt.Sprintf("%d", raddr.(*syscall.SockaddrInet4).Port)
 		t.localPort = fmt.Sprintf("%d", laddr.(*syscall.SockaddrInet4).Port)
-		ip := make(net.IP, net.IPv4len)
-		copy(ip, raddr.(*syscall.SockaddrInet4).Addr[:])
-		t.remoteHost = ip.String()
-		copy(ip, laddr.(*syscall.SockaddrInet4).Addr[:])
-		t.localHost = ip.String()
+		t.remoteIP = make(net.IP, net.IPv4len)
+		copy(t.remoteIP, raddr.(*syscall.SockaddrInet4).Addr[:])
+		t.localIP = make(net.IP, net.IPv4len)
+		copy(t.localIP, laddr.(*syscall.SockaddrInet4).Addr[:])
 	} else {
 		t.remotePort = fmt.Sprintf("%d", raddr.(*syscall.SockaddrInet6).Port)
 		t.localPort = fmt.Sprintf("%d", laddr.(*syscall.SockaddrInet6).Port)
-		ip := make(net.IP, net.IPv6len)
-		copy(ip, raddr.(*syscall.SockaddrInet6).Addr[:])
-		t.remoteHost = ip.String()
-		copy(ip, laddr.(*syscall.SockaddrInet6).Addr[:])
-		t.localHost = ip.String()
+		t.remoteIP = make(net.IP, net.IPv6len)
+		copy(t.remoteIP, raddr.(*syscall.SockaddrInet6).Addr[:])
+		t.localIP = make(net.IP, net.IPv6len)
+		copy(t.localIP, laddr.(*syscall.SockaddrInet6).Addr[:])
 	}
-	t.key = fmt.Sprintf("%s:%s-%s:%s", t.localHost, t.localPort, t.remoteHost, t.remotePort)
+	t.key = fmt.Sprintf("%s:%s->%s:%s", t.localIP.String(), t.localPort, t.remoteIP.String(), t.remotePort)
 	actual, _ := tudpSessions.LoadOrStore(t.key, t)
 	return actual.(*tudpSession)
 }
@@ -300,4 +304,8 @@ func enableTransparentSocketMark(v int) {
 	netx.OverrideDial(protector.DialContext)
 	netx.OverrideListenUDP(protector.ListenUDP)
 	netx.OverrideDialUDP(protector.DialUDP)
+}
+
+func supportTransparentProxy() bool {
+	return true
 }

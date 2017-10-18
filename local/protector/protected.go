@@ -301,7 +301,7 @@ func DialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 	}
 
 	//conn.Conn.SetDeadline(time.Now().Add(timeout))
-	return conn, nil
+	return conn.Conn, nil
 }
 
 // converts the protected connection specified by
@@ -321,13 +321,6 @@ func (conn *ProtectedConn) convert() error {
 	conn.Conn = fileConn
 	conn.mutex.Unlock()
 	return nil
-}
-
-// cleanup is ran whenever we encounter a socket error
-// we use a mutex since this connection is active in a variety
-// of goroutines and to prevent any possible race conditions
-func (conn *ProtectedConn) GetConn() net.Conn {
-	return conn.Conn
 }
 
 // Close is used to destroy a protected connection
@@ -417,7 +410,7 @@ func ListenUDP(network string, laddr *net.UDPAddr) (net.PacketConn, error) {
 		log.Printf("Error converting protected connection: %v", err)
 		return nil, err
 	}
-	return conn, nil
+	return conn.PacketConn, nil
 }
 
 func DialUDP(network string, laddr, raddr *net.UDPAddr) (net.PacketConn, error) {
@@ -463,5 +456,5 @@ func DialUDP(network string, laddr, raddr *net.UDPAddr) (net.PacketConn, error) 
 	}
 
 	//conn.Conn.SetDeadline(time.Now().Add(timeout))
-	return conn, nil
+	return conn.PacketConn, nil
 }

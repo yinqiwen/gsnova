@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/yinqiwen/gsnova/common/logger"
-	"github.com/yinqiwen/gsnova/local/gsnova"
+	_ "github.com/yinqiwen/gsnova/local/gsnova"
 	"github.com/yinqiwen/gsnova/local/proxy"
 )
 
@@ -29,18 +29,6 @@ func printASCIILogo() {
 	       \/__/        \/__/        \/__/        \/__/                    \/__/    
 	`
 	fmt.Println(logo)
-
-	// fmt.Println(" .----------------.  .----------------.  .-----------------. .----------------.  .----------------.  .----------------. ")
-	// fmt.Println("| .--------------. || .--------------. || .--------------. || .--------------. || .--------------. || .--------------. |")
-	// fmt.Println("| |    ______    | || |    _______   | || | ____  _____  | || |     ____     | || | ____   ____  | || |      __      | |")
-	// fmt.Println("| |  .' ___  |   | || |   /  ___  |  | || ||_   \\|_   _| | || |   .'    `.   | || ||_  _| |_  _| | || |     /  \\     | |")
-	// fmt.Println("| | / .'   \\_|   | || |  |  (__ \\_|  | || |  |   \\ | |   | || |  /  .--.  \\  | || |  \\ \\   / /   | || |    / /\\ \\    | |")
-	// fmt.Println("| | | |    ____  | || |   '.___`-.   | || |  | |\\ \\| |   | || |  | |    | |  | || |   \\ \\ / /    | || |   / ____ \\   | |")
-	// fmt.Println("| | \\ `.___]  _| | || |  |`\\____) |  | || | _| |_\\   |_  | || |  \\  `--'  /  | || |    \\ ' /     | || | _/ /    \\ \\_ | |")
-	// fmt.Println("| |  `._____.'   | || |  |_______.'  | || ||_____|\\____| | || |   `.____.'   | || |     \\_/      | || ||____|  |____|| |")
-	// fmt.Println("| |              | || |              | || |              | || |              | || |              | || |              | |")
-	// fmt.Println("| '--------------' || '--------------' || '--------------' || '--------------' || '--------------' || '--------------' |")
-	// fmt.Println(" '----------------'  '----------------'  '----------------'  '----------------'  '----------------'  '----------------' ")
 }
 
 func main() {
@@ -59,10 +47,16 @@ func main() {
 	user := flag.String("user", "gsnova", "Username for remote server to authorize.")
 	key := flag.String("key", "809240d3a021449f6e67aa73221d42df942a308a", "Cipher key for transmission between local&remote.")
 	log := flag.String("log", "color,gsnova.log", "Log file setting")
+	cnip := flag.String("cnip", "./cnipset.txt", "China IP list.")
 	flag.Parse()
 
 	printASCIILogo()
 
+	options := proxy.ProxyOptions{
+		Home:  home,
+		Hosts: *hosts,
+		CNIP:  *cnip,
+	}
 	if *cmd {
 		proxy.GConf.Cipher.Key = *key
 		proxy.GConf.Cipher.Method = "auto"
@@ -78,11 +72,13 @@ func main() {
 		channel.ServerList = []string{*remote}
 		proxy.GConf.Proxy = []proxy.ProxyConfig{local}
 		proxy.GConf.Channel = []proxy.ProxyChannelConfig{channel}
-		err = proxy.StartProxy()
+		options.WatchConf = false
+		err = proxy.Start(options)
 	} else {
-		err = gsnova.StartLocalProxy(home, *conf, *hosts, true)
+		options.WatchConf = true
+		options.Config = *conf
+		err = proxy.Start(options)
 	}
-
 	if nil != err {
 		logger.Error("Start gsnova error:%v", err)
 	} else {

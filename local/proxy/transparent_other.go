@@ -1,4 +1,4 @@
-// +build !linux
+// +build  android !linux
 
 package proxy
 
@@ -19,4 +19,8 @@ func startTransparentUDProxy(addr string, proxy *ProxyConfig) {
 
 func enableTransparentSocketMark(v int) {
 	logger.Error("'enableTransparentSocketMark' Not supported in current system")
+}
+
+func supportTransparentProxy() bool {
+	return false
 }
