@@ -40,6 +40,7 @@ GSnova: Private Proxy Solution.
     - Local client running as HTTP/Socks4/Socks5 Proxy
 - Transparent TCP/UDP Proxy
 	- Transparent tcp/udp proxy implementation in pure golang
+- Multi-hop Proxy
 
 
 # Usage
@@ -61,9 +62,40 @@ The server can also be deployed to serveral PAAS service like heroku/openshift a
    mkdir gsnova_client; cd gsnova_client
    go build github.com/yinqiwen/gsnova/local/client
    cp $GOPATH/github.com/yinqiwen/gsnova/*.json ./
-   #...edit client.json...
-   ./client -conf ./client.json
 ```
+
+### Client Usage
+```
+Usage of ./client:
+  -cmd
+    	Launch gsnova client by command line without config file.
+  -cnip string
+    	China IP list. (default "./cnipset.txt")
+  -conf string
+    	Config file of gsnova client. (default "./client.json")
+  -hop value
+    	Next proxy hop to connect, eg:wss://xxx.paas.com
+  -hosts string
+    	Hosts file of gsnova client. (default "./hosts.json")
+  -key string
+    	Cipher key for transmission between local&remote. (default "809240d3a021449f6e67aa73221d42df942a308a")
+  -listen string
+    	Local listen address (default ":48100")
+  -log string
+    	Log file setting (default "color,gsnova.log")
+  -pid string
+    	PID file (default ".gsnova.pid")
+  -user string
+    	Username for remote server to authorize. (default "gsnova")
+```
+### Run From Command Line
+```
+   ./client -cmd -listen :48100 -hop http2://app1.openshiftapps.com  -key 809240d3a021449f6e67aa73221d42df942a308a
+```
+This would launch a socks4/socks5/http proxy at port 48100 and use http2://app1.openshiftapps.com as next proxy hop.
+
+### Run With Confguration
+
 This is a sample for client.json, the `Key` and the `ServerList` need to be modified to match your server.
 ```json
 {
@@ -88,24 +120,11 @@ This is a sample for client.json, the `Key` and the `ServerList` need to be modi
 		"TrustedDNS": [
 			"208.67.222.222:443",
 			"208.67.220.220:443"
-		],
-		"CacheSize": 1024,
-		"TCPConnect": false
-	},
-	//used to replace forward dns query's target DNS server addr 
-	"RemoteDNS": {
-		"TrustedDNS": [
-			"8.8.8.8",
-			"8.8.4.4"
 		]
 	},
 	"UDPGW": {
 		//fake address, only used as udp protocol indicator
-		"Addr": "20.20.20.20:1111",
-		//since gsnova sniff SNI for https, 'Host' for http, return fake record for dns query would make it run faster for http/https traffic
-		"LocalDNSRecord": {
-			"*": "111.111.111.111"
-		}
+		"Addr": "20.20.20.20:1111"
 	},
 	"SNI": {
 		//Used to redirect SNI host to another for sniffed SNI
@@ -178,6 +197,19 @@ This is a sample for client.json, the `Key` and the `ServerList` need to be modi
 	]
 }
 ```
+```
+   ./client -conf ./client.json
+```
+
+### Advanced Usage
+#### Multi-Hop Proxy
+GSnova support more than ONE remote server as the next hops, just add moren `-hop server` arguments to enable multi-hop proxy. 
+```shell
+   ./client -cmd -listen :48101 -hop http2://app1.openshiftapps.com -hop wss://app2.herokuapp.com -key 809240d3a021449f6e67aa73221d42df942a308a
+```
+#### Transparent Proxy
+- Edit iptables rules.
+- It's only works on linux.
 
 
 ## Mobile Client(Android)
@@ -189,8 +221,5 @@ Users can develop there own app by using the generated `gsnova.aar`.
 There is a very simple andorid app [gsnova-android-v0.27.3.1.zip](https://github.com/yinqiwen/gsnova/releases/download/v0.27.3/gsnova-android-v0.27.3.1.zip) which use `tun2socks` + `gsnova` to build. 
 
 
-## Transparent Proxy
-- Edit iptables rules.
-- Edit `client.json` to enable `Transparent` to true.
-- It's only works on linux
+
 

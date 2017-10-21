@@ -1,17 +1,14 @@
 package gsnova
 
 import (
+	_ "github.com/yinqiwen/gsnova/common/channel/common"
 	"github.com/yinqiwen/gsnova/common/netx"
-	_ "github.com/yinqiwen/gsnova/local/channel/direct"
-	_ "github.com/yinqiwen/gsnova/local/channel/http"
-	_ "github.com/yinqiwen/gsnova/local/channel/http2"
-	_ "github.com/yinqiwen/gsnova/local/channel/kcp"
-	_ "github.com/yinqiwen/gsnova/local/channel/quic"
-	_ "github.com/yinqiwen/gsnova/local/channel/ssh"
-	_ "github.com/yinqiwen/gsnova/local/channel/tcp"
-	_ "github.com/yinqiwen/gsnova/local/channel/websocket"
 	"github.com/yinqiwen/gsnova/local/proxy"
 )
+
+func init() {
+
+}
 
 // type testProc struct {
 // }

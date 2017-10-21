@@ -43,5 +43,6 @@ func (q *QUICMuxSession) NumStreams() int {
 }
 
 func (q *QUICMuxSession) Close() error {
+	q.streamCounter = 0
 	return q.Session.Close(nil)
 }

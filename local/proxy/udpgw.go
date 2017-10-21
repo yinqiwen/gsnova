@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/google/btree"
+	"github.com/yinqiwen/gsnova/common/channel"
+	"github.com/yinqiwen/gsnova/common/dns"
 	"github.com/yinqiwen/gsnova/common/logger"
 	"github.com/yinqiwen/gsnova/common/mux"
 )
@@ -143,13 +145,12 @@ func (u *udpSession) handlePacket(proxy *ProxyConfig, packet *udpgwPacket) error
 		u.streamWriter.Write(packet.content)
 		return nil
 	}
-	readTimeout := time.Duration(proxy.UDPReadMSTimeout) * time.Millisecond
+
 	remoteAddr := packet.address()
 	if packet.addr.port == 53 {
-		readTimeout = time.Duration(proxy.DNSReadMSTimeout) * time.Millisecond
 		selectProxy := proxy.findProxyChannelByRequest("dns", packet.addr.ip.String(), nil)
-		if selectProxy == directProxyChannelName {
-			res, err := localDNS.QueryRaw(packet.content)
+		if selectProxy == channel.DirectChannelName {
+			res, err := dns.LocalDNS.QueryRaw(packet.content)
 			if nil == err {
 				err = u.Write(res)
 			}
@@ -159,8 +160,8 @@ func (u *udpSession) handlePacket(proxy *ProxyConfig, packet *udpgwPacket) error
 			return err
 		}
 		u.proxyChannelName = selectProxy
-		if len(GConf.RemoteDNS.TrustedDNS) > 0 {
-			remoteAddr = selectDNSServer(GConf.RemoteDNS.TrustedDNS)
+		if len(GConf.LocalDNS.TrustedDNS) > 0 {
+			remoteAddr = GConf.LocalDNS.TrustedDNS[0]
 		}
 	}
 	if len(u.proxyChannelName) == 0 {
@@ -176,9 +177,17 @@ func (u *udpSession) handlePacket(proxy *ProxyConfig, packet *udpgwPacket) error
 			u.closeStream()
 		}
 	}
-	stream, conf, err := getMuxStreamByChannel(u.proxyChannelName)
+	stream, conf, err := channel.GetMuxStreamByChannel(u.proxyChannelName)
+	readTimeoutMS := conf.RemoteUDPReadMSTimeout
+	if packet.addr.port == 53 {
+		readTimeoutMS = conf.RemoteDNSReadMSTimeout
+	}
 	if nil != stream {
-		err = stream.Connect("udp", remoteAddr)
+		opt := mux.StreamOptions{
+			DialTimeout: conf.RemoteDialMSTimeout,
+			ReadTimeout: readTimeoutMS,
+		}
+		err = stream.Connect("udp", remoteAddr, opt)
 	}
 	if nil != err {
 		logger.Error("[ERROR]Failed to create mux stream:%v for proxy:%s by address:%v", err, u.proxyChannelName, packet.addr)
@@ -190,7 +199,7 @@ func (u *udpSession) handlePacket(proxy *ProxyConfig, packet *udpgwPacket) error
 	go func() {
 		b := make([]byte, 8192)
 		for {
-			stream.SetReadDeadline(time.Now().Add(readTimeout))
+			stream.SetReadDeadline(time.Now().Add(time.Duration(readTimeoutMS) * time.Millisecond))
 			n, err := u.streamReader.Read(b)
 			if n > 0 {
 				err = u.Write(b[0:n])

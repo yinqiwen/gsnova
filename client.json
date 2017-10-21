@@ -15,11 +15,6 @@
     	"FastDNS":["223.5.5.5","180.76.76.76"],
     	"TrustedDNS": ["208.67.222.222", "208.67.220.220"]
 	},
-	
-	//used to replace forward dns query's target DNS server addr 
-	"RemoteDNS":{
-    	"TrustedDNS": ["8.8.8.8", "8.8.4.4"]
-    },
 
 	"UDPGW":{
 		//fake address, only used as udp protocol indicator
@@ -95,17 +90,18 @@
 	        //if u are behind a HTTP proxy
 	        "Proxy":"",
 		    "ConnsPerServer":3,
-		    //Unit: second
-		    "DialTimeout":5,
-		    //Unit: second
-		    "ReadTimeout":15,
+			"RemoteDialMSTimeout":5000,
+			"RemoteDNSReadMSTimeout":1500,
+			"RemoteUDPReadMSTimeout":15000,
+			"LocalDialMSTimeout":5000,
 		    //Reconnect after 120s
 		    "ReconnectPeriod": 300,
 		    //ReconnectPeriod rand adjustment, the real reconnect period is random value between [P - adjust, P + adjust] 
 		    "RCPRandomAdjustment" : 10,
 		    //Send heartbeat msg to keep alive 
 			"HeartBeatPeriod": 30,
-			"Compressor":"none"
+			"Compressor":"none",
+			"Hops":[]
 		},
 		{
 		    "Enable":false,
@@ -114,10 +110,10 @@
 	        //if u are behind a HTTP proxy
 	        "Proxy":"",
 		    "ConnsPerServer":3,
-		    //Unit: second
-		    "DialTimeout":5,
-		    //Unit: second
-		    "ReadTimeout":15,
+			"RemoteDialMSTimeout":5000,
+			"RemoteDNSReadMSTimeout":1500,
+			"RemoteUDPReadMSTimeout":15000,
+			"LocalDialMSTimeout":5000,
 		    //Reconnect after 120s
 		    "ReconnectPeriod": 1800,
 		    //ReconnectPeriod rand adjustment, the real reconnect period is random value between [P - adjust, P + adjust] 
@@ -127,7 +123,8 @@
 			"Compressor":"none",
 			"KCP":{
 				"Mode":"fast"
-			}
+			},
+			"Hops":[]
 		}
 	]
 }

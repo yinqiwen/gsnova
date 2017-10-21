@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/yinqiwen/gsnova/common/channel"
 	"github.com/yinqiwen/gsnova/common/logger"
 	"github.com/yinqiwen/gsnova/common/mux"
 	"github.com/yinqiwen/gsnova/common/netx"
@@ -93,10 +94,10 @@ func (t *tudpSession) handle(p []byte) {
 			return
 		}
 		protocol := "udp"
-		readTimeout := time.Duration(t.conf.UDPReadMSTimeout) * time.Millisecond
+		isDNS := false
 		if t.remotePort == "53" {
 			protocol = "dns"
-			readTimeout = time.Duration(t.conf.DNSReadMSTimeout) * time.Millisecond
+			isDNS = true
 		}
 		proxyChannelName := t.conf.getProxyChannelByHost(protocol, t.remoteIP.String())
 		if len(proxyChannelName) == 0 {
@@ -105,22 +106,34 @@ func (t *tudpSession) handle(p []byte) {
 			return
 		}
 		logger.Debug("Select %s to proxy udp packet to %s:%s", proxyChannelName, t.remoteIP.String(), t.remotePort)
-		stream, _, err := getMuxStreamByChannel(proxyChannelName)
+		stream, conf, err := channel.GetMuxStreamByChannel(proxyChannelName)
+		var readTimeout int
+		if nil == err {
+			readTimeout = conf.RemoteDNSReadMSTimeout
+			if isDNS {
+				readTimeout = conf.RemoteDNSReadMSTimeout
+			}
+		}
 		if nil != stream {
-			err = stream.Connect("udp", net.JoinHostPort(t.remoteIP.String(), t.remotePort))
+			opt := mux.StreamOptions{
+				DialTimeout: conf.RemoteDialMSTimeout,
+				ReadTimeout: readTimeout,
+			}
+			err = stream.Connect("udp", net.JoinHostPort(t.remoteIP.String(), t.remotePort), opt)
 		}
 		if nil != err || nil == stream {
 			logger.Error("Failed to open stream for reason:%v by proxy:%s", err, proxyChannelName)
 			t.close(err)
 			return
 		}
+
 		t.stream = stream
 		//u.streamReader, u.streamWriter = mux.GetCompressStreamReaderWriter(stream, conf.Compressor)
 		go func() {
 			b := make([]byte, 8192)
 			var uerr error
 			for {
-				stream.SetReadDeadline(time.Now().Add(readTimeout))
+				stream.SetReadDeadline(time.Now().Add(time.Duration(readTimeout) * time.Millisecond))
 				n, err := stream.Read(b)
 				if n > 0 {
 					err = writeBackUDPData(b[0:n], t.local, t.remote)
@@ -129,7 +142,7 @@ func (t *tudpSession) handle(p []byte) {
 				if nil != err {
 					break
 				}
-				if t.remotePort == "53" {
+				if isDNS {
 					break
 				}
 			}

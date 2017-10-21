@@ -12,9 +12,9 @@ import (
 	"time"
 
 	"github.com/yinqiwen/gotoolkit/ots"
+	"github.com/yinqiwen/gsnova/common/channel"
 	"github.com/yinqiwen/gsnova/common/helper"
 	"github.com/yinqiwen/gsnova/common/netx"
-	"github.com/yinqiwen/gsnova/local"
 )
 
 func getConfigList(w http.ResponseWriter, r *http.Request) {
@@ -32,19 +32,11 @@ func getConfigList(w http.ResponseWriter, r *http.Request) {
 
 func statCallback(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(200)
-	fmt.Fprintf(w, "Version: %s\n", local.Version)
+	fmt.Fprintf(w, "Version: %s\n", channel.LocalVersion)
 	//fmt.Fprintf(w, "NumSession: %d\n", getProxySessionSize())
 	ots.Handle("stat", w)
 	fmt.Fprintf(w, "RunningProxyStreamNum: %d\n", runningProxyStreamCount)
-	for _, pch := range proxyChannelTable {
-		if pch.Conf.Name != directProxyChannelName {
-			for holder := range pch.sessions {
-				if nil != holder {
-					holder.dumpStat(w)
-				}
-			}
-		}
-	}
+	channel.DumpLoaclChannelStat(w)
 }
 func stackdumpCallback(w http.ResponseWriter, req *http.Request) {
 	w.WriteHeader(200)

@@ -1,24 +1,19 @@
 package proxy
 
 import (
-	"encoding/json"
 	"net"
 	"net/http"
-	"net/url"
 	"path/filepath"
-	"runtime"
 	"strings"
 
-	"github.com/yinqiwen/gsnova/common/gfwlist"
+	"github.com/yinqiwen/gsnova/common/channel"
+	"github.com/yinqiwen/gsnova/common/dns"
 	"github.com/yinqiwen/gsnova/common/helper"
+	"github.com/yinqiwen/gsnova/common/hosts"
 	"github.com/yinqiwen/gsnova/common/logger"
-	"github.com/yinqiwen/gsnova/common/mux"
-	"github.com/yinqiwen/gsnova/local/hosts"
-	"github.com/yinqiwen/pmux"
 )
 
 var GConf LocalConfig
-var mygfwlist *gfwlist.GFWList
 
 const (
 	BlockedByGFWRule = "BlockedByGFW"
@@ -50,116 +45,6 @@ func matchHostnames(pattern, host string) bool {
 		}
 	}
 	return true
-}
-
-type HTTPBaseConfig struct {
-	HTTPPushRateLimitPerSec int
-}
-type HTTPConfig struct {
-	HTTPBaseConfig
-}
-
-func (hcfg *HTTPConfig) UnmarshalJSON(data []byte) error {
-	hcfg.HTTPPushRateLimitPerSec = 3
-	err := json.Unmarshal(data, &hcfg.HTTPBaseConfig)
-	return err
-}
-
-type KCPBaseConfig struct {
-	Mode         string
-	Conn         int
-	AutoExpire   int
-	ScavengeTTL  int
-	MTU          int
-	SndWnd       int
-	RcvWnd       int
-	DataShard    int
-	ParityShard  int
-	DSCP         int
-	AckNodelay   bool
-	NoDelay      int
-	Interval     int
-	Resend       int
-	NoCongestion int
-	SockBuf      int
-}
-
-type KCPConfig struct {
-	KCPBaseConfig
-}
-
-func (kcfg *KCPConfig) initDefaultConf() {
-	kcfg.Mode = "fast"
-	kcfg.Conn = 1
-	kcfg.AutoExpire = 0
-	kcfg.ScavengeTTL = 600
-	kcfg.MTU = 1350
-	kcfg.SndWnd = 128
-	kcfg.RcvWnd = 512
-	kcfg.DataShard = 10
-	kcfg.ParityShard = 3
-	kcfg.DSCP = 0
-	kcfg.AckNodelay = true
-	kcfg.NoDelay = 0
-	kcfg.Interval = 50
-	kcfg.Resend = 0
-	kcfg.Interval = 50
-	kcfg.NoCongestion = 0
-	kcfg.SockBuf = 4194304
-}
-func (config *KCPConfig) adjustByMode() {
-	switch config.Mode {
-	case "normal":
-		config.NoDelay, config.Interval, config.Resend, config.NoCongestion = 0, 40, 2, 1
-	case "fast":
-		config.NoDelay, config.Interval, config.Resend, config.NoCongestion = 0, 30, 2, 1
-	case "fast2":
-		config.NoDelay, config.Interval, config.Resend, config.NoCongestion = 1, 20, 2, 1
-	case "fast3":
-		config.NoDelay, config.Interval, config.Resend, config.NoCongestion = 1, 10, 2, 1
-	}
-}
-func (kcfg *KCPConfig) UnmarshalJSON(data []byte) error {
-	kcfg.initDefaultConf()
-	err := json.Unmarshal(data, &kcfg.KCPBaseConfig)
-	if nil == err {
-		kcfg.adjustByMode()
-	}
-	return err
-}
-
-type ProxyChannelConfig struct {
-	Enable              bool
-	Name                string
-	ServerList          []string
-	ConnsPerServer      int
-	SNI                 []string
-	SNIProxy            string
-	Proxy               string
-	DialTimeout         int
-	ReadTimeout         int
-	ReconnectPeriod     int
-	HeartBeatPeriod     int
-	RCPRandomAdjustment int
-	Compressor          string
-	KCP                 KCPConfig
-	HTTP                HTTPConfig
-
-	proxyURL *url.URL
-}
-
-func (c *ProxyChannelConfig) ProxyURL() *url.URL {
-	if nil != c.proxyURL {
-		return c.proxyURL
-	}
-	if len(c.Proxy) > 0 {
-		var err error
-		c.proxyURL, err = url.Parse(c.Proxy)
-		if nil != err {
-			logger.Error("Failed to parse proxy URL ", c.Proxy)
-		}
-	}
-	return c.proxyURL
 }
 
 type PACConfig struct {
@@ -207,8 +92,9 @@ func (pac *PACConfig) matchRules(ip string, req *http.Request) bool {
 				ok = pac.ruleInHosts(req)
 			}
 		} else if strings.EqualFold(rule, BlockedByGFWRule) {
-			if nil != mygfwlist && nil != req {
-				ok = mygfwlist.IsBlockedByGFW(req)
+			gfwList := getGFWList()
+			if nil != gfwList && nil != req {
+				ok = gfwList.IsBlockedByGFW(req)
 				if !ok {
 					logger.Debug("#### %s is NOT BlockedByGFW", req.Host)
 				}
@@ -217,16 +103,16 @@ func (pac *PACConfig) matchRules(ip string, req *http.Request) bool {
 				logger.Debug("NIL GFWList object or request")
 			}
 		} else if strings.EqualFold(rule, IsCNIPRule) {
-			if len(ip) == 0 || nil == chinaIPSet {
+			if len(ip) == 0 || nil == dns.CNIPSet {
 				logger.Debug("NIL CNIP content  or IP/Domain")
 				ok = false
 			} else {
 				var err error
 				if net.ParseIP(ip) == nil {
-					ip, err = DnsGetDoaminIP(ip)
+					ip, err = dns.DnsGetDoaminIP(ip)
 				}
 				if nil == err {
-					ok = chinaIPSet.IsInCountry(net.ParseIP(ip), "CN")
+					ok = dns.CNIPSet.IsInCountry(net.ParseIP(ip), "CN")
 				}
 				logger.Debug("ip:%s is CNIP:%v", ip, ok)
 			}
@@ -284,10 +170,10 @@ func (pac *PACConfig) Match(protocol string, ip string, req *http.Request) bool 
 }
 
 type ProxyConfig struct {
-	Local            string
-	DNSReadMSTimeout int
-	UDPReadMSTimeout int
-	PAC              []PACConfig
+	Local string
+	//DNSReadMSTimeout int
+	//UDPReadMSTimeout int
+	PAC []PACConfig
 }
 
 func (cfg *ProxyConfig) getProxyChannelByHost(proto string, host string) string {
@@ -296,36 +182,21 @@ func (cfg *ProxyConfig) getProxyChannelByHost(proto string, host string) string 
 }
 
 func (cfg *ProxyConfig) findProxyChannelByRequest(proto string, ip string, req *http.Request) string {
-	var channel string
+	var channelName string
 	if len(ip) > 0 && helper.IsPrivateIP(ip) {
 		//channel = "direct"
-		return directProxyChannelName
+		return channel.DirectChannelName
 	}
 	for _, pac := range cfg.PAC {
 		if pac.Match(proto, ip, req) {
-			channel = pac.Remote
+			channelName = pac.Remote
 			break
 		}
 	}
-	if len(channel) == 0 {
+	if len(channelName) == 0 {
 		logger.Error("No proxy channel found.")
 	}
-	return channel
-}
-
-type CipherConfig struct {
-	Method string
-	Key    string
-}
-
-type LocalDNSConfig struct {
-	Listen     string
-	TrustedDNS []string
-	FastDNS    []string
-}
-
-type RemoteDNSConfig struct {
-	TrustedDNS []string
+	return channelName
 }
 
 type AdminConfig struct {
@@ -357,87 +228,49 @@ func (sni *SNIConfig) redirect(domain string) (string, bool) {
 }
 
 type GFWListConfig struct {
-	URL      string
-	UserRule []string
-	Proxy    string
+	URL                   string
+	UserRule              []string
+	Proxy                 string
+	RefershPeriodMiniutes int
 }
 
 type LocalConfig struct {
 	Log             []string
-	Cipher          CipherConfig
+	Cipher          channel.CipherConfig
 	UserAgent       string
 	User            string
-	LocalDNS        LocalDNSConfig
-	RemoteDNS       RemoteDNSConfig
+	LocalDNS        dns.LocalDNSConfig
 	UDPGW           UDPGWConfig
 	SNI             SNIConfig
 	Admin           AdminConfig
 	GFWList         GFWListConfig
 	TransparentMark int
 	Proxy           []ProxyConfig
-	Channel         []ProxyChannelConfig
+	Channel         []channel.ProxyChannelConfig
 }
 
 func (cfg *LocalConfig) init() error {
-	gfwlistEnable := false
-	for i, _ := range cfg.Proxy {
-		for j, _ := range cfg.Proxy[i].PAC {
-			rules := cfg.Proxy[i].PAC[j].Rule
-			for _, r := range rules {
-				if strings.Contains(r, BlockedByGFWRule) || strings.Contains(r, IsCNIPRule) {
-					gfwlistEnable = true
-				}
-			}
-		}
-		if 0 == cfg.Proxy[i].DNSReadMSTimeout {
-			cfg.Proxy[i].DNSReadMSTimeout = 800
-		}
-		if 0 == cfg.Proxy[i].UDPReadMSTimeout {
-			cfg.Proxy[i].UDPReadMSTimeout = 15 * 1000
-		}
-	}
-	if gfwlistEnable {
-		go syncGFWList()
-	}
-
-	switch GConf.Cipher.Method {
-	case "auto":
-		if strings.Contains(runtime.GOARCH, "386") || strings.Contains(runtime.GOARCH, "amd64") {
-			GConf.Cipher.Method = pmux.CipherAES256GCM
-		} else if strings.Contains(runtime.GOARCH, "arm") {
-			GConf.Cipher.Method = pmux.CipherChacha20Poly1305
-		}
-	case pmux.CipherChacha20Poly1305:
-	case pmux.CipherSalsa20:
-	case pmux.CipherAES256GCM:
-	case pmux.CipherNone:
-	default:
-		logger.Error("Invalid encrypt method:%s, use 'chacha20poly1305' instead.", GConf.Cipher.Method)
-		GConf.Cipher.Method = pmux.CipherChacha20Poly1305
-	}
 	haveDirect := false
 	for i := range GConf.Channel {
-		if GConf.Channel[i].Name == directProxyChannelName && GConf.Channel[i].Enable {
+		if GConf.Channel[i].Name == channel.DirectChannelName && GConf.Channel[i].Enable {
 			haveDirect = true
 			GConf.Channel[i].ServerList = []string{"direct://0.0.0.0:0"}
 			GConf.Channel[i].ConnsPerServer = 1
-		} else {
-			if len(GConf.Channel[i].Compressor) == 0 || !mux.IsValidCompressor(GConf.Channel[i].Compressor) {
-				GConf.Channel[i].Compressor = mux.NoneCompressor
-			}
 		}
-
-		if GConf.Channel[i].RCPRandomAdjustment > GConf.Channel[i].ReconnectPeriod {
-			GConf.Channel[i].RCPRandomAdjustment = GConf.Channel[i].ReconnectPeriod / 2
+		if len(GConf.Channel[i].Cipher.Key) == 0 {
+			GConf.Channel[i].Cipher = GConf.Cipher
 		}
+		if len(GConf.Channel[i].HTTP.UserAgent) == 0 {
+			GConf.Channel[i].HTTP.UserAgent = GConf.UserAgent
+		}
+		GConf.Channel[i].Adjust()
 	}
 	if !haveDirect {
-		directProxyChannel := make([]ProxyChannelConfig, 1)
-		directProxyChannel[0].Name = directProxyChannelName
+		directProxyChannel := make([]channel.ProxyChannelConfig, 1)
+		directProxyChannel[0].Name = channel.DirectChannelName
 		directProxyChannel[0].Enable = true
 		directProxyChannel[0].ConnsPerServer = 1
-		directProxyChannel[0].DialTimeout = 5
-		directProxyChannel[0].ReadTimeout = 30
+		directProxyChannel[0].LocalDialMSTimeout = 5000
 		directProxyChannel[0].ServerList = []string{"direct://0.0.0.0:0"}
 		GConf.Channel = append(directProxyChannel, GConf.Channel...)
 	}

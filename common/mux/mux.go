@@ -24,8 +24,11 @@ type TimeoutReadWriteCloser interface {
 }
 type ConnectRequest struct {
 	//ProxySID uint32
-	Network string
-	Addr    string
+	Network     string
+	Addr        string
+	DialTimeout int
+	ReadTimeout int
+	Hops        []string
 }
 
 type AuthRequest struct {
@@ -86,9 +89,15 @@ func ReadMessage(stream io.Reader, res interface{}) error {
 	return err
 }
 
+type StreamOptions struct {
+	DialTimeout int
+	ReadTimeout int
+	Hops        []string
+}
+
 type MuxStream interface {
 	io.ReadWriteCloser
-	Connect(network string, addr string) error
+	Connect(network string, addr string, opt StreamOptions) error
 	Auth(req *AuthRequest) error
 	StreamID() uint32
 	SetReadDeadline(t time.Time) error
@@ -129,8 +138,14 @@ func (s *ProxyMuxStream) Close() error {
 	return s.TimeoutReadWriteCloser.Close()
 }
 
-func (s *ProxyMuxStream) Connect(network string, addr string) error {
-	req := &ConnectRequest{Network: network, Addr: addr}
+func (s *ProxyMuxStream) Connect(network string, addr string, opt StreamOptions) error {
+	req := &ConnectRequest{
+		Network:     network,
+		Addr:        addr,
+		DialTimeout: opt.DialTimeout,
+		ReadTimeout: opt.ReadTimeout,
+		Hops:        opt.Hops,
+	}
 	return WriteMessage(s, req)
 }
 func (s *ProxyMuxStream) Auth(req *AuthRequest) error {
