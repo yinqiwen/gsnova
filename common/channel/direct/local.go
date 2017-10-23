@@ -3,7 +3,7 @@ package direct
 import (
 	"io"
 	"net"
-	"strings"
+	"net/url"
 	"sync"
 	"time"
 
@@ -18,9 +18,10 @@ import (
 
 type directStream struct {
 	net.Conn
-	conf    *channel.ProxyChannelConfig
-	addr    string
-	session *directMuxSession
+	conf        *channel.ProxyChannelConfig
+	addr        string
+	session     *directMuxSession
+	proxyServer string
 }
 
 func (tc *directStream) Auth(req *mux.AuthRequest) error {
@@ -39,10 +40,21 @@ func (tc *directStream) Connect(network string, addr string, opt mux.StreamOptio
 		host = hosts.GetHost(host)
 	}
 
-	if nil == tc.conf.ProxyURL() {
+	var proxyURL *url.URL
+	if nil == tc.conf.ProxyURL() && len(tc.proxyServer) == 0 {
 		addr = host + ":" + port
 	} else {
-		addr = tc.conf.ProxyURL().Host
+		if nil != tc.conf.ProxyURL() {
+			addr = tc.conf.ProxyURL().Host
+			proxyURL = tc.conf.ProxyURL()
+		} else {
+			u, err := url.Parse(tc.proxyServer)
+			if nil != err {
+				return err
+			}
+			addr = u.Host
+			proxyURL = u
+		}
 	}
 	connectHost, connectPort, _ := net.SplitHostPort(addr)
 	if net.ParseIP(connectHost) == nil {
@@ -58,11 +70,18 @@ func (tc *directStream) Connect(network string, addr string, opt mux.StreamOptio
 	}
 	//log.Printf("Session:%d connect %s:%s for %s %T %v %v %s", ev.GetId(), network, addr, host, ev, needHttpsConnect, conf.ProxyURL(), net.JoinHostPort(host, port))
 	c, err := netx.DialTimeout(network, addr, time.Duration(opt.DialTimeout)*time.Millisecond)
-	if nil != tc.conf.ProxyURL() && nil == err {
-		if strings.HasPrefix(tc.conf.ProxyURL().Scheme, "socks") {
-			err = helper.Socks5ProxyConnect(tc.conf.ProxyURL(), c, net.JoinHostPort(host, port))
-		} else {
+	if nil != proxyURL && nil == err {
+		switch proxyURL.Scheme {
+		case "http_proxy":
+			fallthrough
+		case "http":
 			err = helper.HTTPProxyConnect(tc.conf.ProxyURL(), c, "https://"+net.JoinHostPort(host, port))
+		case "socks":
+			fallthrough
+		case "socks4":
+			fallthrough
+		case "socks5":
+			err = helper.Socks5ProxyConnect(tc.conf.ProxyURL(), c, net.JoinHostPort(host, port))
 		}
 	}
 	if nil != err {
@@ -106,6 +125,7 @@ type directMuxSession struct {
 	conf         *channel.ProxyChannelConfig
 	streams      map[*directStream]bool
 	streamsMutex sync.Mutex
+	proxyServer  string
 }
 
 func (tc *directMuxSession) closeStream(s *directStream) {
@@ -123,8 +143,9 @@ func (tc *directMuxSession) OpenStream() (mux.MuxStream, error) {
 	tc.streamsMutex.Lock()
 	defer tc.streamsMutex.Unlock()
 	stream := &directStream{
-		conf:    tc.conf,
-		session: tc,
+		conf:        tc.conf,
+		session:     tc,
+		proxyServer: tc.proxyServer,
 	}
 	return stream, nil
 }
@@ -152,12 +173,18 @@ func (tc *directMuxSession) Close() error {
 }
 
 type DirectProxy struct {
+	proxyType string
 }
 
 func (p *DirectProxy) CreateMuxSession(server string, conf *channel.ProxyChannelConfig) (mux.MuxSession, error) {
+	ps := server
+	if len(p.proxyType) == 0 {
+		ps = ""
+	}
 	session := &directMuxSession{
-		conf:    conf,
-		streams: make(map[*directStream]bool),
+		conf:        conf,
+		streams:     make(map[*directStream]bool),
+		proxyServer: ps,
 	}
 	return session, nil
 }
@@ -171,4 +198,8 @@ func (p *DirectProxy) Features() channel.FeatureSet {
 
 func init() {
 	channel.RegisterLocalChannelType(channel.DirectChannelName, &DirectProxy{})
+	channel.RegisterLocalChannelType("socks", &DirectProxy{"socks5"})
+	channel.RegisterLocalChannelType("socks4", &DirectProxy{"socks4"})
+	channel.RegisterLocalChannelType("socks5", &DirectProxy{"socks5"})
+	channel.RegisterLocalChannelType("http_proxy", &DirectProxy{"http_proxy"})
 }
