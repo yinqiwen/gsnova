@@ -17,6 +17,23 @@ var LocalChannelTypeTable map[string]reflect.Type = make(map[string]reflect.Type
 
 const DirectChannelName = "direct"
 
+var DirectSchemes = []string{
+	DirectChannelName,
+	"socks",
+	"socks4",
+	"socks5",
+	"http_proxy",
+}
+
+func IsDirectScheme(scheme string) bool {
+	for _, s := range DirectSchemes {
+		if s == scheme {
+			return true
+		}
+	}
+	return false
+}
+
 func RegisterLocalChannelType(str string, p LocalChannel) error {
 	rt := reflect.TypeOf(p)
 	if rt.Kind() == reflect.Ptr {
@@ -27,12 +44,12 @@ func RegisterLocalChannelType(str string, p LocalChannel) error {
 }
 
 func AllowedSchema() []string {
-	schames := []string{}
-	for schema := range LocalChannelTypeTable {
-		if schema != DirectChannelName {
-			schames = append(schames, schema)
+	schemes := []string{}
+	for scheme := range LocalChannelTypeTable {
+		if !IsDirectScheme(scheme) {
+			schemes = append(schemes, scheme)
 		}
 	}
-	sort.Strings(schames)
-	return schames
+	sort.Strings(schemes)
+	return schemes
 }
