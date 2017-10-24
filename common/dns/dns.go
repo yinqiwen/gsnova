@@ -39,19 +39,22 @@ func selectDNSServer(ss []string) string {
 	return server
 }
 
-func DnsGetDoaminIP(domain string) (string, error) {
-	if nil == LocalDNS {
-		addrs, err := net.DefaultResolver.LookupHost(context.Background(), domain)
-		if nil == err && len(addrs) > 0 {
-			return addrs[0], nil
-		}
-		return "", err
-	}
-	ips, err := LocalDNS.LookupA(domain)
-	if len(ips) > 0 {
-		return pickIP(ips), err
+func getIPByDefaultResolver(domain string) (string, error) {
+	addrs, err := net.DefaultResolver.LookupHost(context.Background(), domain)
+	if nil == err && len(addrs) > 0 {
+		return addrs[0], nil
 	}
 	return "", err
+}
+
+func DnsGetDoaminIP(domain string) (string, error) {
+	if nil != LocalDNS {
+		ips, err := LocalDNS.LookupA(domain)
+		if len(ips) > 0 {
+			return pickIP(ips), err
+		}
+	}
+	return getIPByDefaultResolver(domain)
 }
 
 var CNIPSet *cip.CountryIPSet
