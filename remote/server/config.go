@@ -47,6 +47,7 @@ type TCPServerConfig struct {
 type ServerConfig struct {
 	AdminListen string
 	Cipher      channel.CipherConfig
+	Mux         channel.MuxConfig
 	Log         []string
 	TLS         TLServerConfig
 	KCP         KCPServerConfig
@@ -88,6 +89,8 @@ func init() {
 	kcpServer := flag.String("kcp", "", "KCP listen address")
 	tlsServer := flag.String("tls", "", "TLS listen address")
 	admin := flag.String("admin", "", "Admin listen address")
+	window := flag.String("window", "", "Max mux stream window size, default 256K")
+	windowRefresh := flag.String("window_refresh", "", "Mux stream window refresh size, default 32K")
 	pid := flag.String("pid", ".gsnova.pid", "PID file")
 
 	flag.Parse()
@@ -141,6 +144,12 @@ func init() {
 	if len(*logging) > 0 {
 		ServerConf.Log = strings.Split(*logging, ",")
 	}
+	if len(*window) > 0 {
+		ServerConf.Mux.MaxStreamWindow = *window
+	}
+	if len(*windowRefresh) > 0 {
+		ServerConf.Mux.StreamMinRefresh = *windowRefresh
+	}
 
 	if len(ServerConf.KCP.Listen) > 0 {
 		config := &ServerConf.KCP
@@ -155,6 +164,7 @@ func init() {
 			config.NoDelay, config.Interval, config.Resend, config.NoCongestion = 1, 10, 2, 1
 		}
 	}
+	channel.SetDefaultMuxConfig(ServerConf.Mux)
 	channel.DefaultServerCipher = ServerConf.Cipher
 	logger.InitLogger(ServerConf.Log)
 	cipherKey := os.Getenv("GSNOVA_CIPHER_KEY")

@@ -5,8 +5,8 @@ import (
 	"net/url"
 	"runtime"
 	"strings"
-	"time"
 
+	"github.com/yinqiwen/gsnova/common/helper"
 	"github.com/yinqiwen/gsnova/common/logger"
 	"github.com/yinqiwen/gsnova/common/mux"
 	"github.com/yinqiwen/pmux"
@@ -15,6 +15,30 @@ import (
 type FeatureSet struct {
 	AutoExpire bool
 	Pingable   bool
+}
+
+type MuxConfig struct {
+	MaxStreamWindow  string
+	StreamMinRefresh string
+}
+
+func (m *MuxConfig) ToPMuxConf() *pmux.Config {
+	cfg := pmux.DefaultConfig()
+	cfg.EnableKeepAlive = false
+
+	if len(m.MaxStreamWindow) > 0 {
+		v, err := helper.ToBytes(m.MaxStreamWindow)
+		if nil == err {
+			cfg.MaxStreamWindowSize = uint32(v)
+		}
+	}
+	if len(m.StreamMinRefresh) > 0 {
+		v, err := helper.ToBytes(m.StreamMinRefresh)
+		if nil == err {
+			cfg.StreamMinRefresh = uint32(v)
+		}
+	}
+	return cfg
 }
 
 type CipherConfig struct {
@@ -226,14 +250,20 @@ func (c *ProxyChannelConfig) ProxyURL() *url.URL {
 	return c.proxyURL
 }
 
-var DefaultCipherKey string
+//var DefaultCipherKey string
+var defaultMuxConfig MuxConfig
 
-func InitialPMuxConfig(conf *CipherConfig) *pmux.Config {
-	cfg := pmux.DefaultConfig()
-	cfg.CipherKey = []byte(conf.Key)
+func SetDefaultMuxConfig(cfg MuxConfig) {
+	defaultMuxConfig = cfg
+}
+
+func InitialPMuxConfig(cipher *CipherConfig) *pmux.Config {
+	//cfg := pmux.DefaultConfig()
+	cfg := defaultMuxConfig.ToPMuxConf()
+	cfg.CipherKey = []byte(cipher.Key)
 	cfg.CipherMethod = mux.DefaultMuxCipherMethod
 	cfg.CipherInitialCounter = mux.DefaultMuxInitialCipherCounter
-	cfg.EnableKeepAlive = false
-	cfg.PingTimeout = 5 * time.Second
+	//cfg.EnableKeepAlive = false
+	//cfg.PingTimeout = 5 * time.Second
 	return cfg
 }

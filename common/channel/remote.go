@@ -6,6 +6,8 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/yinqiwen/pmux"
+
 	"github.com/yinqiwen/gsnova/common/logger"
 	"github.com/yinqiwen/gsnova/common/mux"
 )
@@ -98,7 +100,9 @@ func ServProxyMuxSession(session mux.MuxSession) error {
 		stream, err := session.AcceptStream()
 		if nil != err {
 			//session.Close()
-			logger.Error("Failed to accept stream with error:%v", err)
+			if err != pmux.ErrSessionShutdown {
+				logger.Error("Failed to accept stream with error:%v", err)
+			}
 			return err
 		}
 		if nil == authReq {

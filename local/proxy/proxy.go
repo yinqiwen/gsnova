@@ -136,6 +136,7 @@ func initGFWList() {
 func StartProxy() error {
 	GConf.init()
 	logger.InitLogger(GConf.Log)
+	channel.SetDefaultMuxConfig(GConf.Mux)
 
 	if GConf.TransparentMark > 0 {
 		enableTransparentSocketMark(GConf.TransparentMark)

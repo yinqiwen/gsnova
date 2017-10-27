@@ -237,6 +237,7 @@ type GFWListConfig struct {
 type LocalConfig struct {
 	Log             []string
 	Cipher          channel.CipherConfig
+	Mux             channel.MuxConfig
 	UserAgent       string
 	User            string
 	LocalDNS        dns.LocalDNSConfig

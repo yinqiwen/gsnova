@@ -61,7 +61,7 @@ func DialServerByConf(server string, conf *ProxyChannelConfig) (net.Conn, error)
 				hostport = hosts.GetAddr(conf.SNIProxy, "443")
 				tcpHost, _, _ = net.SplitHostPort(hostport)
 			} else {
-				logger.Info("####Not exist:%s", conf.SNIProxy)
+				logger.Info("SNIProxy Not exist in hosts:%s", conf.SNIProxy)
 			}
 		} else {
 			tcpHost = conf.SNIProxy
@@ -76,6 +76,7 @@ func DialServerByConf(server string, conf *ProxyChannelConfig) (net.Conn, error)
 		dailTimeout = 5000
 	}
 	timeout := time.Duration(dailTimeout) * time.Millisecond
+	connAddr := hostport
 	if len(conf.Proxy) == 0 {
 		if net.ParseIP(tcpHost) == nil {
 			iphost, err := dns.DnsGetDoaminIP(tcpHost)
@@ -87,6 +88,7 @@ func DialServerByConf(server string, conf *ProxyChannelConfig) (net.Conn, error)
 		conn, err = netx.DialTimeout("tcp", hostport, timeout)
 	} else {
 		conn, err = helper.ProxyDial(conf.Proxy, hostport, timeout)
+		connAddr = conf.Proxy
 	}
 	if nil == err {
 		switch rurl.Scheme {
@@ -105,7 +107,7 @@ func DialServerByConf(server string, conf *ProxyChannelConfig) (net.Conn, error)
 	if nil != err {
 		logger.Notice("Connect %s failed with reason:%v.", server, err)
 	} else {
-		logger.Debug("Connect %s success via %s.", server, hostport)
+		logger.Debug("Connect %s success via %s.", server, connAddr)
 	}
 	return conn, err
 }

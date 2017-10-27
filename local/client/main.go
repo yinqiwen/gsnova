@@ -53,6 +53,9 @@ func main() {
 	key := flag.String("key", "809240d3a021449f6e67aa73221d42df942a308a", "Cipher key for transmission between local&remote.")
 	log := flag.String("log", "color,gsnova.log", "Log file setting")
 	cnip := flag.String("cnip", "./cnipset.txt", "China IP list.")
+	window := flag.String("window", "", "Max mux stream window size, default 256K")
+	windowRefresh := flag.String("window_refresh", "", "Mux stream window refresh size, default 32K")
+	pingInterval := flag.Int("ping_interval", 30, "Channel ping interval seconds.")
 	flag.Parse()
 
 	printASCIILogo()
@@ -68,6 +71,8 @@ func main() {
 			flag.PrintDefaults()
 			return
 		}
+		proxy.GConf.Mux.MaxStreamWindow = *window
+		proxy.GConf.Mux.StreamMinRefresh = *windowRefresh
 		proxy.GConf.Cipher.Key = *key
 		proxy.GConf.Cipher.Method = "auto"
 		proxy.GConf.User = *user
@@ -79,6 +84,7 @@ func main() {
 		ch.Enable = true
 		ch.Name = "default"
 		ch.ConnsPerServer = 3
+		ch.HeartBeatPeriod = *pingInterval
 		ch.ServerList = []string{hops[0]}
 		ch.Hops = hops[1:]
 		proxy.GConf.Proxy = []proxy.ProxyConfig{local}
