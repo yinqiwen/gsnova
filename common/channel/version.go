@@ -1,5 +1,5 @@
 package channel
 
 //'r1' means revision 1
-const LocalVersion = "r14"
-const RemoteVersion = "r11"
+const LocalVersion = "r15"
+const RemoteVersion = "r12"

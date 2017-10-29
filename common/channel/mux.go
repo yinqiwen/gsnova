@@ -92,14 +92,14 @@ func (s *muxSessionHolder) heartbeat(interval int) {
 			s.sessionMutex.Unlock()
 			if nil != session {
 				if s.Channel.Features().Pingable {
-					duration, err := session.Ping()
+					_, err := session.Ping()
 					if err != nil {
 						logger.Error("[ERR]: Ping remote:%s failed: %v", s.server, err)
 						s.close()
 					} else {
-						if duration > time.Duration(100)*time.Millisecond {
-							logger.Debug("Cost %v to ping remote:%s", duration, s.server)
-						}
+						// if duration > time.Duration(100)*time.Millisecond {
+						// 	logger.Debug("Cost %v to ping remote:%s", duration, s.server)
+						// }
 					}
 				}
 			} else {
