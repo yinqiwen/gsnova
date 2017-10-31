@@ -75,7 +75,7 @@ func main() {
 		proxy.GConf.Mux.StreamMinRefresh = *windowRefresh
 		proxy.GConf.Cipher.Key = *key
 		proxy.GConf.Cipher.Method = "auto"
-		proxy.GConf.User = *user
+		proxy.GConf.Cipher.User = *user
 		proxy.GConf.Log = strings.Split(*log, ",")
 		local := proxy.ProxyConfig{}
 		local.Local = *listen

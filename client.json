@@ -4,14 +4,11 @@
 	"UserAgent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/60.0.3112.101 Safari/537.36",
 	//encrypt method can choose from none/auto/salsa20/chacha20poly1305/aes256-gcm
 	//'auto' method would choose fastest encrypt method for current env
-	"Cipher":{"Method":"auto", "Key":"809240d3a021449f6e67aa73221d42df942a308a"},
+	"Cipher":{"Method":"auto", "Key":"809240d3a021449f6e67aa73221d42df942a308a", "User": "gsnova"},
 	"Mux":{
 		"MaxStreamWindow": "512K",
 		"StreamMinRefresh":"32K"
 	},
-	
-	 //user name auth
-	"User": "gsnova",
 
     "LocalDNS":{
     	//only listen UDP

@@ -136,14 +136,14 @@ func NewHTTPClient(conf *ProxyChannelConfig, scheme string) (*http.Client, error
 	// 	tlscfg.ServerName = conf.SNI[0]
 	// 	tr.TLSClientConfig = tlscfg
 	// }
-	if len(conf.Proxy) > 0 {
-		proxyUrl, err := url.Parse(conf.Proxy)
-		if nil != err {
-			logger.Error("[ERROR]Invalid proxy url:%s to create http client.", conf.Proxy)
-			return nil, err
-		}
-		tr.Proxy = http.ProxyURL(proxyUrl)
-	}
+	// if len(conf.Proxy) > 0 {
+	// 	proxyUrl, err := url.Parse(conf.Proxy)
+	// 	if nil != err {
+	// 		logger.Error("[ERROR]Invalid proxy url:%s to create http client.", conf.Proxy)
+	// 		return nil, err
+	// 	}
+	// 	tr.Proxy = http.ProxyURL(proxyUrl)
+	// }
 	hc := &http.Client{}
 	//hc.Timeout = tr.ResponseHeaderTimeout
 	hc.Transport = tr

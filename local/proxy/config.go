@@ -239,7 +239,6 @@ type LocalConfig struct {
 	Cipher          channel.CipherConfig
 	Mux             channel.MuxConfig
 	UserAgent       string
-	User            string
 	LocalDNS        dns.LocalDNSConfig
 	UDPGW           UDPGWConfig
 	SNI             SNIConfig
