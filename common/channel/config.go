@@ -71,7 +71,9 @@ func (conf *CipherConfig) Adjust() {
 }
 
 func (conf *CipherConfig) AllowUsers(users string) {
-	conf.allowedUser = strings.Split(users, ",")
+	if len(users) > 0 {
+		conf.allowedUser = strings.Split(users, ",")
+	}
 }
 
 func (conf *CipherConfig) VerifyUser(user string) bool {

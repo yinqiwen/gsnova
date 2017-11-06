@@ -227,7 +227,7 @@ func (h *httpDuplexConn) pull() {
 			continue
 		}
 		if response.StatusCode == 401 { //try once more
-			logger.Notice("Failed to pull data from HTTP server for response:%v %v", response)
+			logger.Notice("Failed to pull data from HTTP server for response:%v ", response)
 			h.Close()
 			return
 		}
