@@ -5,7 +5,6 @@ import (
 	"encoding/binary"
 	"io"
 	"io/ioutil"
-	"log"
 	"math/rand"
 	"sync/atomic"
 	"time"
@@ -159,7 +158,6 @@ func (s *ProxyMuxStream) Auth(req *AuthRequest) error {
 	res := &AuthResponse{}
 	err = ReadMessage(s, res)
 	if nil != err {
-		log.Printf("#########err :%v", err)
 		return err
 	}
 	if nil == err {

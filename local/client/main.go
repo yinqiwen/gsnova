@@ -4,10 +4,12 @@ import (
 	"flag"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/google/gops/agent"
 	"github.com/yinqiwen/gsnova/common/channel"
 	"github.com/yinqiwen/gsnova/common/logger"
 	_ "github.com/yinqiwen/gsnova/local/gsnova"
@@ -33,6 +35,9 @@ func printASCIILogo() {
 }
 
 func main() {
+	if err := agent.Listen(agent.Options{}); err != nil {
+		log.Fatal(err)
+	}
 	path, err := filepath.Abs(os.Args[0])
 	if nil != err {
 		fmt.Println(err)
@@ -53,7 +58,7 @@ func main() {
 	key := flag.String("key", "809240d3a021449f6e67aa73221d42df942a308a", "Cipher key for transmission between local&remote.")
 	log := flag.String("log", "color,gsnova.log", "Log file setting")
 	cnip := flag.String("cnip", "./cnipset.txt", "China IP list.")
-	window := flag.String("window", "", "Max mux stream window size, default 256K")
+	window := flag.String("window", "", "Max mux stream window size, default 512K")
 	windowRefresh := flag.String("window_refresh", "", "Mux stream window refresh size, default 32K")
 	pingInterval := flag.Int("ping_interval", 30, "Channel ping interval seconds.")
 	flag.Parse()

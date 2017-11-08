@@ -89,7 +89,7 @@ func init() {
 	kcpServer := flag.String("kcp", "", "KCP listen address")
 	tlsServer := flag.String("tls", "", "TLS listen address")
 	admin := flag.String("admin", "", "Admin listen address")
-	window := flag.String("window", "", "Max mux stream window size, default 256K")
+	window := flag.String("window", "", "Max mux stream window size, default 512K")
 	windowRefresh := flag.String("window_refresh", "", "Mux stream window refresh size, default 32K")
 	pid := flag.String("pid", ".gsnova.pid", "PID file")
 
