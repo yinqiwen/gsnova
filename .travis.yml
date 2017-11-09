@@ -1,7 +1,18 @@
+sudo: required
+services:
+  - docker
+
 language: go
 
 go:
 - 1.9
+
+env:
+  global:
+    - secure: "e7IjyptwfaNmHUYAwTZbLjup0FVD6wVOQIggLSOcqYyrbSYKepVJdbvOUfWqdZ3tUWtpHb5H/2a8RkizXHH3mBi4K5/9wlByTGmiKKA05dYbDod3KpiLbPnHK9UjRQydD6wpYJcK0/yguXmFDqYoRIFwmxeqNJ78OydIo7BOxGY=" 
+    - secure: "LEmUhd0lO5BPox3+IdBw/u45Z3TtY0arkef6v7q27qcEs3a2p+SuVVElHx4UcU8/AhN3D9jlskB0UZIgZRMfB3xaPCBVvjHh8UwQ13WqrR7524HuU8kin/4vLDdoIEvs2hQaj58slzmdyddKG2dkgCwkpK/J1DBfKHttbYE+ias=" 
+    - secure: "MO3eA15Jp2CkN0SiSI5Oo32wioCcVbaWwpxBCgQrkIyV85yakPzhoWlQWvh90QXEU9bBDKlQiTOXfo11G0as7byU8typa5UI7uLG1sGD9l2bBZbFuqorMrvHl5PeOzfjAQuUnn2KNP5RccuaCn+n65ZImhj8oTFrYGmb1VTdgg0=" 
+
 before_install:
 install:
 - go get github.com/tools/godep
@@ -62,3 +73,8 @@ deploy:
   on:
     tags: true
     repo: yinqiwen/gsnova
+
+after_deploy:
+  - curl -O -L https://github.com/grammarly/rocker/releases/download/1.3.1/rocker-1.3.1_linux_amd64.tar.gz
+  - tar zxf rocker-0.2.2_linux_amd64.tar.gz
+  - ./rocker build -f Docker/server/Rockerfile --auth $DOCKER_USER:$DOCKER_PASS --push -var VERSION=$TRAVIS_TAG 
