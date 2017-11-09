@@ -1,4 +1,0 @@
-
-gsnova-vps docker file   
-
-

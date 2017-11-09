@@ -1,4 +1,0 @@
-
-gsnova-paas docker file   
-
-
