@@ -121,6 +121,9 @@ func syncConfigFile(addr string, localDir, remoteDir string, fileName string) (b
 		if nil != resp.Body {
 			resp.Body.Close()
 		}
+		if resp.StatusCode == 404 {
+			return false, nil
+		}
 		return false, fmt.Errorf("Invalid response:%v for %s", resp, filePath)
 	}
 
