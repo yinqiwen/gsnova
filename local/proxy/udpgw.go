@@ -128,6 +128,11 @@ func (u *udpSession) closeStream() {
 		u.streamReader = nil
 	}
 }
+func (u *udpSession) close() {
+	u.closeStream()
+	removeUdpSession(&u.udpSessionId, 0)
+	updateUdpSession(u, true)
+}
 
 func (u *udpSession) Write(content []byte) error {
 	var packet udpgwPacket
@@ -157,6 +162,7 @@ func (u *udpSession) handlePacket(proxy *ProxyConfig, packet *udpgwPacket) error
 			if nil != err {
 				logger.Error("[ERROR]Failed to query dns with reason:%v", err)
 			}
+			u.close()
 			return err
 		}
 		u.proxyChannelName = selectProxy
@@ -208,9 +214,7 @@ func (u *udpSession) handlePacket(proxy *ProxyConfig, packet *udpgwPacket) error
 				break
 			}
 		}
-		u.closeStream()
-		removeUdpSession(&u.udpSessionId, 0)
-		updateUdpSession(u, true)
+
 	}()
 	u.streamWriter.Write(packet.content)
 	return nil
