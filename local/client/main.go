@@ -4,12 +4,10 @@ import (
 	"flag"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
 
-	"github.com/google/gops/agent"
 	"github.com/yinqiwen/gsnova/common/channel"
 	"github.com/yinqiwen/gsnova/common/logger"
 	_ "github.com/yinqiwen/gsnova/local/gsnova"
@@ -35,9 +33,6 @@ func printASCIILogo() {
 }
 
 func main() {
-	if err := agent.Listen(agent.Options{}); err != nil {
-		log.Fatal(err)
-	}
 	path, err := filepath.Abs(os.Args[0])
 	if nil != err {
 		fmt.Println(err)
