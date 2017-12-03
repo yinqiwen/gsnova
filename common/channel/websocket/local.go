@@ -31,7 +31,7 @@ func (ws *WebsocketProxy) CreateMuxSession(server string, conf *channel.ProxyCha
 	wsDialer.TLSClientConfig = channel.NewTLSConfig(conf)
 	c, _, err := wsDialer.Dial(u.String(), nil)
 	if err != nil {
-		logger.Notice("dial websocket error:%v", err)
+		logger.Notice("dial websocket error:%v %v", err, u.String())
 		return nil, err
 	}
 	logger.Debug("Connect %s success.", server)

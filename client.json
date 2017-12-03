@@ -102,7 +102,11 @@
 		    //Send heartbeat msg to keep alive 
 			"HeartBeatPeriod": 30,
 			"Compressor":"none",
-			"Hops":[]
+			"Hops":[],
+			//Use matched RemoteSNI host to connect at remote side
+			"RemoteSNIProxy":{
+				//"*.google.*":"GoogleHKSNI"
+			}
 		},
 		{
 		    "Enable":false,

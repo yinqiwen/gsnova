@@ -13,6 +13,7 @@ import (
 
 	"github.com/yinqiwen/gsnova/common/channel"
 	"github.com/yinqiwen/gsnova/common/helper"
+	"github.com/yinqiwen/gsnova/common/hosts"
 	"github.com/yinqiwen/gsnova/common/logger"
 	"github.com/yinqiwen/gsnova/common/mux"
 	"github.com/yinqiwen/gsnova/local/socks"
@@ -192,6 +193,16 @@ START:
 		DialTimeout: conf.RemoteDialMSTimeout,
 		Hops:        conf.Hops,
 	}
+
+	if remotePort == "443" && nil == net.ParseIP(remoteHost) {
+		remoteSNI := conf.GetRemoteSNI(remoteHost)
+		if len(remoteSNI) > 0 {
+			sniHost := hosts.GetHost(remoteSNI)
+			logger.Notice("Proxy stream[%d] select remote SNI host %s for proxy to %s:%s", ssid, sniHost, remoteHost, remotePort)
+			remoteHost = sniHost
+		}
+	}
+
 	logger.Notice("Proxy stream[%d] select %s for proxy to %s:%s", ssid, proxyChannelName, remoteHost, remotePort)
 	err = stream.Connect("tcp", net.JoinHostPort(remoteHost, remotePort), opt)
 	if nil != err {

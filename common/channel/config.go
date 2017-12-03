@@ -3,6 +3,7 @@ package channel
 import (
 	"encoding/json"
 	"net/url"
+	"path/filepath"
 	"runtime"
 	"strings"
 
@@ -200,9 +201,26 @@ type ProxyChannelConfig struct {
 	HTTP                   HTTPConfig
 	Cipher                 CipherConfig
 	Hops                   HopServers
+	RemoteSNIProxy         map[string]string
 
 	proxyURL    *url.URL
 	lazyConnect bool
+}
+
+func (conf *ProxyChannelConfig) GetRemoteSNI(domain string) string {
+	if nil != conf.RemoteSNIProxy {
+		for k, v := range conf.RemoteSNIProxy {
+			matched, err := filepath.Match(k, domain)
+			if nil != err {
+				logger.Error("Invalid pattern:%s with reason:%v", k, err)
+				continue
+			}
+			if matched {
+				return v
+			}
+		}
+	}
+	return ""
 }
 
 func (conf *ProxyChannelConfig) Adjust() {
