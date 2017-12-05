@@ -217,11 +217,13 @@ START:
 
 	closeCh := make(chan int, 1)
 	go func() {
-		io.Copy(localConn, streamReader)
+		buf := make([]byte, 128*1024)
+		io.CopyBuffer(localConn, streamReader, buf)
 		closeCh <- 1
 	}()
 	if (isSocksProxy || isHttpsProxy || isTransparentProxy) && nil == initialHTTPReq {
-		io.Copy(streamWriter, bufconn)
+		buf := make([]byte, 128*1024)
+		io.CopyBuffer(streamWriter, bufconn, buf)
 		if close, ok := streamWriter.(io.Closer); ok {
 			close.Close()
 		}

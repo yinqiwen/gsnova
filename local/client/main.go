@@ -33,6 +33,9 @@ func printASCIILogo() {
 }
 
 func main() {
+	// if err := agent.Listen(agent.Options{}); err != nil {
+	// 	log.Fatal(err)
+	// }
 	path, err := filepath.Abs(os.Args[0])
 	if nil != err {
 		fmt.Println(err)

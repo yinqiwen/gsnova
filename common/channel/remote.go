@@ -74,11 +74,13 @@ func handleProxyStream(stream mux.MuxStream, auth *mux.AuthRequest) {
 	defer c.Close()
 	closeSig := make(chan bool, 2)
 	go func() {
-		io.Copy(c, streamReader)
+		buf := make([]byte, 128*1024)
+		io.CopyBuffer(c, streamReader, buf)
 		closeSig <- true
 	}()
 	go func() {
-		io.Copy(streamWriter, c)
+		buf := make([]byte, 128*1024)
+		io.CopyBuffer(streamWriter, c, buf)
 		closeSig <- true
 	}()
 	<-closeSig
