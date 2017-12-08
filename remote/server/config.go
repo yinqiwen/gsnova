@@ -164,14 +164,14 @@ func init() {
 			config.NoDelay, config.Interval, config.Resend, config.NoCongestion = 1, 10, 2, 1
 		}
 	}
-	channel.SetDefaultMuxConfig(ServerConf.Mux)
-	channel.DefaultServerCipher = ServerConf.Cipher
-	logger.InitLogger(ServerConf.Log)
 	cipherKey := os.Getenv("GSNOVA_CIPHER_KEY")
 	if len(cipherKey) > 0 {
 		ServerConf.Cipher.Key = cipherKey
 		logger.Notice("Server cipher key overide by env:GSNOVA_CIPHER_KEY")
 	}
+	channel.SetDefaultMuxConfig(ServerConf.Mux)
+	channel.DefaultServerCipher = ServerConf.Cipher
+	logger.InitLogger(ServerConf.Log)
 
 	logger.Info("Load server conf success.")
 	confdata, _ := json.MarshalIndent(&ServerConf, "", "    ")
