@@ -12,7 +12,7 @@ import (
 	"github.com/yinqiwen/gsnova/common/mux"
 )
 
-func handleProxyStream(stream mux.MuxStream, auth *mux.AuthRequest) {
+func handleProxyStream(stream mux.MuxStream, auth *mux.AuthRequest, sessionActiveTime *time.Time) {
 	creq, err := mux.ReadConnectRequest(stream)
 	if nil != err {
 		stream.Close()
@@ -91,15 +91,35 @@ func handleProxyStream(stream mux.MuxStream, auth *mux.AuthRequest) {
 	if close, ok := streamReader.(io.Closer); ok {
 		close.Close()
 	}
+	*sessionActiveTime = time.Now()
 }
 
 var DefaultServerCipher CipherConfig
 
 func ServProxyMuxSession(session mux.MuxSession) error {
 	var authReq *mux.AuthRequest
+	sessionActiveTime := time.Now()
 	defer session.Close()
+
+	if defaultMuxConfig.IdleTimeout > 0 {
+		sessionActiveTicker := time.NewTicker(10 * time.Second)
+		defer sessionActiveTicker.Stop()
+
+		go func() {
+			for range sessionActiveTicker.C {
+				ago := time.Now().Sub(sessionActiveTime)
+				if ago > time.Duration(defaultMuxConfig.IdleTimeout)*time.Second {
+					session.Close()
+					logger.Error("Close mux session since it's not active since %v ago.", ago)
+					return
+				}
+			}
+		}()
+	}
+
 	for {
 		stream, err := session.AcceptStream()
+		sessionActiveTime = time.Now()
 		if nil != err {
 			//session.Close()
 			if err != pmux.ErrSessionShutdown {
@@ -132,6 +152,6 @@ func ServProxyMuxSession(session mux.MuxSession) error {
 			}
 			continue
 		}
-		go handleProxyStream(stream, authReq)
+		go handleProxyStream(stream, authReq, &sessionActiveTime)
 	}
 }

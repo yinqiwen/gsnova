@@ -21,6 +21,7 @@ type FeatureSet struct {
 type MuxConfig struct {
 	MaxStreamWindow  string
 	StreamMinRefresh string
+	IdleTimeout      int
 }
 
 func (m *MuxConfig) ToPMuxConf() *pmux.Config {

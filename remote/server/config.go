@@ -60,6 +60,7 @@ type ServerConfig struct {
 var ServerConf ServerConfig
 
 func initDefaultConf() {
+	ServerConf.Mux.IdleTimeout = 300
 	ServerConf.KCP.Mode = "fast"
 	ServerConf.KCP.MTU = 1350
 	ServerConf.KCP.SndWnd = 1024

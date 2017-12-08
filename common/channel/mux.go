@@ -247,6 +247,7 @@ func (ch *LocalProxyChannel) Init(lock bool) bool {
 			}
 		}
 	}
+
 	if success {
 		logger.Notice("Proxy channel:%s init success", conf.Name)
 		if lock {
