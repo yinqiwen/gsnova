@@ -1,6 +1,6 @@
 // +build linux,!android
 
-package proxy
+package local
 
 import (
 	"fmt"
@@ -15,7 +15,7 @@ import (
 	"github.com/yinqiwen/gsnova/common/logger"
 	"github.com/yinqiwen/gsnova/common/mux"
 	"github.com/yinqiwen/gsnova/common/netx"
-	"github.com/yinqiwen/gsnova/local/protector"
+	"github.com/yinqiwen/gsnova/common/protector"
 )
 
 const (

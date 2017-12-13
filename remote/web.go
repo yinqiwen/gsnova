@@ -1,4 +1,4 @@
-package main
+package remote
 
 import (
 	"fmt"

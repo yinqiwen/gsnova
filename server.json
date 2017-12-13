@@ -7,7 +7,8 @@
 	"Cipher":{"Key":"809240d3a021449f6e67aa73221d42df942a308a"},
 	"Mux":{
 		"MaxStreamWindow": "512K",
-		"StreamMinRefresh":"32K"
+		"StreamMinRefresh":"32K",
+		"IdleTimeout": 300
 	},
 	"TCP":{
 		"Listen":":48100"
@@ -28,7 +29,7 @@
     "TLS":{
        //"Key":"/etc/letsencrypt/live/testdomain.tk/privkey.pem",
 	   //"Cert":"/etc/letsencrypt/live/testdomain.tk/fullchain.pem"
-	   "Listen":"48102",
+	   "Listen":":48102",
        "Key": "",
        "Cert":""
 	},

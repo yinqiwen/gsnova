@@ -1,4 +1,4 @@
-package proxy
+package local
 
 import (
 	"bufio"
@@ -16,7 +16,7 @@ import (
 	"github.com/yinqiwen/gsnova/common/hosts"
 	"github.com/yinqiwen/gsnova/common/logger"
 	"github.com/yinqiwen/gsnova/common/mux"
-	"github.com/yinqiwen/gsnova/local/socks"
+	"github.com/yinqiwen/gsnova/common/socks"
 )
 
 var proxyServerRunning = true

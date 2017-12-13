@@ -1,6 +1,6 @@
 // +build  android !linux
 
-package proxy
+package local
 
 import (
 	"fmt"

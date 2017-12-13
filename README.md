@@ -45,52 +45,78 @@ GSnova: Private Proxy Solution.
 
 # Usage
 **go1.9 is requied.**
-## Deploy Server
+
+## Compile
+```shell
+   go get -t -u -v github.com/yinqiwen/gsnova
+```
+There is also prebuilt binary release at [here](https://github.com/yinqiwen/gsnova/releases)
+
+## Command Line  Usage
+```
+Usage of ./gsnova:
+  -admin string
+        Admin listen address
+  -client
+        Launch gsnova as client.
+  -cmd
+        Launch gsnova  by command line without config file.
+  -cnip string
+        China IP list. (default "./cnipset.txt")
+  -conf string
+        Config file of gsnova.
+  -hop value
+        Next proxy hop server to connect for client, eg:wss://xxx.paas.com
+  -hosts string
+        Hosts file of gsnova client. (default "./hosts.json")
+  -http string
+        Remote HTTP/Websocket proxy server listen address
+  -http2 string
+        Remote HTTP2 proxy server listen address
+  -kcp string
+        Remote KCP proxy server listen address
+  -key string
+        Cipher key for transmission between local&remote. (default "809240d3a021449f6e67aa73221d42df942a308a")
+  -listen string
+        Local client listen address (default ":48100")
+  -log string
+        Log file setting (default "color,gsnova.log")
+  -pid string
+        PID file (default ".gsnova.pid")
+  -ping_interval int
+        Channel ping interval seconds. (default 30)
+  -quic string
+        Remote QUIC proxy server listen address
+  -server
+        Launch gsnova as server.
+  -tcp string
+        Remote TCP proxy server listen address
+  -tls string
+        Remote TLS proxy server listen address
+  -user string
+        Username for remote server to authorize. (default "gsnova")
+  -version
+        Print version.
+  -window string
+        Max mux stream window size, default 512K
+  -window_refresh string
+        Mux stream window refresh size, default 32K
+```
+
+## Deploy & Run Server
 
 ```shell
-   go get -t -u -v github.com/yinqiwen/gsnova/remote/server
-   go build github.com/yinqiwen/gsnova/remote/server
-   ./server -tcp :48100 -quic :48100 -tls :48101 -kcp :48101 -http :48102 -http2 :48103  -key 809240d3a021449f6e67aa73221d42df942a308a -allow "*"
+   ./gsnova -cmd -server -tcp :48100 -quic :48100 -tls :48101 -kcp :48101 -http :48102 -http2 :48103  -key 809240d3a021449f6e67aa73221d42df942a308a -user "*"
 ```
 This would launch a running instance listening at serveral ports with different transport protocol.  
 
 The server can also be deployed to serveral PAAS service like heroku/openshift and some docker host servce.  
 
-## Deploy Client(PC)
-```shell
-   go get -t -u -v github.com/yinqiwen/gsnova/local/client
-   mkdir gsnova_client; cd gsnova_client
-   go build github.com/yinqiwen/gsnova/local/client
-   cp $GOPATH/github.com/yinqiwen/gsnova/*.json ./
-```
+## Deploy & Run Client(PC)
 
-### Client Usage
-```
-Usage of ./client:
-  -cmd
-    	Launch gsnova client by command line without config file.
-  -cnip string
-    	China IP list. (default "./cnipset.txt")
-  -conf string
-    	Config file of gsnova client. (default "./client.json")
-  -hop value
-    	Next proxy hop to connect, eg:wss://xxx.paas.com
-  -hosts string
-    	Hosts file of gsnova client. (default "./hosts.json")
-  -key string
-    	Cipher key for transmission between local&remote. (default "809240d3a021449f6e67aa73221d42df942a308a")
-  -listen string
-    	Local listen address (default ":48100")
-  -log string
-    	Log file setting (default "color,gsnova.log")
-  -pid string
-    	PID file (default ".gsnova.pid")
-  -user string
-    	Username for remote server to authorize. (default "gsnova")
-```
 ### Run From Command Line
 ```
-   ./client -cmd -listen :48100 -hop http2://app1.openshiftapps.com  -key 809240d3a021449f6e67aa73221d42df942a308a
+   ./gsnova -cmd -client -listen :48100 -hop http2://app1.openshiftapps.com  -key 809240d3a021449f6e67aa73221d42df942a308a
 ```
 This would launch a socks4/socks5/http proxy at port 48100 and use http2://app1.openshiftapps.com as next proxy hop.
 
@@ -198,14 +224,14 @@ This is a sample for client.json, the `Key` and the `ServerList` need to be modi
 }
 ```
 ```
-   ./client -conf ./client.json
+   ./gsnova -client -conf ./client.json
 ```
 
 ### Advanced Usage
 #### Multi-Hop Proxy
 GSnova support more than ONE remote server as the next hops, just add moren `-hop server` arguments to enable multi-hop proxy. 
 ```shell
-   ./client -cmd -listen :48101 -hop http2://app1.openshiftapps.com -hop wss://app2.herokuapp.com -key 809240d3a021449f6e67aa73221d42df942a308a
+   ./gsnova -cmd -client -listen :48101 -hop http2://app1.openshiftapps.com -hop wss://app2.herokuapp.com -key 809240d3a021449f6e67aa73221d42df942a308a
 ```
 #### Transparent Proxy
 - Edit iptables rules.

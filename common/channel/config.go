@@ -127,11 +127,7 @@ type KCPBaseConfig struct {
 	SockBuf      int
 }
 
-type KCPConfig struct {
-	KCPBaseConfig
-}
-
-func (kcfg *KCPConfig) initDefaultConf() {
+func (kcfg *KCPBaseConfig) InitDefaultConf() {
 	kcfg.Mode = "fast"
 	kcfg.Conn = 1
 	kcfg.AutoExpire = 0
@@ -150,6 +146,11 @@ func (kcfg *KCPConfig) initDefaultConf() {
 	kcfg.NoCongestion = 0
 	kcfg.SockBuf = 4194304
 }
+
+type KCPConfig struct {
+	KCPBaseConfig
+}
+
 func (config *KCPConfig) adjustByMode() {
 	switch config.Mode {
 	case "normal":
@@ -163,7 +164,7 @@ func (config *KCPConfig) adjustByMode() {
 	}
 }
 func (kcfg *KCPConfig) UnmarshalJSON(data []byte) error {
-	kcfg.initDefaultConf()
+	kcfg.KCPBaseConfig.InitDefaultConf()
 	err := json.Unmarshal(data, &kcfg.KCPBaseConfig)
 	if nil == err {
 		kcfg.adjustByMode()
@@ -227,7 +228,7 @@ func (conf *ProxyChannelConfig) GetRemoteSNI(domain string) string {
 func (conf *ProxyChannelConfig) Adjust() {
 	conf.Cipher.Adjust()
 	if len(conf.KCP.Mode) == 0 {
-		conf.KCP.initDefaultConf()
+		conf.KCP.InitDefaultConf()
 	}
 	conf.KCP.adjustByMode()
 	if len(conf.Compressor) == 0 || !mux.IsValidCompressor(conf.Compressor) {

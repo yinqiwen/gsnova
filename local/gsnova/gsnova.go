@@ -3,7 +3,7 @@ package gsnova
 import (
 	_ "github.com/yinqiwen/gsnova/common/channel/common"
 	"github.com/yinqiwen/gsnova/common/netx"
-	"github.com/yinqiwen/gsnova/local/proxy"
+	"github.com/yinqiwen/gsnova/local"
 )
 
 func init() {
@@ -18,7 +18,7 @@ func init() {
 // }
 
 func StartLocalProxy(home string, conf string, hosts string, cnip string, watchConf bool) error {
-	options := proxy.ProxyOptions{
+	options := local.ProxyOptions{
 		Home:      home,
 		Config:    conf,
 		Hosts:     hosts,
@@ -26,15 +26,15 @@ func StartLocalProxy(home string, conf string, hosts string, cnip string, watchC
 		WatchConf: watchConf,
 	}
 	// ProtectConnections("114.114.114.114", &testProc{})
-	return proxy.Start(options)
+	return local.Start(options)
 }
 
 func StopLocalProxy() error {
 	netx.Reset()
-	return proxy.Stop()
+	return local.Stop()
 }
 
 //SyncConfig sync config files from running gsnova instance
 func SyncConfig(addr string, localDir string) (bool, error) {
-	return proxy.SyncConfig(addr, localDir)
+	return local.SyncConfig(addr, localDir)
 }
