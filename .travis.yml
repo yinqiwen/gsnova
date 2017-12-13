@@ -24,7 +24,7 @@ script:
 - GOOS=windows GOARCH=386 go build -o gsnova.exe github.com/yinqiwen/gsnova
 - tar cjf gsnova_windows_386-${TRAVIS_TAG}.tar.bz2 client.json server.json hosts.json cnipset.txt gsnova.exe
 - GOOS=windows GOARCH=amd64 go build -o gsnova.exe github.com/yinqiwen/gsnova
-- tar cjf gsnova_windows_amd64-${TRAVIS_TAG}.tar.bz2 client.json server.json hosts.json cnipset.txt gsnova_client.exe
+- tar cjf gsnova_windows_amd64-${TRAVIS_TAG}.tar.bz2 client.json server.json hosts.json cnipset.txt gsnova.exe
 - GOOS=linux GOARCH=386 go build  github.com/yinqiwen/gsnova
 - tar cjf gsnova_linux_386-${TRAVIS_TAG}.tar.bz2 client.json server.json hosts.json cnipset.txt gsnova
 - GOOS=linux GOARCH=amd64 go build github.com/yinqiwen/gsnova
