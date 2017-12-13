@@ -4,7 +4,7 @@ package gsnova
 
 import (
 	"github.com/yinqiwen/gsnova/common/netx"
-	"github.com/yinqiwen/gsnova/local/protector"
+	"github.com/yinqiwen/gsnova/common/protector"
 )
 
 // SocketProtector is an interface for classes that can protect Android sockets,
