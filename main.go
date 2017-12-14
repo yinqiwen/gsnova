@@ -225,7 +225,7 @@ func main() {
 
 		logger.Info("Load server conf success.")
 		confdata, _ := json.MarshalIndent(&remote.ServerConf, "", "    ")
-		logger.Info("GSnova server:%s start with config:\n%s", channel.RemoteVersion, string(confdata))
+		logger.Info("GSnova server:%s start with config:\n%s", channel.Version, string(confdata))
 		remote.StartRemoteProxy()
 	}
 
