@@ -2,10 +2,7 @@ package remote
 
 import (
 	"crypto/tls"
-	"fmt"
-	"io"
 
-	"github.com/yinqiwen/gsnova/common/channel"
 	"github.com/yinqiwen/gsnova/common/helper"
 	"github.com/yinqiwen/gsnova/common/logger"
 
@@ -14,16 +11,6 @@ import (
 	"github.com/yinqiwen/gsnova/common/channel/quic"
 	"github.com/yinqiwen/gsnova/common/channel/tcp"
 )
-
-func dumpServerStat(args []string, c io.Writer) error {
-	fmt.Fprintf(c, "Version:    %s\n", channel.RemoteVersion)
-	// fmt.Fprintf(c, "NumSession:    %d\n", remote.GetSessionTableSize())
-	// fmt.Fprintf(c, "NumEventQueue: %d\n", remote.GetEventQueueSize())
-	// fmt.Fprintf(c, "NumActiveDynamicServer: %d\n", activeDynamicServerSize())
-	// fmt.Fprintf(c, "NumRetiredDynamicServer: %d\n", retiredDynamicServerSize())
-	// fmt.Fprintf(c, "TotalUserConn: %d\n", totalConn)
-	return nil
-}
 
 func generateTLSConfig(cert, key string) (*tls.Config, error) {
 	if len(cert) > 0 {

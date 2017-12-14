@@ -163,7 +163,7 @@ func StartProxy() error {
 		<-singalCh
 	}
 
-	logger.Info("Started GSnova %s.", channel.LocalVersion)
+	logger.Info("Started GSnova %s.", channel.Version)
 
 	go startAdminServer()
 	startLocalServers()

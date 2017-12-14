@@ -15,12 +15,12 @@ import (
 
 // hello world, the web server
 func indexCallback(w http.ResponseWriter, req *http.Request) {
-	io.WriteString(w, strings.Replace(html, "${Version}", channel.RemoteVersion, -1))
+	io.WriteString(w, strings.Replace(html, "${Version}", channel.Version, -1))
 }
 
 func statCallback(w http.ResponseWriter, req *http.Request) {
 	w.WriteHeader(200)
-	fmt.Fprintf(w, "Version:    %s\n", channel.RemoteVersion)
+	fmt.Fprintf(w, "Version:    %s\n", channel.Version)
 	ots.Handle("stat", w)
 }
 
