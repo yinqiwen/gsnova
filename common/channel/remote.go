@@ -12,6 +12,17 @@ import (
 	"github.com/yinqiwen/gsnova/common/mux"
 )
 
+type recordActiveTimeReader struct {
+	io.Reader
+	sessionActiveTime *time.Time
+}
+
+func (r *recordActiveTimeReader) Read(p []byte) (int, error) {
+	n, err := r.Reader.Read(p)
+	*(r.sessionActiveTime) = time.Now()
+	return n, err
+}
+
 func handleProxyStream(stream mux.MuxStream, auth *mux.AuthRequest, sessionActiveTime *time.Time) {
 	creq, err := mux.ReadConnectRequest(stream)
 	if nil != err {
@@ -71,16 +82,18 @@ func handleProxyStream(stream mux.MuxStream, auth *mux.AuthRequest, sessionActiv
 	}
 	streamReader, streamWriter := mux.GetCompressStreamReaderWriter(stream, auth.CompressMethod)
 
+	connReader := &recordActiveTimeReader{Reader: c, sessionActiveTime: sessionActiveTime}
+	streamActiveReader := &recordActiveTimeReader{Reader: streamReader, sessionActiveTime: sessionActiveTime}
 	defer c.Close()
 	closeSig := make(chan bool, 2)
 	go func() {
 		buf := make([]byte, 128*1024)
-		io.CopyBuffer(c, streamReader, buf)
+		io.CopyBuffer(c, streamActiveReader, buf)
 		closeSig <- true
 	}()
 	go func() {
 		buf := make([]byte, 128*1024)
-		io.CopyBuffer(streamWriter, c, buf)
+		io.CopyBuffer(streamWriter, connReader, buf)
 		closeSig <- true
 	}()
 	<-closeSig
