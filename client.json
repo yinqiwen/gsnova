@@ -127,7 +127,7 @@
 			"HeartBeatPeriod": 30,
 			"Compressor":"none",
 			"KCP":{
-				"Mode":"fast"
+				"Mode":"fast2"
 			},
 			"Hops":[]
 		}

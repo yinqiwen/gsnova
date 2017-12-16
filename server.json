@@ -2,9 +2,12 @@
 	"AdminListen": "127.0.0.1:60000",
 	"DialTimeout": 15,
 	"UDPReadTimeout": 30,
-	//user name auth
-	"AllowedUser":["*", "gsnova"],
-	"Cipher":{"Key":"809240d3a021449f6e67aa73221d42df942a308a"},
+	//cipher config
+	"Cipher":{
+		"Key":"809240d3a021449f6e67aa73221d42df942a308a",
+		//AllowedUser
+		"User": "*,gsnova"
+	},
 	"Mux":{
 		"MaxStreamWindow": "512K",
 		"StreamMinRefresh":"32K",
@@ -24,7 +27,7 @@
 	"KCP":{
 		"Listen":":48101",
 		"Params":{
-			"Mode":"fast"
+			"Mode":"fast2"
 		}
 	},
 	//If u want to listen with TLS, add the key/cert configuration

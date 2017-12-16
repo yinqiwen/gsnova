@@ -192,7 +192,6 @@ func main() {
 			if len(*user) > 0 {
 				remote.ServerConf.Cipher.User = *user
 			}
-			remote.ServerConf.Cipher.AllowUsers(remote.ServerConf.Cipher.User)
 			if len(*log) > 0 {
 				remote.ServerConf.Log = strings.Split(*log, ",")
 			}
@@ -223,6 +222,7 @@ func main() {
 		}
 		channel.SetDefaultMuxConfig(remote.ServerConf.Mux)
 		channel.DefaultServerCipher = remote.ServerConf.Cipher
+		remote.ServerConf.Cipher.AllowUsers(remote.ServerConf.Cipher.User)
 
 		logger.InitLogger(remote.ServerConf.Log)
 
