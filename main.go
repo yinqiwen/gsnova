@@ -156,6 +156,7 @@ func main() {
 			if _, err := os.Stat(confile); nil == err {
 				logger.Info("Load server conf from file:%s", confile)
 				data, err := helper.ReadWithoutComment(confile, "//")
+
 				//data, err := ioutil.ReadFile(file)
 				if nil == err {
 					err = json.Unmarshal(data, &remote.ServerConf)
@@ -166,43 +167,44 @@ func main() {
 				}
 			}
 		}
-		if len(*httpServer) > 0 {
-			remote.ServerConf.HTTP.Listen = *httpServer
+		if *cmd {
+			if len(*httpServer) > 0 {
+				remote.ServerConf.HTTP.Listen = *httpServer
+			}
+			if len(*tcpServer) > 0 {
+				remote.ServerConf.TCP.Listen = *tcpServer
+			}
+			if len(*quicServer) > 0 {
+				remote.ServerConf.QUIC.Listen = *quicServer
+			}
+			if len(*kcpServer) > 0 {
+				remote.ServerConf.KCP.Listen = *kcpServer
+			}
+			if len(*http2Server) > 0 {
+				remote.ServerConf.HTTP2.Listen = *http2Server
+			}
+			if len(*tlsServer) > 0 {
+				remote.ServerConf.TLS.Listen = *tlsServer
+			}
+			if len(*key) > 0 {
+				remote.ServerConf.Cipher.Key = *key
+			}
+			if len(*user) > 0 {
+				remote.ServerConf.Cipher.User = *user
+			}
+			remote.ServerConf.Cipher.AllowUsers(remote.ServerConf.Cipher.User)
+			if len(*log) > 0 {
+				remote.ServerConf.Log = strings.Split(*log, ",")
+			}
+			if len(*window) > 0 {
+				remote.ServerConf.Mux.MaxStreamWindow = *window
+			}
+			if len(*windowRefresh) > 0 {
+				remote.ServerConf.Mux.StreamMinRefresh = *windowRefresh
+			}
 		}
-		if len(*tcpServer) > 0 {
-			remote.ServerConf.TCP.Listen = *tcpServer
-		}
-		if len(*quicServer) > 0 {
-			remote.ServerConf.QUIC.Listen = *quicServer
-		}
-		if len(*kcpServer) > 0 {
-			remote.ServerConf.KCP.Listen = *kcpServer
-		}
-		if len(*http2Server) > 0 {
-			remote.ServerConf.HTTP2.Listen = *http2Server
-		}
-		if len(*tlsServer) > 0 {
-			remote.ServerConf.TLS.Listen = *tlsServer
-		}
-		if len(*key) > 0 {
-			remote.ServerConf.Cipher.Key = *key
-		}
-		if len(*user) > 0 {
-			remote.ServerConf.Cipher.User = *user
-		}
-		remote.ServerConf.Cipher.AllowUsers(remote.ServerConf.Cipher.User)
-		if len(*log) > 0 {
-			remote.ServerConf.Log = strings.Split(*log, ",")
-		}
-		if len(*window) > 0 {
-			remote.ServerConf.Mux.MaxStreamWindow = *window
-		}
-		if len(*windowRefresh) > 0 {
-			remote.ServerConf.Mux.StreamMinRefresh = *windowRefresh
-		}
-
 		if len(remote.ServerConf.KCP.Listen) > 0 {
-			config := &remote.ServerConf.KCP
+			config := &remote.ServerConf.KCP.Params
 			switch config.Mode {
 			case "normal":
 				config.NoDelay, config.Interval, config.Resend, config.NoCongestion = 0, 40, 2, 1
@@ -221,6 +223,7 @@ func main() {
 		}
 		channel.SetDefaultMuxConfig(remote.ServerConf.Mux)
 		channel.DefaultServerCipher = remote.ServerConf.Cipher
+
 		logger.InitLogger(remote.ServerConf.Log)
 
 		logger.Info("Load server conf success.")

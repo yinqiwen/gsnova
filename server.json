@@ -23,7 +23,9 @@
 	},
 	"KCP":{
 		"Listen":":48101",
-		"Mode":"fast"
+		"Params":{
+			"Mode":"fast"
+		}
 	},
 	//If u want to listen with TLS, add the key/cert configuration
     "TLS":{

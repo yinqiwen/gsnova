@@ -12,8 +12,8 @@ type TLServerConfig struct {
 
 // Config for server
 type KCPServerConfig struct {
-	channel.KCPConfig
 	Listen string
+	Params channel.KCPConfig
 }
 
 type QUICServerConfig struct {
@@ -51,5 +51,5 @@ var ServerConf ServerConfig
 
 func InitDefaultConf() {
 	ServerConf.Mux.IdleTimeout = 300
-	ServerConf.KCP.InitDefaultConf()
+	ServerConf.KCP.Params.InitDefaultConf()
 }

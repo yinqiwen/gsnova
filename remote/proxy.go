@@ -37,7 +37,7 @@ func StartRemoteProxy() {
 	}
 	if len(ServerConf.KCP.Listen) > 0 {
 		go func() {
-			kcp.StartKCPProxyServer(ServerConf.KCP.Listen, &ServerConf.KCP.KCPConfig)
+			kcp.StartKCPProxyServer(ServerConf.KCP.Listen, &ServerConf.KCP.Params)
 		}()
 	}
 	if len(ServerConf.TLS.Listen) > 0 {
