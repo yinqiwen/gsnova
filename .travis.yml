@@ -12,6 +12,7 @@ env:
     - secure: "e7IjyptwfaNmHUYAwTZbLjup0FVD6wVOQIggLSOcqYyrbSYKepVJdbvOUfWqdZ3tUWtpHb5H/2a8RkizXHH3mBi4K5/9wlByTGmiKKA05dYbDod3KpiLbPnHK9UjRQydD6wpYJcK0/yguXmFDqYoRIFwmxeqNJ78OydIo7BOxGY=" 
     - secure: "LEmUhd0lO5BPox3+IdBw/u45Z3TtY0arkef6v7q27qcEs3a2p+SuVVElHx4UcU8/AhN3D9jlskB0UZIgZRMfB3xaPCBVvjHh8UwQ13WqrR7524HuU8kin/4vLDdoIEvs2hQaj58slzmdyddKG2dkgCwkpK/J1DBfKHttbYE+ias=" 
     - secure: "MO3eA15Jp2CkN0SiSI5Oo32wioCcVbaWwpxBCgQrkIyV85yakPzhoWlQWvh90QXEU9bBDKlQiTOXfo11G0as7byU8typa5UI7uLG1sGD9l2bBZbFuqorMrvHl5PeOzfjAQuUnn2KNP5RccuaCn+n65ZImhj8oTFrYGmb1VTdgg0=" 
+    - secure: "J+GWt852LoGcez5tyuKSZF85IjoV4T/sIXn+0TuVznh8VHhIpjw4wqBDBbvyjeNgree8QYtJ6CR4aVh6T2JnCw6rsFyMoHEjBaRriIYzPBHtKQhvVyceFFsE6Sgn08ldH/x0T4V53TEo+1fG/wTM32OqTCZwnWND1ZvjHFxWxvw="
 
 before_install:
 install:
@@ -19,7 +20,7 @@ install:
 - go get github.com/clipperhouse/{linkedlist,set,slice,stringer,typewriter}
 - go get -t github.com/yinqiwen/gsnova
 script:
-- godep save && tar cf tmp-deploy.tar Godeps vendor local common remote main.go  server.json && tar uf tmp-deploy.tar -C remote Procfile manifest.yml && bzip2 tmp-deploy.tar && mv tmp-deploy.tar.bz2 gsnova-paas-deploy-with-dependencies-${TRAVIS_TAG}.tar.bz2
+- godep save && tar cf tmp-deploy.tar Godeps vendor local common remote main.go  server.json && tar uf tmp-deploy.tar -C remote Procfile manifest.yml && cp remote/Procfile ./ && bzip2 tmp-deploy.tar && mv tmp-deploy.tar.bz2 gsnova-paas-deploy-with-dependencies-${TRAVIS_TAG}.tar.bz2
 - export CGO_ENABLED=0
 - GOOS=windows GOARCH=386 go build -o gsnova.exe github.com/yinqiwen/gsnova
 - tar cjf gsnova_windows_386-${TRAVIS_TAG}.tar.bz2 client.json server.json hosts.json cnipset.txt gsnova.exe
@@ -47,26 +48,32 @@ script:
 
 
 deploy:
-  provider: releases
-  api_key:
-    secure: YngDT2JlydCG+qb8Ww9wBFyWiLRQJczybNLeoFKluBXKoh1Vu+TZeReMK+rRUjOqOmYV8sNtOnEVSg4+ICeYDNp9fRRwcNKTkp0H+8pH0OynxdH2faCjx1H5U0WQuWqMLQoMSHZ90I0tL40kEJOChLY6WGvwY47YBqi/dsvmTfg=
-  file: 
-    - "gsnova-paas-deploy-with-dependencies-${TRAVIS_TAG}.tar.bz2"
-    - "gsnova_windows_386-${TRAVIS_TAG}.tar.bz2"
-    - "gsnova_windows_amd64-${TRAVIS_TAG}.tar.bz2"
-    - "gsnova_linux_386-${TRAVIS_TAG}.tar.bz2"
-    - "gsnova_linux_amd64-${TRAVIS_TAG}.tar.bz2"
-    - "gsnova_linux_armv5-${TRAVIS_TAG}.tar.bz2"
-    - "gsnova_linux_armv6-${TRAVIS_TAG}.tar.bz2"
-    - "gsnova_linux_armv7-${TRAVIS_TAG}.tar.bz2"
-    - "gsnova_linux_arm64-${TRAVIS_TAG}.tar.bz2"
-    - "gsnova_linux_mips-${TRAVIS_TAG}.tar.bz2"
-    - "gsnova_linux_mipsle-${TRAVIS_TAG}.tar.bz2"
-    - "gsnova_macos_amd64-${TRAVIS_TAG}.tar.bz2"
-  skip_cleanup: true
-  on:
-    tags: true
-    repo: yinqiwen/gsnova
+  - provider: releases
+    api_key:
+      secure: YngDT2JlydCG+qb8Ww9wBFyWiLRQJczybNLeoFKluBXKoh1Vu+TZeReMK+rRUjOqOmYV8sNtOnEVSg4+ICeYDNp9fRRwcNKTkp0H+8pH0OynxdH2faCjx1H5U0WQuWqMLQoMSHZ90I0tL40kEJOChLY6WGvwY47YBqi/dsvmTfg=
+    file: 
+      - "gsnova-paas-deploy-with-dependencies-${TRAVIS_TAG}.tar.bz2"
+      - "gsnova_windows_386-${TRAVIS_TAG}.tar.bz2"
+      - "gsnova_windows_amd64-${TRAVIS_TAG}.tar.bz2"
+      - "gsnova_linux_386-${TRAVIS_TAG}.tar.bz2"
+      - "gsnova_linux_amd64-${TRAVIS_TAG}.tar.bz2"
+      - "gsnova_linux_armv5-${TRAVIS_TAG}.tar.bz2"
+      - "gsnova_linux_armv6-${TRAVIS_TAG}.tar.bz2"
+      - "gsnova_linux_armv7-${TRAVIS_TAG}.tar.bz2"
+      - "gsnova_linux_arm64-${TRAVIS_TAG}.tar.bz2"
+      - "gsnova_linux_mips-${TRAVIS_TAG}.tar.bz2"
+      - "gsnova_linux_mipsle-${TRAVIS_TAG}.tar.bz2"
+      - "gsnova_macos_amd64-${TRAVIS_TAG}.tar.bz2"
+    skip_cleanup: true
+    on:
+      tags: true
+      repo: yinqiwen/gsnova
+  - provider: heroku
+    api_key:
+      secure: "ctdNOvQykz2LSSOqiQn+pG22PAd1s32eXTKTJavR0jt547Q44TlzrEwc3t7PECjazGY577MSxcnUmH8cnX6cae2psCd/J4GhAz6I2AbezrEqrNf/+kjjRi3v/4vE2mE96jtFd8TvdXlDJZB8R6E45w+/2Xoo1iixz9l1R/XWJAM="
+    app: $HEROKU_APP
+    skip_cleanup: true
+    strategy: git
 
 after_deploy:
   - curl -O -L https://github.com/grammarly/rocker/releases/download/1.3.1/rocker-1.3.1_linux_amd64.tar.gz
