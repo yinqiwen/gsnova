@@ -23,27 +23,27 @@ script:
 - godep save && tar cf tmp-deploy.tar Godeps vendor local common remote main.go  server.json && tar uf tmp-deploy.tar -C remote Procfile manifest.yml && cp remote/Procfile ./ && bzip2 tmp-deploy.tar && mv tmp-deploy.tar.bz2 gsnova-paas-deploy-with-dependencies-${TRAVIS_TAG}.tar.bz2
 - export CGO_ENABLED=0
 - GOOS=windows GOARCH=386 go build -o gsnova.exe github.com/yinqiwen/gsnova
-- [ -n "$TRAVIS_TAG" ] && tar cjf gsnova_windows_386-${TRAVIS_TAG}.tar.bz2 client.json server.json hosts.json cnipset.txt gsnova.exe
+- if [ -n "$TRAVIS_TAG" ] ; then tar cjf gsnova_windows_386-${TRAVIS_TAG}.tar.bz2 client.json server.json hosts.json cnipset.txt gsnova.exe; fi
 - GOOS=windows GOARCH=amd64 go build -o gsnova.exe github.com/yinqiwen/gsnova
-- [ -n "$TRAVIS_TAG" ] && tar cjf gsnova_windows_amd64-${TRAVIS_TAG}.tar.bz2 client.json server.json hosts.json cnipset.txt gsnova.exe
+- if [ -n "$TRAVIS_TAG" ] ; then tar cjf gsnova_windows_amd64-${TRAVIS_TAG}.tar.bz2 client.json server.json hosts.json cnipset.txt gsnova.exe; fi
 - GOOS=linux GOARCH=386 go build  github.com/yinqiwen/gsnova
-- [ -n "$TRAVIS_TAG" ] && tar cjf gsnova_linux_386-${TRAVIS_TAG}.tar.bz2 client.json server.json hosts.json cnipset.txt gsnova
+- if [ -n "$TRAVIS_TAG" ] ; then tar cjf gsnova_linux_386-${TRAVIS_TAG}.tar.bz2 client.json server.json hosts.json cnipset.txt gsnova; fi
 - GOOS=linux GOARCH=amd64 go build github.com/yinqiwen/gsnova
-- [ -n "$TRAVIS_TAG" ] && tar cjf gsnova_linux_amd64-${TRAVIS_TAG}.tar.bz2 client.json server.json hosts.json cnipset.txt gsnova
+- if [ -n "$TRAVIS_TAG" ] ; then tar cjf gsnova_linux_amd64-${TRAVIS_TAG}.tar.bz2 client.json server.json hosts.json cnipset.txt gsnova; fi
 - GOOS=linux GOARCH=arm GOARM=5 go build github.com/yinqiwen/gsnova
-- [ -n "$TRAVIS_TAG" ] && tar cjf gsnova_linux_armv5-${TRAVIS_TAG}.tar.bz2 client.json server.json hosts.json cnipset.txt gsnova
+- if [ -n "$TRAVIS_TAG" ] ; then tar cjf gsnova_linux_armv5-${TRAVIS_TAG}.tar.bz2 client.json server.json hosts.json cnipset.txt gsnova; fi
 - GOOS=linux GOARCH=arm GOARM=6 go build  github.com/yinqiwen/gsnova
-- [ -n "$TRAVIS_TAG" ] && tar cjf gsnova_linux_armv6-${TRAVIS_TAG}.tar.bz2 client.json server.json hosts.json cnipset.txt gsnova
+- if [ -n "$TRAVIS_TAG" ] ; then tar cjf gsnova_linux_armv6-${TRAVIS_TAG}.tar.bz2 client.json server.json hosts.json cnipset.txt gsnova; fi
 - GOOS=linux GOARCH=arm GOARM=7 go build  github.com/yinqiwen/gsnova
-- [ -n "$TRAVIS_TAG" ] && tar cjf gsnova_linux_armv7-${TRAVIS_TAG}.tar.bz2 client.json server.json hosts.json cnipset.txt gsnova
+- if [ -n "$TRAVIS_TAG" ] ; then tar cjf gsnova_linux_armv7-${TRAVIS_TAG}.tar.bz2 client.json server.json hosts.json cnipset.txt gsnova; fi
 - GOOS=linux GOARCH=arm64  go build  github.com/yinqiwen/gsnova
-- [ -n "$TRAVIS_TAG" ] && tar cjf gsnova_linux_arm64-${TRAVIS_TAG}.tar.bz2 client.json server.json hosts.json cnipset.txt gsnova
+- if [ -n "$TRAVIS_TAG" ] ; then tar cjf gsnova_linux_arm64-${TRAVIS_TAG}.tar.bz2 client.json server.json hosts.json cnipset.txt gsnova; fi
 - GOOS=linux GOARCH=mipsle  go build  github.com/yinqiwen/gsnova
-- [ -n "$TRAVIS_TAG" ] && tar cjf gsnova_linux_mipsle-${TRAVIS_TAG}.tar.bz2 client.json server.json hosts.json cnipset.txt gsnova
+- if [ -n "$TRAVIS_TAG" ] ; then tar cjf gsnova_linux_mipsle-${TRAVIS_TAG}.tar.bz2 client.json server.json hosts.json cnipset.txt gsnova; fi
 - GOOS=linux GOARCH=mips  go build  github.com/yinqiwen/gsnova
-- [ -n "$TRAVIS_TAG" ] && tar cjf gsnova_linux_mips-${TRAVIS_TAG}.tar.bz2 client.json server.json hosts.json cnipset.txt gsnova
+- if [ -n "$TRAVIS_TAG" ] ; then tar cjf gsnova_linux_mips-${TRAVIS_TAG}.tar.bz2 client.json server.json hosts.json cnipset.txt gsnova; fi
 - GOOS=darwin GOARCH=amd64 go build  github.com/yinqiwen/gsnova
-- [ -n "$TRAVIS_TAG" ] && tar cjf gsnova_macos_amd64-${TRAVIS_TAG}.tar.bz2 client.json server.json hosts.json cnipset.txt gsnova
+- if [ -n "$TRAVIS_TAG" ] ; then tar cjf gsnova_macos_amd64-${TRAVIS_TAG}.tar.bz2 client.json server.json hosts.json cnipset.txt gsnova; fi
 
 
 
