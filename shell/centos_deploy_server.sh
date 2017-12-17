@@ -46,7 +46,7 @@ function  env_setting(){
 
 function  build_gsnova_server(){
     echo ">>>>> Syncing gsnova server code"
-    go get -t -u -v github.com/yinqiwen/gsnova/remote/server
+    go get -t -u -v github.com/yinqiwen/gsnova
     if [ $? -ne 0 ]; then
        echo "Sync gsnova server code failed."
        return
@@ -54,7 +54,7 @@ function  build_gsnova_server(){
     echo "<<<<< Done syncing gsnova server code"
     echo ">>>>> Building gsnova server"
     mkdir -p $GSNOVA_SERVICE_DIR; cd $GSNOVA_SERVICE_DIR
-    go build  -v github.com/yinqiwen/gsnova/remote/server
+    go build  -v github.com/yinqiwen/gsnova
     if [ ! -f server.json ]; then
         cp $GOPATH/src/github.com/yinqiwen/gsnova/server.json ./
     fi
@@ -67,7 +67,7 @@ function  build_gsnova_server(){
 function generate_supervise_conf(){
     cd $GSNOVA_SERVICE_DIR
     echo "[program:gsnova_server]
-command=$(pwd)/server -conf $(pwd)/server.json
+command=$(pwd)/gsnova -server -conf $(pwd)/server.json
 autostart=true
 autorestart=true
 startsecs=3
