@@ -73,7 +73,6 @@ deploy:
       secure: "ctdNOvQykz2LSSOqiQn+pG22PAd1s32eXTKTJavR0jt547Q44TlzrEwc3t7PECjazGY577MSxcnUmH8cnX6cae2psCd/J4GhAz6I2AbezrEqrNf/+kjjRi3v/4vE2mE96jtFd8TvdXlDJZB8R6E45w+/2Xoo1iixz9l1R/XWJAM="
     app: $HEROKU_APP
     skip_cleanup: true
-    strategy: git
 
 after_deploy:
   - curl -O -L https://github.com/grammarly/rocker/releases/download/1.3.1/rocker-1.3.1_linux_amd64.tar.gz
