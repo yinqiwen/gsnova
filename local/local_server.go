@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/yinqiwen/gsnova/common/channel"
+	"github.com/yinqiwen/gsnova/common/dns"
 	"github.com/yinqiwen/gsnova/common/helper"
 	"github.com/yinqiwen/gsnova/common/hosts"
 	"github.com/yinqiwen/gsnova/common/logger"
@@ -86,6 +87,11 @@ func serveProxyConn(conn net.Conn, remoteHost, remotePort string, proxy *ProxyCo
 			conn.SetReadDeadline(time.Now().Add(10 * time.Millisecond))
 		} else {
 			conn.SetReadDeadline(time.Now().Add(200 * time.Millisecond))
+		}
+
+		if nil != dns.CNIPSet {
+			remoteIP := net.ParseIP(remoteHost)
+			logger.Debug("Recv proxy request to IP:%v CNIP:%v", remoteIP, dns.CNIPSet.IsInCountry(remoteIP, "CN"))
 		}
 		sni, err := helper.PeekTLSServerName(bufconn)
 		if nil != err {
