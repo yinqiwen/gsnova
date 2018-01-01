@@ -108,13 +108,13 @@ func serveProxyConn(conn net.Conn, remoteHost, remotePort string, proxy *ProxyCo
 
 	//2. sniff domain via http
 	if trySniffDomain {
-		localConn.SetReadDeadline(time.Now().Add(5 * time.Second))
+		localConn.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
 		headChunk, err := bufconn.Peek(7)
 		if len(headChunk) != 7 {
 			if err != io.EOF {
 				logger.Error("Peek:%s %d %v to %s:%s", string(headChunk), len(headChunk), err, remoteHost, remotePort)
 			}
-			return
+			goto START
 		}
 		method := string(headChunk)
 		if tmp := strings.Fields(method); len(tmp) > 0 {
