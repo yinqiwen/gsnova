@@ -20,6 +20,7 @@ import (
 type muxSessionHolder struct {
 	creatTime       time.Time
 	expireTime      time.Time
+	activeTime      time.Time
 	muxSession      mux.MuxSession
 	retiredSessions map[mux.MuxSession]bool
 	server          string
@@ -75,6 +76,7 @@ func (s *muxSessionHolder) getNewStream() (mux.MuxStream, error) {
 	if nil == s.muxSession {
 		return nil, pmux.ErrSessionShutdown
 	}
+	s.activeTime = time.Now()
 	return s.muxSession.OpenStream()
 }
 
@@ -103,7 +105,7 @@ func (s *muxSessionHolder) heartbeat(interval int) {
 					}
 				}
 			} else {
-				if !s.conf.lazyConnect {
+				if !s.conf.lazyConnect && time.Now().Sub(s.activeTime) > time.Duration(s.conf.HibernateAfterSecs)*time.Second {
 					s.init(true)
 				}
 			}

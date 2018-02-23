@@ -204,6 +204,7 @@ type ProxyChannelConfig struct {
 	Cipher                 CipherConfig
 	Hops                   HopServers
 	RemoteSNIProxy         map[string]string
+	HibernateAfterSecs     int
 
 	proxyURL    *url.URL
 	lazyConnect bool
@@ -255,6 +256,9 @@ func (conf *ProxyChannelConfig) Adjust() {
 	}
 	if 0 == conf.RemoteDialMSTimeout {
 		conf.RemoteDialMSTimeout = 5000
+	}
+	if 0 == conf.HibernateAfterSecs {
+		conf.HibernateAfterSecs = 1800
 	}
 }
 
