@@ -247,7 +247,7 @@ START:
 				}
 			}
 			prevReq := proxyReq
-			localConn.SetReadDeadline(time.Now().Add(5 * time.Second))
+			//localConn.SetReadDeadline(time.Now().Add(5 * time.Second))
 			proxyReq, err = http.ReadRequest(bufconn)
 			if nil != err {
 				if err != io.EOF && !strings.Contains(err.Error(), "use of closed network connection") {
