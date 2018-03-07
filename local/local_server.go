@@ -227,6 +227,25 @@ START:
 		io.CopyBuffer(localConn, streamReader, buf)
 		closeCh <- 1
 	}()
+
+	//start task to check stream timeout(if the stream has no read&write action more than 10s)
+	timeoutTicker := time.NewTicker(2 * time.Second)
+	stopTicker := make(chan bool, 1)
+	go func() {
+		for {
+			select {
+			case <-timeoutTicker.C:
+				if time.Now().Sub(stream.LatestIOTime()) > 10*time.Second {
+					localConn.Close()
+					stream.Close()
+					logger.Error("Close stream[%d] since it's not active since %v ago.", ssid, time.Now().Sub(stream.LatestIOTime()))
+					return
+				}
+			case <-stopTicker:
+				return
+			}
+		}
+	}()
 	if (isSocksProxy || isHttpsProxy || isTransparentProxy) && nil == initialHTTPReq {
 		buf := make([]byte, 128*1024)
 		io.CopyBuffer(streamWriter, bufconn, buf)
@@ -250,6 +269,9 @@ START:
 			//localConn.SetReadDeadline(time.Now().Add(5 * time.Second))
 			proxyReq, err = http.ReadRequest(bufconn)
 			if nil != err {
+				if err, ok := err.(net.Error); ok && err.Timeout() {
+
+				}
 				if err != io.EOF && !strings.Contains(err.Error(), "use of closed network connection") {
 					logger.Notice("Failed to read proxy http request to %s:%s for reason:%v", remoteHost, remotePort, err)
 				}
@@ -263,6 +285,7 @@ START:
 		}
 	}
 	<-closeCh
+	close(stopTicker)
 }
 
 func startLocalProxyServer(proxyIdx int) (*net.TCPListener, error) {

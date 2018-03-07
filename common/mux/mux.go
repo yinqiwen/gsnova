@@ -102,6 +102,7 @@ type MuxStream interface {
 	StreamID() uint32
 	SetReadDeadline(t time.Time) error
 	SetWriteDeadline(t time.Time) error
+	LatestIOTime() time.Time
 }
 
 type MuxSession interface {
@@ -115,8 +116,21 @@ type MuxSession interface {
 
 type ProxyMuxStream struct {
 	TimeoutReadWriteCloser
-	session   MuxSession
-	sessionID int64
+	session      MuxSession
+	sessionID    int64
+	latestIOTime time.Time
+}
+
+func (s *ProxyMuxStream) Read(p []byte) (int, error) {
+	s.latestIOTime = time.Now()
+	return s.Read(p)
+}
+func (s *ProxyMuxStream) Write(p []byte) (int, error) {
+	s.latestIOTime = time.Now()
+	return s.Write(p)
+}
+func (s *ProxyMuxStream) LatestIOTime() time.Time {
+	return s.latestIOTime
 }
 
 func (s *ProxyMuxStream) StreamID() uint32 {

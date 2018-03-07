@@ -18,10 +18,11 @@ import (
 
 type directStream struct {
 	net.Conn
-	conf        *channel.ProxyChannelConfig
-	addr        string
-	session     *directMuxSession
-	proxyServer string
+	conf         *channel.ProxyChannelConfig
+	addr         string
+	session      *directMuxSession
+	proxyServer  string
+	latestIOTime time.Time
 }
 
 func (tc *directStream) Auth(req *mux.AuthRequest) error {
@@ -98,16 +99,22 @@ func (tc *directStream) StreamID() uint32 {
 	return 0
 }
 
+func (s *directStream) LatestIOTime() time.Time {
+	return s.latestIOTime
+}
+
 func (tc *directStream) Read(p []byte) (int, error) {
 	if nil == tc.Conn {
 		return 0, io.EOF
 	}
+	tc.latestIOTime = time.Now()
 	return tc.Conn.Read(p)
 }
 func (tc *directStream) Write(p []byte) (int, error) {
 	if nil == tc.Conn {
 		return 0, io.EOF
 	}
+	tc.latestIOTime = time.Now()
 	return tc.Conn.Write(p)
 }
 

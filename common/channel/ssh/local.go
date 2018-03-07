@@ -18,9 +18,14 @@ import (
 
 type sshStream struct {
 	net.Conn
-	conf    *channel.ProxyChannelConfig
-	addr    string
-	session *sshMuxSession
+	conf         *channel.ProxyChannelConfig
+	addr         string
+	session      *sshMuxSession
+	latestIOTime time.Time
+}
+
+func (s *sshStream) LatestIOTime() time.Time {
+	return s.latestIOTime
 }
 
 func (tc *sshStream) Auth(req *mux.AuthRequest) error {
@@ -56,12 +61,14 @@ func (tc *sshStream) Read(p []byte) (int, error) {
 	if nil == tc.Conn {
 		return 0, io.EOF
 	}
+	tc.latestIOTime = time.Now()
 	return tc.Conn.Read(p)
 }
 func (tc *sshStream) Write(p []byte) (int, error) {
 	if nil == tc.Conn {
 		return 0, io.EOF
 	}
+	tc.latestIOTime = time.Now()
 	return tc.Conn.Write(p)
 }
 
