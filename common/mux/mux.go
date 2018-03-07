@@ -123,11 +123,11 @@ type ProxyMuxStream struct {
 
 func (s *ProxyMuxStream) Read(p []byte) (int, error) {
 	s.latestIOTime = time.Now()
-	return s.Read(p)
+	return s.TimeoutReadWriteCloser.Read(p)
 }
 func (s *ProxyMuxStream) Write(p []byte) (int, error) {
 	s.latestIOTime = time.Now()
-	return s.Write(p)
+	return s.TimeoutReadWriteCloser.Write(p)
 }
 func (s *ProxyMuxStream) LatestIOTime() time.Time {
 	return s.latestIOTime
