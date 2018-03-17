@@ -84,4 +84,4 @@ deploy:
     app: $HEROKU_APP
     skip_cleanup: true
     on:
-      condition: $TRAVIS_TAG = ''
+      tags: false
