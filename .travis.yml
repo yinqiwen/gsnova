@@ -80,7 +80,7 @@ deploy:
       repo: yinqiwen/gsnova
   - provider: heroku
     api_key:
-      secure: "ctdNOvQykz2LSSOqiQn+pG22PAd1s32eXTKTJavR0jt547Q44TlzrEwc3t7PECjazGY577MSxcnUmH8cnX6cae2psCd/J4GhAz6I2AbezrEqrNf/+kjjRi3v/4vE2mE96jtFd8TvdXlDJZB8R6E45w+/2Xoo1iixz9l1R/XWJAM="
+      secure: "LQZx6US2jzCMT3VsZHBKT3w4vq3dA1iJZ0591pYkUtvtChIBWnYe9F7rn4XInkyCSKRLBBEkQvu7A9qED0KOi0DlsmIOUgZ5d+qMicWeU0OvUNeiQEBj2bX8oa5mYRW3hBznpkLCZBwnXJLrv6A6LpNQYQ1ZvR19rtmTmXAku+s="
     app: $HEROKU_APP
     skip_cleanup: true
     on:
