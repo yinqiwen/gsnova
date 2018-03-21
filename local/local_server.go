@@ -95,7 +95,7 @@ func serveProxyConn(conn net.Conn, remoteHost, remotePort string, proxy *ProxyCo
 		}
 		sni, err := helper.PeekTLSServerName(bufconn)
 		if nil != err {
-			//log.Printf("##Failed to sniff SNI with error:%v", err)
+			//logger.Debug("##Failed to sniff SNI with error:%v", err)
 		} else {
 			if redirect, ok := GConf.SNI.redirect(sni); ok {
 				sni = redirect
@@ -179,7 +179,8 @@ func serveProxyConn(conn net.Conn, remoteHost, remotePort string, proxy *ProxyCo
 	}
 START:
 	if len(remoteHost) == 0 || len(remotePort) == 0 {
-		logger.Error("Can NOT resolve remote host or port %s:%s", remoteHost, remotePort)
+		logger.Error("Can NOT resolve remote host or port %s:%s %v", remoteHost, remotePort, initialHTTPReq)
+		logger.Error("%v %v %v", trySniffDomain, isTransparentProxy, isSocksProxy)
 		return
 	}
 	proxyChannelName = proxy.getProxyChannelByHost(protocol, remoteHost)
@@ -232,10 +233,15 @@ START:
 	timeoutTicker := time.NewTicker(2 * time.Second)
 	stopTicker := make(chan bool, 1)
 	go func() {
+		maxIdleTime := time.Duration(GConf.Mux.StreamIdleTimeout) * time.Second
+		if maxIdleTime == 0 {
+			maxIdleTime = 10 * time.Second
+		}
+
 		for {
 			select {
 			case <-timeoutTicker.C:
-				if time.Now().Sub(stream.LatestIOTime()) > 10*time.Second {
+				if time.Now().Sub(stream.LatestIOTime()) > maxIdleTime {
 					localConn.Close()
 					stream.Close()
 					logger.Error("Close stream[%d] since it's not active since %v ago.", ssid, time.Now().Sub(stream.LatestIOTime()))
