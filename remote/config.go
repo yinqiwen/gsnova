@@ -50,6 +50,7 @@ type ServerConfig struct {
 var ServerConf ServerConfig
 
 func InitDefaultConf() {
-	ServerConf.Mux.IdleTimeout = 300
+	ServerConf.Mux.StreamIdleTimeout = 10
+	ServerConf.Mux.SessionIdleTimeout = 300
 	ServerConf.KCP.Params.InitDefaultConf()
 }

@@ -7,7 +7,9 @@
 	"Cipher":{"Method":"auto", "Key":"809240d3a021449f6e67aa73221d42df942a308a", "User": "gsnova"},
 	"Mux":{
 		"MaxStreamWindow": "512K",
-		"StreamMinRefresh":"32K"
+		"StreamMinRefresh":"32K",
+		"StreamIdleTimeout":10,
+		"SessionIdleTimeout":300
 	},
 
     "LocalDNS":{

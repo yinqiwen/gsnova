@@ -11,7 +11,8 @@
 	"Mux":{
 		"MaxStreamWindow": "512K",
 		"StreamMinRefresh":"32K",
-		"IdleTimeout": 300
+		"StreamIdleTimeout":10,
+		"SessionIdleTimeout":300
 	},
 	"TCP":{
 		"Listen":":48100"
