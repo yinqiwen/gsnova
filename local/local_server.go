@@ -180,7 +180,6 @@ func serveProxyConn(conn net.Conn, remoteHost, remotePort string, proxy *ProxyCo
 START:
 	if len(remoteHost) == 0 || len(remotePort) == 0 {
 		logger.Error("Can NOT resolve remote host or port %s:%s %v", remoteHost, remotePort, initialHTTPReq)
-		logger.Error("%v %v %v", trySniffDomain, isTransparentProxy, isSocksProxy)
 		return
 	}
 	proxyChannelName = proxy.getProxyChannelByHost(protocol, remoteHost)
