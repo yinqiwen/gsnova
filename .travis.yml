@@ -15,6 +15,12 @@ env:
     - secure: "J+GWt852LoGcez5tyuKSZF85IjoV4T/sIXn+0TuVznh8VHhIpjw4wqBDBbvyjeNgree8QYtJ6CR4aVh6T2JnCw6rsFyMoHEjBaRriIYzPBHtKQhvVyceFFsE6Sgn08ldH/x0T4V53TEo+1fG/wTM32OqTCZwnWND1ZvjHFxWxvw="
 
 before_install:
+  - if [ -n "$TRAVIS_TAG" ] ; then 
+       git tag "latest";
+       export RELEASE_VER="latest";
+    else
+       export RELEASE_VER="${TRAVIS_TAG}";
+    fi  
 install:
 - go get github.com/tools/godep
 - go get github.com/clipperhouse/{linkedlist,set,slice,stringer,typewriter}
@@ -51,12 +57,7 @@ script:
 before_deploy:
   - git config --local user.name "yinqiwen"
   - git config --local user.email "yinqiwen@gmail.com"
-  - if [ -n "$TRAVIS_TAG" ] ; then 
-       git tag "latest";
-       export RELEASE_VER="latest";
-    else
-       export RELEASE_VER="${TRAVIS_TAG}";
-    fi
+
 deploy:
   - provider: releases
     api_key:
