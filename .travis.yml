@@ -48,25 +48,34 @@ script:
 - if [ -n "$TRAVIS_TAG" ] ; then tar cjf gsnova_macos_amd64-${TRAVIS_TAG}.tar.bz2 client.json server.json hosts.json cnipset.txt gsnova; fi
 
 
-
+before_deploy:
+  - git config --local user.name "yinqiwen"
+  - git config --local user.email "yinqiwen@gmail.com"
+  - if [ -n "$TRAVIS_TAG" ] ; then 
+       git tag "latest";
+       RELEASE_VER="latest"
+    else
+       RELEASE_VER="${TRAVIS_TAG}"
+    fi
 deploy:
   - provider: releases
     api_key:
       secure: YngDT2JlydCG+qb8Ww9wBFyWiLRQJczybNLeoFKluBXKoh1Vu+TZeReMK+rRUjOqOmYV8sNtOnEVSg4+ICeYDNp9fRRwcNKTkp0H+8pH0OynxdH2faCjx1H5U0WQuWqMLQoMSHZ90I0tL40kEJOChLY6WGvwY47YBqi/dsvmTfg=
     file: 
-      - "gsnova-paas-deploy-with-dependencies-${TRAVIS_TAG}.tar.bz2"
-      - "gsnova_windows_386-${TRAVIS_TAG}.tar.bz2"
-      - "gsnova_windows_amd64-${TRAVIS_TAG}.tar.bz2"
-      - "gsnova_linux_386-${TRAVIS_TAG}.tar.bz2"
-      - "gsnova_linux_amd64-${TRAVIS_TAG}.tar.bz2"
-      - "gsnova_linux_armv5-${TRAVIS_TAG}.tar.bz2"
-      - "gsnova_linux_armv6-${TRAVIS_TAG}.tar.bz2"
-      - "gsnova_linux_armv7-${TRAVIS_TAG}.tar.bz2"
-      - "gsnova_linux_arm64-${TRAVIS_TAG}.tar.bz2"
-      - "gsnova_linux_mips-${TRAVIS_TAG}.tar.bz2"
-      - "gsnova_linux_mipsle-${TRAVIS_TAG}.tar.bz2"
-      - "gsnova_macos_amd64-${TRAVIS_TAG}.tar.bz2"
+      - "gsnova-paas-deploy-with-dependencies-${RELEASE_VER}.tar.bz2"
+      - "gsnova_windows_386-${RELEASE_VER}.tar.bz2"
+      - "gsnova_windows_amd64-${RELEASE_VER}.tar.bz2"
+      - "gsnova_linux_386-${RELEASE_VER}.tar.bz2"
+      - "gsnova_linux_amd64-${RELEASE_VER}.tar.bz2"
+      - "gsnova_linux_armv5-${RELEASE_VER}.tar.bz2"
+      - "gsnova_linux_armv6-${RELEASE_VER}.tar.bz2"
+      - "gsnova_linux_armv7-${RELEASE_VER}.tar.bz2"
+      - "gsnova_linux_arm64-${RELEASE_VER}.tar.bz2"
+      - "gsnova_linux_mips-${RELEASE_VER}.tar.bz2"
+      - "gsnova_linux_mipsle-${RELEASE_VER}.tar.bz2"
+      - "gsnova_macos_amd64-${RELEASE_VER}.tar.bz2"
     skip_cleanup: true
+    overwrite: true
     on:
       tags: true
       repo: yinqiwen/gsnova
@@ -74,7 +83,7 @@ deploy:
     script: 
     - curl -O -L https://github.com/grammarly/rocker/releases/download/1.3.1/rocker-1.3.1_linux_amd64.tar.gz
     - tar zxf rocker-0.2.2_linux_amd64.tar.gz
-    - ./rocker build -f Docker/server/Rockerfile --auth $DOCKER_USER:$DOCKER_PASS --push -var Version=$TRAVIS_TAG 
+    - ./rocker build -f Docker/server/Rockerfile --auth $DOCKER_USER:$DOCKER_PASS --push -var Version=${RELEASE_VER} 
     on:
       tags: true
       repo: yinqiwen/gsnova
@@ -85,3 +94,4 @@ deploy:
     skip_cleanup: true
     on:
       tags: false
+      condition: $TRAVIS_TAG = ''
