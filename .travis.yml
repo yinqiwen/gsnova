@@ -53,9 +53,9 @@ before_deploy:
   - git config --local user.email "yinqiwen@gmail.com"
   - if [ -n "$TRAVIS_TAG" ] ; then 
        git tag "latest";
-       RELEASE_VER="latest"
+       export RELEASE_VER="latest";
     else
-       RELEASE_VER="${TRAVIS_TAG}"
+       export RELEASE_VER="${TRAVIS_TAG}";
     fi
 deploy:
   - provider: releases
