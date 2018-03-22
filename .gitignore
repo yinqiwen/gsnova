@@ -5,3 +5,6 @@ Godeps
 .exe
 vendor
 .DS_Store
+*.tar.gz
+*.tar.bz2
+
