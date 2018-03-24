@@ -2,6 +2,7 @@ package remote
 
 import (
 	"crypto/tls"
+	"net/url"
 
 	"github.com/yinqiwen/gsnova/common/helper"
 	"github.com/yinqiwen/gsnova/common/logger"
@@ -24,52 +25,73 @@ func generateTLSConfig(cert, key string) (*tls.Config, error) {
 }
 
 func StartRemoteProxy() {
-	if len(ServerConf.QUIC.Listen) > 0 {
-		tlscfg, err := generateTLSConfig(ServerConf.QUIC.Cert, ServerConf.QUIC.Key)
+	for _, lis := range ServerConf.Server {
+		u, err := url.Parse(lis.Listen)
 		if nil != err {
-			logger.Error("Failed to create TLS config by cert/key: %s/%s", ServerConf.QUIC.Cert, ServerConf.QUIC.Key)
-		} else {
-			go func() {
-				quic.StartQuicProxyServer(ServerConf.QUIC.Listen, tlscfg)
-			}()
+			logger.Error("Invalid listen url:%s for reason:%v", lis.Listen, err)
+			continue
 		}
-
-	}
-	if len(ServerConf.KCP.Listen) > 0 {
-		go func() {
-			kcp.StartKCPProxyServer(ServerConf.KCP.Listen, &ServerConf.KCP.Params)
-		}()
-	}
-	if len(ServerConf.TLS.Listen) > 0 {
-		tlscfg, err := generateTLSConfig(ServerConf.TLS.Cert, ServerConf.TLS.Key)
-		if nil != err {
-			logger.Error("Failed to create TLS config by cert/key: %s/%s", ServerConf.TLS.Cert, ServerConf.TLS.Key)
-		} else {
-			go func() {
-				tcp.StartTLSProxyServer(ServerConf.TLS.Listen, tlscfg)
-			}()
+		scheme := u.Scheme
+		switch scheme {
+		case "quic":
+			{
+				tlscfg, err := generateTLSConfig(lis.Cert, lis.Key)
+				if nil != err {
+					logger.Error("Failed to create TLS config by cert/key: %s/%s", lis.Cert, lis.Key)
+				} else {
+					go func() {
+						quic.StartQuicProxyServer(u.Host, tlscfg)
+					}()
+				}
+			}
+		case "kcp":
+			{
+				go func() {
+					kcp.StartKCPProxyServer(u.Host, &lis.KCParams)
+				}()
+			}
+		case "tcp":
+			{
+				go func() {
+					tcp.StartTcpProxyServer(u.Host)
+				}()
+			}
+		case "tls":
+			{
+				tlscfg, err := generateTLSConfig(lis.Cert, lis.Key)
+				if nil != err {
+					logger.Error("Failed to create TLS config by cert/key: %s/%s", lis.Cert, lis.Key)
+				} else {
+					go func() {
+						tcp.StartTLSProxyServer(u.Host, tlscfg)
+					}()
+				}
+			}
+		case "http":
+			{
+				go func() {
+					startHTTPProxyServer(u.Host, "", "")
+				}()
+			}
+		case "https":
+			{
+				go func() {
+					startHTTPProxyServer(u.Host, lis.Cert, lis.Key)
+				}()
+			}
+		case "http2":
+			{
+				tlscfg, err := generateTLSConfig(lis.Cert, lis.Key)
+				if nil != err {
+					logger.Error("Failed to create TLS config by cert/key: %s/%s", lis.Cert, lis.Key)
+				} else {
+					go func() {
+						http2.StartHTTTP2ProxyServer(u.Host, tlscfg)
+					}()
+				}
+			}
+		default:
+			logger.Error("Invalid listen scheme in listen url:%s", lis.Listen)
 		}
-
 	}
-	if len(ServerConf.HTTP.Listen) > 0 {
-		go func() {
-			startHTTPProxyServer(ServerConf.HTTP.Listen)
-		}()
-	}
-	if len(ServerConf.TCP.Listen) > 0 {
-		go func() {
-			tcp.StartTcpProxyServer(ServerConf.TCP.Listen)
-		}()
-	}
-	if len(ServerConf.HTTP2.Listen) > 0 {
-		tlscfg, err := generateTLSConfig(ServerConf.HTTP2.Cert, ServerConf.HTTP2.Key)
-		if nil != err {
-			logger.Error("Failed to create TLS config by cert/key: %s/%s", ServerConf.TLS.Cert, ServerConf.TLS.Key)
-		} else {
-			go func() {
-				http2.StartHTTTP2ProxyServer(ServerConf.HTTP2.Listen, tlscfg)
-			}()
-		}
-	}
-
 }

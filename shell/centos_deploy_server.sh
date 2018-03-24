@@ -1,6 +1,6 @@
 #!/bin/bash 
 
-GO_RELEASE_FILE=go1.9.linux-amd64.tar.gz
+GO_RELEASE_FILE=go1.10.linux-amd64.tar.gz
 GO_RELEASE_URL=https://storage.googleapis.com/golang/$GO_RELEASE_FILE
 GSNOVA_SERVICE_DIR=gsnova_server
 

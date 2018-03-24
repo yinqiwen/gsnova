@@ -29,7 +29,7 @@ func stackdumpCallback(w http.ResponseWriter, req *http.Request) {
 	ots.Handle("stackdump", w)
 }
 
-func startHTTPProxyServer(listenAddr string) {
+func startHTTPProxyServer(listenAddr string, cert, key string) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", indexCallback)
 	mux.HandleFunc("/stat", statCallback)
@@ -40,7 +40,13 @@ func startHTTPProxyServer(listenAddr string) {
 	mux.HandleFunc("/http/test", httpChannel.HttpTest)
 
 	logger.Info("Listen on HTTP address:%s", listenAddr)
-	err := http.ListenAndServe(listenAddr, mux)
+	var err error
+	if len(cert) == 0 {
+		err = http.ListenAndServe(listenAddr, mux)
+	} else {
+		err = http.ListenAndServeTLS(listenAddr, cert, key, mux)
+	}
+
 	if nil != err {
 		logger.Error("Listen HTTP server error:%v", err)
 	}

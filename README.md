@@ -56,57 +56,49 @@ There is also prebuilt binary release at [here](https://github.com/yinqiwen/gsno
 ```
 Usage of ./gsnova:
   -admin string
-        Admin listen address
+    	Admin listen address
   -client
-        Launch gsnova as client.
+    	Launch gsnova as client.
   -cmd
-        Launch gsnova  by command line without config file.
+    	Launch gsnova  by command line without config file.
   -cnip string
-        China IP list. (default "./cnipset.txt")
+    	China IP list. (default "./cnipset.txt")
   -conf string
-        Config file of gsnova.
+    	Config file of gsnova.
   -hop value
-        Next proxy hop server to connect for client, eg:wss://xxx.paas.com
+    	Next proxy hop server to connect for client, eg:wss://xxx.paas.com
   -hosts string
-        Hosts file of gsnova client. (default "./hosts.json")
-  -http string
-        Remote HTTP/Websocket proxy server listen address
-  -http2 string
-        Remote HTTP2 proxy server listen address
-  -kcp string
-        Remote KCP proxy server listen address
+    	Hosts file of gsnova client. (default "./hosts.json")
   -key string
-        Cipher key for transmission between local&remote. (default "809240d3a021449f6e67aa73221d42df942a308a")
-  -listen string
-        Local client listen address (default ":48100")
+    	Cipher key for transmission between local&remote. (default "809240d3a021449f6e67aa73221d42df942a308a")
+  -listen value
+    	Listen on address.
   -log string
-        Log file setting (default "color,gsnova.log")
+    	Log file setting (default "color,gsnova.log")
   -pid string
-        PID file (default ".gsnova.pid")
+    	PID file (default ".gsnova.pid")
   -ping_interval int
-        Channel ping interval seconds. (default 30)
-  -quic string
-        Remote QUIC proxy server listen address
+    	Channel ping interval seconds. (default 30)
   -server
-        Launch gsnova as server.
-  -tcp string
-        Remote TCP proxy server listen address
-  -tls string
-        Remote TLS proxy server listen address
+    	Launch gsnova as server.
+  -tls.cert string
+    	TLS Cert file
+  -tls.key string
+    	TLS Key file
   -user string
-        Username for remote server to authorize. (default "gsnova")
+    	Username for remote server to authorize. (default "gsnova")
   -version
-        Print version.
+    	Print version.
   -window string
-        Max mux stream window size, default 512K
+    	Max mux stream window size, default 512K
   -window_refresh string
-        Mux stream window refresh size, default 32K
+    	Mux stream window refresh size, default 32K
 ```
 
 ## Deploy & Run Server
 
 ```shell
-   ./gsnova -cmd -server -tcp :48100 -quic :48100 -tls :48101 -kcp :48101 -http :48102 -http2 :48103  -key 809240d3a021449f6e67aa73221d42df942a308a -user "*"
+   ./gsnova -cmd -server -listen tcp://:48100 -listen quic://:48100 -listen tls://:48101 -listen kcp://:48101 -listen http://:48102 -listen http2://:48103  -key 809240d3a021449f6e67aa73221d42df942a308a -user "*"
 ```
 This would launch a running instance listening at serveral ports with different transport protocol.  
 

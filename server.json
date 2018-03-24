@@ -2,6 +2,7 @@
 	"AdminListen": "127.0.0.1:60000",
 	"DialTimeout": 15,
 	"UDPReadTimeout": 30,
+	"Log": ["server.log"],
 	//cipher config
 	"Cipher":{
 		"Key":"809240d3a021449f6e67aa73221d42df942a308a",
@@ -14,35 +15,33 @@
 		"StreamIdleTimeout":10,
 		"SessionIdleTimeout":300
 	},
-	"TCP":{
-		"Listen":":48100"
-	},
-	"QUIC":{
-		"Listen":":48100",
-		"Key": "",
-		"Cert":""
-	},
-	"HTTP":{
-		"Listen":":48101"
-	},
-	"KCP":{
-		"Listen":":48101",
-		"Params":{
-			"Mode":"fast2"
+	"Server":[
+		{
+			"Listen":"tcp://:48100"
+		},
+		{
+			"Listen":"quic://:48100"
+		},
+		{
+			"Listen":"http://:48101"
+		},
+		{
+			"Listen":"kcp://:48101",
+			"KCParams":{
+				"Mode":"fast2"
+			}
+		},
+		{
+			"Listen":"tls://:48102",
+            "Key": "",
+			"Cert":""
+			///"Key":"/etc/letsencrypt/live/testdomain.tk/privkey.pem",
+	        //"Cert":"/etc/letsencrypt/live/testdomain.tk/fullchain.pem"
+		},
+		{
+			"Listen":"http2//:48103",
+			"Key": "",
+			"Cert":""
 		}
-	},
-	//If u want to listen with TLS, add the key/cert configuration
-    "TLS":{
-       //"Key":"/etc/letsencrypt/live/testdomain.tk/privkey.pem",
-	   //"Cert":"/etc/letsencrypt/live/testdomain.tk/fullchain.pem"
-	   "Listen":":48102",
-       "Key": "",
-       "Cert":""
-	},
-	"HTTP2":{
-		"Listen":":48103",
-		"Key": "",
-		"Cert":""
-	},
-	"Log": ["server.log"]
+	]
 }
