@@ -102,11 +102,6 @@ func main() {
 			logger.Error("Failed to start admin server with reason:%v", err)
 		}
 	}
-	if len(listens) == 0 {
-		logger.Error("At least one -listen argument required.", err)
-		flag.PrintDefaults()
-		return
-	}
 	if runAsClient {
 		options := local.ProxyOptions{
 			Home:  home,
@@ -116,6 +111,11 @@ func main() {
 		if *cmd {
 			if len(hops) == 0 {
 				logger.Error("At least one -hop argument required.", err)
+				flag.PrintDefaults()
+				return
+			}
+			if len(listens) == 0 {
+				logger.Error("At least one -listen argument required.", err)
 				flag.PrintDefaults()
 				return
 			}
@@ -157,6 +157,11 @@ func main() {
 		//run as server
 		remote.InitDefaultConf()
 		if !(*cmd) {
+			if len(listens) == 0 {
+				logger.Error("At least one -listen argument required.", err)
+				flag.PrintDefaults()
+				return
+			}
 			if len(confile) == 0 {
 				confile = "./server.json"
 			}
