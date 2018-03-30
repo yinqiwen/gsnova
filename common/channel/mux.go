@@ -17,6 +17,11 @@ import (
 	"github.com/yinqiwen/pmux"
 )
 
+type DeadLineAccetor interface {
+	SetReadDeadline(t time.Time) error
+	SetWriteDeadline(t time.Time) error
+}
+
 type muxSessionHolder struct {
 	creatTime       time.Time
 	expireTime      time.Time

@@ -16,6 +16,16 @@ type sessionContext struct {
 	activeIOTime time.Time
 }
 
+func isTimeoutErr(err error) bool {
+	if err == pmux.ErrTimeout {
+		return true
+	}
+	if err, ok := err.(net.Error); ok && err.Timeout() {
+		return true
+	}
+	return false
+}
+
 func handleProxyStream(stream mux.MuxStream, auth *mux.AuthRequest, ctx *sessionContext) {
 	creq, err := mux.ReadConnectRequest(stream)
 	if nil != err {
@@ -25,6 +35,10 @@ func handleProxyStream(stream mux.MuxStream, auth *mux.AuthRequest, ctx *session
 	}
 	logger.Debug("[%d]Start handle stream:%v with comprresor:%s", stream.StreamID(), creq, auth.CompressMethod)
 
+	maxIdleTime := time.Duration(defaultMuxConfig.StreamIdleTimeout) * time.Second
+	if maxIdleTime == 0 {
+		maxIdleTime = 10 * time.Second
+	}
 	var c io.ReadWriteCloser
 	dialTimeout := creq.DialTimeout
 	if dialTimeout == 0 {
@@ -39,9 +53,9 @@ func handleProxyStream(stream mux.MuxStream, auth *mux.AuthRequest, ctx *session
 			if creq.ReadTimeout > 0 {
 				//connection need to set read timeout to avoid hang forever
 				readTimeout := time.Duration(creq.ReadTimeout) * time.Millisecond
-				conn.SetReadDeadline(time.Now().Add(readTimeout))
+				maxIdleTime = readTimeout
+				c = conn
 			}
-			c = conn
 		}
 	} else {
 		var nextURL *url.URL
@@ -76,42 +90,32 @@ func handleProxyStream(stream mux.MuxStream, auth *mux.AuthRequest, ctx *session
 	streamReader, streamWriter := mux.GetCompressStreamReaderWriter(stream, auth.CompressMethod)
 	defer c.Close()
 	closeSig := make(chan bool, 2)
+
 	go func() {
 		buf := make([]byte, 128*1024)
-		io.CopyBuffer(c, streamReader, buf)
-		closeSig <- true
-	}()
-	go func() {
-		buf := make([]byte, 128*1024)
-		io.CopyBuffer(streamWriter, c, buf)
-		closeSig <- true
-	}()
-	timeoutTicker := time.NewTicker(2 * time.Second)
-	stopTicker := make(chan bool, 1)
-	go func() {
 		for {
-			maxIdleTime := time.Duration(defaultMuxConfig.StreamIdleTimeout) * time.Second
-			if maxIdleTime == 0 {
-				maxIdleTime = 10 * time.Second
-			}
-			select {
-			case <-timeoutTicker.C:
-				if stream.LatestIOTime().After(ctx.activeIOTime) {
-					ctx.activeIOTime = stream.LatestIOTime()
-				}
-				if time.Now().Sub(stream.LatestIOTime()) > maxIdleTime {
-					c.Close()
-					stream.Close()
-					return
-				}
-			case <-stopTicker:
-				return
+			_, err := io.CopyBuffer(c, streamReader, buf)
+			if isTimeoutErr(err) && time.Now().Sub(stream.LatestIOTime()) < maxIdleTime {
+				continue
 			}
 		}
+		closeSig <- true
+	}()
+	go func() {
+		buf := make([]byte, 128*1024)
+		for {
+			if d, ok := c.(DeadLineAccetor); ok {
+				d.SetReadDeadline(time.Now().Add(maxIdleTime))
+			}
+			_, err := io.CopyBuffer(streamWriter, c, buf)
+			if isTimeoutErr(err) && time.Now().Sub(stream.LatestIOTime()) < maxIdleTime {
+				continue
+			}
+		}
+		closeSig <- true
 	}()
 
 	<-closeSig
-	close(stopTicker)
 
 	if close, ok := streamWriter.(io.Closer); ok {
 		close.Close()

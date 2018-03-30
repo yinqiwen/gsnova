@@ -10,6 +10,7 @@ import (
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/yinqiwen/gotoolkit/gfwlist"
+	"github.com/yinqiwen/gsnova/common"
 	"github.com/yinqiwen/gsnova/common/channel"
 	"github.com/yinqiwen/gsnova/common/dns"
 	"github.com/yinqiwen/gsnova/common/helper"
@@ -163,7 +164,7 @@ func StartProxy() error {
 		<-singalCh
 	}
 
-	logger.Info("Started GSnova %s.", channel.Version)
+	logger.Info("Started GSnova %s.", common.Version)
 
 	go startAdminServer()
 	startLocalServers()
