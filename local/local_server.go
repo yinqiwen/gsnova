@@ -249,13 +249,7 @@ START:
 	closeCh := make(chan int, 1)
 	go func() {
 		buf := make([]byte, 128*1024)
-		for {
-			localConn.SetReadDeadline(time.Now().Add(maxIdleTime))
-			_, err := io.CopyBuffer(localConn, streamReader, buf)
-			if isTimeoutErr(err) && time.Now().Sub(stream.LatestIOTime()) < maxIdleTime {
-				continue
-			}
-		}
+		io.CopyBuffer(localConn, streamReader, buf)
 		closeCh <- 1
 	}()
 
@@ -263,7 +257,14 @@ START:
 
 	if (isSocksProxy || isHttpsProxy || isTransparentProxy) && nil == initialHTTPReq {
 		buf := make([]byte, 128*1024)
-		io.CopyBuffer(streamWriter, bufconn, buf)
+		for {
+			localConn.SetReadDeadline(time.Now().Add(maxIdleTime))
+			_, cerr := io.CopyBuffer(streamWriter, bufconn, buf)
+			if isTimeoutErr(cerr) && time.Now().Sub(stream.LatestIOTime()) < maxIdleTime {
+				continue
+			}
+		}
+
 		if close, ok := streamWriter.(io.Closer); ok {
 			close.Close()
 		}
@@ -281,8 +282,15 @@ START:
 				}
 			}
 			prevReq := proxyReq
-			//localConn.SetReadDeadline(time.Now().Add(5 * time.Second))
-			proxyReq, err = http.ReadRequest(bufconn)
+			for {
+				localConn.SetReadDeadline(time.Now().Add(maxIdleTime))
+				proxyReq, err = http.ReadRequest(bufconn)
+				if isTimeoutErr(err) && time.Now().Sub(stream.LatestIOTime()) < maxIdleTime {
+					continue
+				}
+				break
+			}
+
 			if nil != err {
 				if err, ok := err.(net.Error); ok && err.Timeout() {
 
