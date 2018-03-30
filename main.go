@@ -157,11 +157,6 @@ func main() {
 		//run as server
 		remote.InitDefaultConf()
 		if !(*cmd) {
-			if len(listens) == 0 {
-				logger.Error("At least one -listen argument required.", err)
-				flag.PrintDefaults()
-				return
-			}
 			if len(confile) == 0 {
 				confile = "./server.json"
 			}
@@ -180,6 +175,11 @@ func main() {
 			}
 		}
 		if *cmd {
+			if len(listens) == 0 {
+				logger.Error("At least one -listen argument required.", err)
+				flag.PrintDefaults()
+				return
+			}
 			for _, lis := range listens {
 				var lisCfg remote.ServerListenConfig
 				lisCfg.Listen = lis
