@@ -54,8 +54,8 @@ func handleProxyStream(stream mux.MuxStream, auth *mux.AuthRequest, ctx *session
 				//connection need to set read timeout to avoid hang forever
 				readTimeout := time.Duration(creq.ReadTimeout) * time.Millisecond
 				maxIdleTime = readTimeout
-				c = conn
 			}
+			c = conn
 		}
 	} else {
 		var nextURL *url.URL
@@ -98,6 +98,7 @@ func handleProxyStream(stream mux.MuxStream, auth *mux.AuthRequest, ctx *session
 			if isTimeoutErr(err) && time.Now().Sub(stream.LatestIOTime()) < maxIdleTime {
 				continue
 			}
+			break
 		}
 		closeSig <- true
 	}()

@@ -263,6 +263,7 @@ START:
 			if isTimeoutErr(cerr) && time.Now().Sub(stream.LatestIOTime()) < maxIdleTime {
 				continue
 			}
+			break
 		}
 
 		if close, ok := streamWriter.(io.Closer); ok {
