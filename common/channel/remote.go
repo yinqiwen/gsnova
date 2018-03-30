@@ -18,6 +18,13 @@ type sessionContext struct {
 	activeIOTime time.Time
 	streamCouter int32
 	session      mux.MuxSession
+	closed       bool
+}
+
+func (ctx *sessionContext) close() {
+	ctx.closed = true
+	ctx.session.Close()
+	emptySessions.Delete(ctx)
 }
 
 var emptySessions sync.Map
@@ -31,7 +38,7 @@ func init() {
 					ctx := key.(*sessionContext)
 					ago := time.Now().Sub(ctx.activeIOTime)
 					if ago > time.Duration(defaultMuxConfig.SessionIdleTimeout)*time.Second {
-						ctx.session.Close()
+						ctx.close()
 						logger.Error("Close mux session since it's not active since %v ago.", ago)
 					}
 					return true
@@ -55,7 +62,7 @@ func handleProxyStream(stream mux.MuxStream, auth *mux.AuthRequest, ctx *session
 	atomic.AddInt32(&ctx.streamCouter, 1)
 	emptySessions.Delete(ctx)
 	defer func() {
-		if 0 == atomic.AddInt32(&ctx.streamCouter, -1) {
+		if 0 == atomic.AddInt32(&ctx.streamCouter, -1) && !ctx.closed {
 			emptySessions.Store(ctx, true)
 		}
 	}()
@@ -161,8 +168,7 @@ func ServProxyMuxSession(session mux.MuxSession) error {
 	ctx := &sessionContext{}
 	ctx.activeIOTime = time.Now()
 	ctx.session = session
-	defer session.Close()
-	defer emptySessions.Delete(ctx)
+	defer ctx.close()
 
 	for {
 		stream, err := session.AcceptStream()
