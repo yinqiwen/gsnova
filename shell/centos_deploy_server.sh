@@ -1,8 +1,9 @@
 #!/bin/bash 
 
-GO_RELEASE_FILE=go1.10.linux-amd64.tar.gz
-GO_RELEASE_URL=https://storage.googleapis.com/golang/$GO_RELEASE_FILE
 GSNOVA_SERVICE_DIR=gsnova_server
+GSNOVA_VER=latest
+GSNOVA_FILE=gsnova_linux_amd64-$GSNOVA_VER.tar.bz2
+GSNOVA_RELEASE_URL=https://github.com/yinqiwen/gsnova/releases/download/$GSNOVA_VER/$GSNOVA_FILE    
 
 function  install_dependencies(){
     yum install git python-setuptools -y -q
@@ -17,57 +18,32 @@ function  install_dependencies(){
 }
    
 
-function  install_golang(){
-    if [ -f $GO_RELEASE_FILE ]; then
-        echo "File $GO_RELEASE_FILE exists."
-    else
-       echo "File $GO_RELEASE_FILE does not exist, dowload from $GO_RELEASE_URL"
-       wget $GO_RELEASE_URL
-       if [ $? -ne 0 ]; then
-           echo "Download $GO_RELEASE_FILE failed."
-           exit 1
-        fi
-    fi
 
-    if [ ! -d "go" ]; then
-        tar zxf $GO_RELEASE_FILE
-        if [ $? -ne 0 ]; then
-            echo "Extract $GO_RELEASE_FILE failed."
-            exit 1
-        fi
-    fi
-}
-
-function  env_setting(){
-    export GO_ROOT=$(pwd)/go
-    export PATH=$GO_ROOT/bin:$PATH
-    export GOPATH=$(pwd)/golang_projects
-}
-
-function  build_gsnova_server(){
-    echo ">>>>> Syncing gsnova server code"
-    go get -t -u -v github.com/yinqiwen/gsnova
+function  download_gsnova_server(){
+    mkdir -p $GSNOVA_SERVICE_DIR; cd $GSNOVA_SERVICE_DIR
+    echo ">>>>> Syncing gsnova server"
+    wget $GSNOVA_RELEASE_URL -O $GSNOVA_FILE
     if [ $? -ne 0 ]; then
        echo "Sync gsnova server code failed."
        return
     fi
-    echo "<<<<< Done syncing gsnova server code"
+    echo "<<<<< Done syncing gsnova server"
     echo ">>>>> Building gsnova server"
-    mkdir -p $GSNOVA_SERVICE_DIR; cd $GSNOVA_SERVICE_DIR
-    go build  -v github.com/yinqiwen/gsnova
-    if [ ! -f server.json ]; then
-        cp $GOPATH/src/github.com/yinqiwen/gsnova/server.json ./
+    
+    tar jxf $GSNOVA_FILE
+    if [ ! -f myserver.json ]; then
+        cp ./server.json ./myserver.json
     fi
     
     echo "<<<<< Done building gsnova server"
-    echo "Please edit $GSNOVA_SERVICE_DIR/server.json before start gsnova_server."
+    echo "Please edit $GSNOVA_SERVICE_DIR/myserver.json before start gsnova_server."
     cd ..
 }
 
 function generate_supervise_conf(){
     cd $GSNOVA_SERVICE_DIR
     echo "[program:gsnova_server]
-command=$(pwd)/gsnova -server -conf $(pwd)/server.json
+command=$(pwd)/gsnova -server -conf $(pwd)/myserver.json -admin :60000
 autostart=true
 autorestart=true
 startsecs=3
@@ -82,9 +58,9 @@ stdout_logfile=$(pwd)/gsnova_server.log" > gsnova_server_supervise.conf
 }
 
 install_dependencies
-install_golang
-env_setting
-build_gsnova_server
+#install_golang
+#env_setting
+download_gsnova_server
 generate_supervise_conf
 
 
