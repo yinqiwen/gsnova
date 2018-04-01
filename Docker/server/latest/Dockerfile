@@ -12,6 +12,6 @@ RUN apk add --update git && \
 #WORKDIR /go/bin
 # Run the outyet command by default when the container starts.
 #ENTRYPOINT ["/go/bin/vps"]
-CMD ["/go/bin/gsnova", "-cmd" ,"-server", "-key","809240d3a021449f6e67aa73221d42df942a308a", "-tcp", ":9443", "-quic", ":9443", "-http", ":9444", "-kcp", ":9444", "-http2", ":9445", "-tls", ":9446", "-log", "console"]
+CMD ["/go/bin/gsnova", "-cmd" ,"-server", "-key","809240d3a021449f6e67aa73221d42df942a308a", "-listen", "tcp://:9443", "-listen", "quic://:9443", "-listen", "http://:9444", "-listen", "kcp://:9444", "-listen", "http2://:9445", "-listen", "tls://:9446", "-log", "console"]
 # Document that the service listens on port 9443.
 EXPOSE 9443 9444 9445 9446
