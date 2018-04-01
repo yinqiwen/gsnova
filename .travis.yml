@@ -9,10 +9,9 @@ go:
 
 env:
   global:
-    - secure: "e7IjyptwfaNmHUYAwTZbLjup0FVD6wVOQIggLSOcqYyrbSYKepVJdbvOUfWqdZ3tUWtpHb5H/2a8RkizXHH3mBi4K5/9wlByTGmiKKA05dYbDod3KpiLbPnHK9UjRQydD6wpYJcK0/yguXmFDqYoRIFwmxeqNJ78OydIo7BOxGY=" 
-    - secure: "LEmUhd0lO5BPox3+IdBw/u45Z3TtY0arkef6v7q27qcEs3a2p+SuVVElHx4UcU8/AhN3D9jlskB0UZIgZRMfB3xaPCBVvjHh8UwQ13WqrR7524HuU8kin/4vLDdoIEvs2hQaj58slzmdyddKG2dkgCwkpK/J1DBfKHttbYE+ias=" 
-    - secure: "MO3eA15Jp2CkN0SiSI5Oo32wioCcVbaWwpxBCgQrkIyV85yakPzhoWlQWvh90QXEU9bBDKlQiTOXfo11G0as7byU8typa5UI7uLG1sGD9l2bBZbFuqorMrvHl5PeOzfjAQuUnn2KNP5RccuaCn+n65ZImhj8oTFrYGmb1VTdgg0=" 
-    - secure: "J+GWt852LoGcez5tyuKSZF85IjoV4T/sIXn+0TuVznh8VHhIpjw4wqBDBbvyjeNgree8QYtJ6CR4aVh6T2JnCw6rsFyMoHEjBaRriIYzPBHtKQhvVyceFFsE6Sgn08ldH/x0T4V53TEo+1fG/wTM32OqTCZwnWND1ZvjHFxWxvw="
+    - secure: "lr1A72WQgvfEVt+QQ58+so6J8c52hs31gHW+Ekvz+vqpQRSGEdc28y/tEZ8zPGOLGXj08FMTUXgTn8hTy/8GTHNBSqxJONmWGjkooLtaaIHTbMEsCTb95ZUm+okUlmw1NKu0MDxHi+QQomtrXxoxh2Lfiy5Owd8dORQwKd2eF6g="
+    - secure: "YAsho1KEQV/OnRzjWgAOEO9Qko7JOifiy+odOXMcTiCU2Pixmjz5uRQndf82ktaI5ncRFz4fRIgRD3dBauPulAQmJo+sVljmPeV6m0L7PiqcwR0ml8E7BNe2ROm/RXJZxuGw5F0ci3wsw/UJg+3+kwtjUXQr8Bcr0y7x+XrxANw="
+    - secure: "MGd/VnfZYb8F9W9BAWV0n9qoyb7h5uieQne53vw0d/uSA9OtcigZ4/YC0gJ2du+PjnqkNUV4R3WGmMNH4reU0ODs11TDzH01CYQkWCwKwz79tLFs1/tvv0CxbFMeluBDwxc8TGEXLsz6GqIiyBxPCjrjhC7oW5scvIANg0WMlBM="
 
 install:
 - go get github.com/tools/godep
@@ -77,13 +76,13 @@ deploy:
     skip_cleanup: true
     on:
       tags: true
-  # - provider: heroku
-  #   api_key:
-  #     secure: "LQZx6US2jzCMT3VsZHBKT3w4vq3dA1iJZ0591pYkUtvtChIBWnYe9F7rn4XInkyCSKRLBBEkQvu7A9qED0KOi0DlsmIOUgZ5d+qMicWeU0OvUNeiQEBj2bX8oa5mYRW3hBznpkLCZBwnXJLrv6A6LpNQYQ1ZvR19rtmTmXAku+s="
-  #   app: $HEROKU_APP
-  #   skip_cleanup: true
-  #   on:
-  #     tags: true
-  #     condition: $TRAVIS_TAG = 'latest'
+  - provider: heroku
+    api_key:
+      secure: "PsICvdYk4eDTxFyS1j/DPAF6H7GCsNpkWcZHyFBROh60gxXGU+XHdUTQrrFHSPzLi6b8mDe4NOCtdrfA1xuluv6IbdbGQB+gM2lvRKse9x8sojh57rqvVAcaeCc/NsY7W/eAnk8Rd8TcW5nqrEg3qpUbl/Vio74ZQW/ZY+P0ZaQ="
+    app: $HEROKU_APP
+    skip_cleanup: true
+    on:
+      tags: true
+      condition: $TRAVIS_TAG = 'latest'
        
 
