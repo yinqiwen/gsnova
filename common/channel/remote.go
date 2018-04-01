@@ -129,30 +129,27 @@ func handleProxyStream(stream mux.MuxStream, auth *mux.AuthRequest, ctx *session
 	}
 	streamReader, streamWriter := mux.GetCompressStreamReaderWriter(stream, auth.CompressMethod)
 	defer c.Close()
-	closeSig := make(chan bool, 2)
+	closeSig := make(chan bool, 1)
 
 	go func() {
 		buf := make([]byte, 128*1024)
 		io.CopyBuffer(c, streamReader, buf)
 		closeSig <- true
 	}()
-	go func() {
-		buf := make([]byte, 128*1024)
-		for {
-			if d, ok := c.(DeadLineAccetor); ok {
-				d.SetReadDeadline(time.Now().Add(maxIdleTime))
-			}
-			_, err := io.CopyBuffer(streamWriter, c, buf)
-			if isTimeoutErr(err) && time.Now().Sub(stream.LatestIOTime()) < maxIdleTime {
-				continue
-			}
-			break
+	buf := make([]byte, 128*1024)
+	for {
+		if d, ok := c.(DeadLineAccetor); ok {
+			d.SetReadDeadline(time.Now().Add(maxIdleTime))
 		}
-		closeSig <- true
-	}()
-
+		_, err := io.CopyBuffer(streamWriter, c, buf)
+		if isTimeoutErr(err) && time.Now().Sub(stream.LatestIOTime()) < maxIdleTime {
+			continue
+		}
+		c.Close()
+		stream.Close()
+		break
+	}
 	<-closeSig
-
 	if close, ok := streamWriter.(io.Closer); ok {
 		close.Close()
 	}
