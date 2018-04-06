@@ -223,7 +223,9 @@ func (s *ProxyMuxSession) OpenStream() (MuxStream, error) {
 	if nil != err {
 		return nil, err
 	}
-	return &ProxyMuxStream{TimeoutReadWriteCloser: ss}, nil
+	stream := &ProxyMuxStream{TimeoutReadWriteCloser: ss}
+	ss.IOCallback = stream
+	return stream, nil
 }
 
 func (s *ProxyMuxSession) AcceptStream() (MuxStream, error) {
