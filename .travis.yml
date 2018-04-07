@@ -9,9 +9,9 @@ go:
 
 env:
   global:
-    - secure: "lr1A72WQgvfEVt+QQ58+so6J8c52hs31gHW+Ekvz+vqpQRSGEdc28y/tEZ8zPGOLGXj08FMTUXgTn8hTy/8GTHNBSqxJONmWGjkooLtaaIHTbMEsCTb95ZUm+okUlmw1NKu0MDxHi+QQomtrXxoxh2Lfiy5Owd8dORQwKd2eF6g="
-    - secure: "YAsho1KEQV/OnRzjWgAOEO9Qko7JOifiy+odOXMcTiCU2Pixmjz5uRQndf82ktaI5ncRFz4fRIgRD3dBauPulAQmJo+sVljmPeV6m0L7PiqcwR0ml8E7BNe2ROm/RXJZxuGw5F0ci3wsw/UJg+3+kwtjUXQr8Bcr0y7x+XrxANw="
-    - secure: "MGd/VnfZYb8F9W9BAWV0n9qoyb7h5uieQne53vw0d/uSA9OtcigZ4/YC0gJ2du+PjnqkNUV4R3WGmMNH4reU0ODs11TDzH01CYQkWCwKwz79tLFs1/tvv0CxbFMeluBDwxc8TGEXLsz6GqIiyBxPCjrjhC7oW5scvIANg0WMlBM="
+    - secure: "oQ5ZkuQJ3z/14dLFPhWqGvuTEY0CNydGMH495br71LQVkJlsM96Re5gmFXhSftkdAaMgcRRkDCPVxjOIl0NogLOt1tVT8w7byKEI8i7GkacQavrsW0ORiFkt4FbI+vwS0zkamG+M/eU0RkXl482/6QRs6QyvF6vEbFDogEOYw9M"
+    - secure: "H+lBfJo6b7KXFvM/PT6K90fcHgpjM1czTvG8zb+waeWfKSxO1zUFzhzSt2IJo0Je5hL2djUM7iME9xsIUNyY4Q4y5tjUavBuc16F+oSAeMNJuBg+V+JHIWCvEMs/CtmPGqTKm6ZNn34HN62j/oFGqZWmgXPbmN5IyFfJLIwllDc="
+    - secure: "bRj17E9wb/iElTncxbIUO3ph3vbSXsTeXL/+nGQM6djDDDwzElieEs92ZeatGS0aET7xgXcEYALCEdUsve8giNRBSN3p6Zwg3OP2fT4E9fV778rc+0lpH/goVphUzRRn5bsbmM6epVBO/XvhGQMWZ2RCWsE3mtFt+EoCywIRhcs="
 
 install:
 - go get github.com/tools/godep
@@ -68,14 +68,11 @@ deploy:
     on:
       tags: true
       repo: yinqiwen/gsnova
-  # - provider: script
-  #   script: 
-  #   - curl -O -L https://github.com/grammarly/rocker/releases/download/1.3.1/rocker-1.3.1-linux_amd64.tar.gz
-  #   - tar zxf rocker-1.3.1-linux_amd64.tar.gz
-  #   - ./rocker build -f Docker/server/Rockerfile --auth $DOCKER_USER:$DOCKER_PASS --push -var Version=${TRAVIS_TAG}
-  #   skip_cleanup: true
-  #   on:
-  #     tags: true
+  - provider: script
+    script: bash ./Docker/server/docker_push.sh
+    skip_cleanup: true
+    on:
+      tags: true
   - provider: heroku
     api_key:
       secure: "PsICvdYk4eDTxFyS1j/DPAF6H7GCsNpkWcZHyFBROh60gxXGU+XHdUTQrrFHSPzLi6b8mDe4NOCtdrfA1xuluv6IbdbGQB+gM2lvRKse9x8sojh57rqvVAcaeCc/NsY7W/eAnk8Rd8TcW5nqrEg3qpUbl/Vio74ZQW/ZY+P0ZaQ="
