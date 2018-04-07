@@ -1,3 +1,5 @@
+// +build !mips,!mipsle
+
 package helper
 
 import (
@@ -47,7 +49,7 @@ func CreateRootCA(dir string) error {
 	return nil
 }
 
-func GetCAByDomain(domain string) (*certificate.Bundle, error) {
+func getCAByDomain(domain string) (*certificate.Bundle, error) {
 	if nil == pkiStore {
 		return nil, ErrPKIStoreNotInit
 	}
@@ -89,7 +91,7 @@ func TLSConfig(domain string) (*tls.Config, error) {
 	if strings.Contains(domain, ":") {
 		domain = strings.Split(domain, ":")[0]
 	}
-	bundle, err := GetCAByDomain(domain)
+	bundle, err := getCAByDomain(domain)
 	if nil != err {
 		return nil, err
 	}
