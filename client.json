@@ -52,8 +52,13 @@
 	"Proxy":[
 		{
 			"Local": ":48100",
-			//used to indicate if it's serving as a transparent proxy(work with iptables)
-			"Transparent": false,
+			//used to indicate if it's a MITM proxy server, which would use generated cert for TLS connections
+			"MITM": false,  
+			"HTTPDump":{
+				"Dump":"./httpdump-48100.txt",
+				"Domain":[],  
+				"ExcludeBody":["text/css"]
+			},  
 			"PAC":[
 				//{"Protocol":["dns", "udp"],"Remote":"direct"},
 				// Support rules 'IsCNIP/InHosts/BlockedByGFW'

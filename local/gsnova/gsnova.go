@@ -2,6 +2,7 @@ package gsnova
 
 import (
 	_ "github.com/yinqiwen/gsnova/common/channel/common"
+	"github.com/yinqiwen/gsnova/common/helper"
 	"github.com/yinqiwen/gsnova/common/netx"
 	"github.com/yinqiwen/gsnova/local"
 )
@@ -37,4 +38,8 @@ func StopLocalProxy() error {
 //SyncConfig sync config files from running gsnova instance
 func SyncConfig(addr string, localDir string) (bool, error) {
 	return local.SyncConfig(addr, localDir)
+}
+
+func CreateMITMCA(dir string) error {
+	return helper.CreateRootCA(dir + "/MITM")
 }

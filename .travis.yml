@@ -76,13 +76,13 @@ deploy:
     skip_cleanup: true
     on:
       tags: true
-  - provider: heroku
-    api_key:
-      secure: "PsICvdYk4eDTxFyS1j/DPAF6H7GCsNpkWcZHyFBROh60gxXGU+XHdUTQrrFHSPzLi6b8mDe4NOCtdrfA1xuluv6IbdbGQB+gM2lvRKse9x8sojh57rqvVAcaeCc/NsY7W/eAnk8Rd8TcW5nqrEg3qpUbl/Vio74ZQW/ZY+P0ZaQ="
-    app: $HEROKU_APP
-    skip_cleanup: true
-    on:
-      tags: true
-      condition: $TRAVIS_TAG = 'latest'
+  # - provider: heroku
+  #   api_key:
+  #     secure: "PsICvdYk4eDTxFyS1j/DPAF6H7GCsNpkWcZHyFBROh60gxXGU+XHdUTQrrFHSPzLi6b8mDe4NOCtdrfA1xuluv6IbdbGQB+gM2lvRKse9x8sojh57rqvVAcaeCc/NsY7W/eAnk8Rd8TcW5nqrEg3qpUbl/Vio74ZQW/ZY+P0ZaQ="
+  #   app: $HEROKU_APP
+  #   skip_cleanup: true
+  #   on:
+  #     tags: true
+  #     condition: $TRAVIS_TAG = 'latest'
        
 

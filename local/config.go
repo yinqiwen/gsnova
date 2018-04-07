@@ -169,11 +169,28 @@ func (pac *PACConfig) Match(protocol string, ip string, req *http.Request) bool 
 	return MatchPatterns(host, pac.Host) && MatchPatterns(req.Method, pac.Method) && MatchPatterns(req.URL.String(), pac.URL)
 }
 
+type HTTPDumpConfig struct {
+	Dump        string
+	Domain      []string
+	ExcludeBody []string
+	IncludeBody []string
+}
+
+func (dump *HTTPDumpConfig) MatchDomain(host string) bool {
+	for _, dm := range dump.Domain {
+		matched, _ := filepath.Match(dm, host)
+		if matched {
+			return true
+		}
+	}
+	return false
+}
+
 type ProxyConfig struct {
-	Local string
-	//DNSReadMSTimeout int
-	//UDPReadMSTimeout int
-	PAC []PACConfig
+	Local    string
+	MITM     bool //Man-in-the-middle
+	HTTPDump HTTPDumpConfig
+	PAC      []PACConfig
 }
 
 func (cfg *ProxyConfig) getProxyChannelByHost(proto string, host string) string {

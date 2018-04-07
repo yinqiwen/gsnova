@@ -3,9 +3,15 @@ package helper
 import (
 	"bytes"
 	"io"
+	"log"
 	"net"
+	"net/http"
 	"time"
 )
+
+type PeekReader interface {
+	Peek(n int) ([]byte, error)
+}
 
 type BufferChunkReader struct {
 	io.Reader
@@ -95,4 +101,20 @@ func (s *TimeoutReadWriteCloser) Write(p []byte) (n int, err error) {
 	case <-timeout:
 		return 0, ErrWriteTimeout
 	}
+}
+
+type HttpPostWriter struct {
+	URL string
+}
+
+func (s *HttpPostWriter) Write(p []byte) (n int, err error) {
+	res, err := http.Post(s.URL, "text/plain", bytes.NewBuffer(p))
+	if nil != err {
+		log.Printf("Post error:%v", err)
+		return 0, err
+	}
+	if nil != res.Body {
+		res.Body.Close()
+	}
+	return len(p), nil
 }

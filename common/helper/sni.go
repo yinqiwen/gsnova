@@ -1,7 +1,6 @@
 package helper
 
 import (
-	"bufio"
 	"errors"
 
 	"github.com/yinqiwen/gsnova/common/logger"
@@ -11,7 +10,7 @@ var ErrTLSIncomplete = errors.New("TLS header incomplete")
 var ErrNoSNI = errors.New("No SNI in protocol")
 var ErrTLSClientHello = errors.New("Invalid tls client hello")
 
-func PeekTLSServerName(reader *bufio.Reader) (string, error) {
+func PeekTLSServerName(reader PeekReader) (string, error) {
 	tlsHederLen := 5
 	hbuf, err := reader.Peek(tlsHederLen)
 	if nil != err {

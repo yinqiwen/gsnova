@@ -46,7 +46,7 @@ func main() {
 		return
 	}
 	//common options
-	admin := flag.String("admin", "", "Admin listen address")
+	otsListen := flag.String("ots", "", "Online trouble shooting listen address")
 	version := flag.Bool("version", false, "Print version.")
 	cmd := flag.Bool("cmd", false, "Launch gsnova by command line without config file.")
 	isClient := flag.Bool("client", false, "Launch gsnova as client.")
@@ -61,12 +61,16 @@ func main() {
 	user := flag.String("user", "gsnova", "Username for remote server to authorize.")
 
 	//client options
+	admin := flag.String("admin", "", "Client Admin listen address")
 	cnip := flag.String("cnip", "./cnipset.txt", "China IP list.")
+	mitm := flag.Bool("mitm", false, "Launch gsnova as a MITM Proxy")
+	httpDumpDest := flag.String("httpdump.dst", "", "HTTP Dump destination file or http url")
+	var httpDumpFilters channel.HopServers
+	flag.Var(&httpDumpFilters, "httpdump.filter", "HTTP Dump Domain Filter, eg:*.google.com")
 	var hops channel.HopServers
 	home, _ := filepath.Split(path)
 	hosts := flag.String("hosts", "./hosts.json", "Hosts file of gsnova client.")
-	//listen := flag.String("listen", ":48100", "Local client listen address")
-	flag.Var(&hops, "hop", "Next proxy hop server to connect for client, eg:wss://xxx.paas.com")
+	flag.Var(&hops, "remote", "Next remote proxy hop server to connect for client, eg:wss://xxx.paas.com")
 
 	//client or server listen
 	var listens channel.HopServers
@@ -96,8 +100,8 @@ func main() {
 		return
 	}
 
-	if len(*admin) > 0 {
-		err := ots.StartTroubleShootingServer(*admin)
+	if len(*otsListen) > 0 {
+		err := ots.StartTroubleShootingServer(*otsListen)
 		if nil != err {
 			logger.Error("Failed to start admin server with reason:%v", err)
 		}
@@ -119,6 +123,11 @@ func main() {
 				flag.PrintDefaults()
 				return
 			}
+			local.GConf.Admin.Listen = *admin
+			channelName := "default"
+			if strings.EqualFold(hops[0], channel.DirectChannelName) {
+				channelName = channel.DirectChannelName
+			}
 			local.GConf.Mux.MaxStreamWindow = *window
 			local.GConf.Mux.StreamMinRefresh = *windowRefresh
 			local.GConf.Cipher.Key = *key
@@ -127,19 +136,25 @@ func main() {
 			local.GConf.Log = strings.Split(*log, ",")
 			for _, lis := range listens {
 				proxyConf := local.ProxyConfig{}
+				proxyConf.MITM = *mitm
 				proxyConf.Local = lis
-				proxyConf.PAC = []local.PACConfig{{Remote: "default"}}
+				proxyConf.HTTPDump.Dump = *httpDumpDest
+				proxyConf.HTTPDump.Domain = httpDumpFilters
+				proxyConf.PAC = []local.PACConfig{{Remote: channelName}}
 				local.GConf.Proxy = append(local.GConf.Proxy, proxyConf)
 			}
-			ch := channel.ProxyChannelConfig{}
-			ch.Enable = true
-			ch.Name = "default"
-			ch.ConnsPerServer = 3
-			ch.HeartBeatPeriod = *pingInterval
-			ch.ServerList = []string{hops[0]}
-			ch.Hops = hops[1:]
 
-			local.GConf.Channel = []channel.ProxyChannelConfig{ch}
+			if !strings.EqualFold(hops[0], channel.DirectChannelName) {
+				ch := channel.ProxyChannelConfig{}
+				ch.Enable = true
+				ch.Name = "default"
+				ch.ConnsPerServer = 3
+				ch.HeartBeatPeriod = *pingInterval
+				ch.ServerList = []string{hops[0]}
+				ch.Hops = hops[1:]
+				local.GConf.Channel = []channel.ProxyChannelConfig{ch}
+			}
+
 			options.WatchConf = false
 			err = local.Start(options)
 		} else {

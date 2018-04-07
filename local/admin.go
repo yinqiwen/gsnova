@@ -3,6 +3,7 @@ package local
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"net"
@@ -11,12 +12,15 @@ import (
 	"os"
 	"time"
 
+	"github.com/yinqiwen/gotoolkit/iotools"
 	"github.com/yinqiwen/gotoolkit/ots"
-	"github.com/yinqiwen/gsnova/common"
 	"github.com/yinqiwen/gsnova/common/channel"
 	"github.com/yinqiwen/gsnova/common/helper"
+	"github.com/yinqiwen/gsnova/common/logger"
 	"github.com/yinqiwen/gsnova/common/netx"
 )
+
+var httpDumpLog *iotools.RotateFile
 
 func getConfigList(w http.ResponseWriter, r *http.Request) {
 	var confs []string
@@ -33,7 +37,7 @@ func getConfigList(w http.ResponseWriter, r *http.Request) {
 
 func statCallback(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(200)
-	fmt.Fprintf(w, "Version: %s\n", common.Version)
+	fmt.Fprintf(w, "Version: %s\n", channel.Version)
 	//fmt.Fprintf(w, "NumSession: %d\n", getProxySessionSize())
 	ots.Handle("stat", w)
 	fmt.Fprintf(w, "RunningProxyStreamNum: %d\n", runningProxyStreamCount)
@@ -52,12 +56,21 @@ func gcCallback(w http.ResponseWriter, req *http.Request) {
 	ots.Handle("gc", w)
 }
 
+func httpDumpCallback(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(200)
+	if nil != httpDumpLog {
+		io.Copy(httpDumpLog, r.Body)
+	} else {
+		r.Body.Close()
+	}
+}
+
 func startAdminServer() {
 	if len(GConf.Admin.Listen) == 0 {
 		return
 	}
 	if len(GConf.Admin.ConfigDir) == 0 {
-		log.Printf("[WARN]The ConfigDir's Dir is empty, use current dir instead")
+		logger.Error("[WARN]The ConfigDir's Dir is empty, use current dir instead")
 		GConf.Admin.ConfigDir = "./"
 	}
 	if len(GConf.Admin.BroadcastAddr) > 0 {
@@ -72,7 +85,7 @@ func startAdminServer() {
 					c, err = net.DialUDP("udp", nil, addr)
 				}
 				if err != nil {
-					log.Printf("Failed to resolve multicast addr.")
+					logger.Error("Failed to resolve multicast addr.")
 				} else {
 					for _, ip := range localIP {
 						c.Write([]byte(net.JoinHostPort(ip, adminPort)))
@@ -81,6 +94,13 @@ func startAdminServer() {
 			}
 		}()
 	}
+	httpDumpLog = &iotools.RotateFile{
+		Path:            proxyHome + "httpdump.log",
+		MaxBackupIndex:  2,
+		MaxFileSize:     1024 * 1024,
+		SyncBytesPeriod: 1024 * 1024,
+	}
+
 	mux := http.NewServeMux()
 	fs := http.FileServer(http.Dir(GConf.Admin.ConfigDir))
 	mux.Handle("/", fs)
@@ -89,9 +109,10 @@ func startAdminServer() {
 	mux.HandleFunc("/stackdump", stackdumpCallback)
 	mux.HandleFunc("/gc", gcCallback)
 	mux.HandleFunc("/memdump", memdumpCallback)
+	mux.HandleFunc("/httpdump", httpDumpCallback)
 	err := http.ListenAndServe(GConf.Admin.Listen, mux)
 	if nil != err {
-		log.Printf("[ERROR]Failed to start config store server:%v", err)
+		logger.Error("Failed to start config store server:%v", err)
 	}
 }
 

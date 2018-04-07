@@ -1,7 +1,7 @@
 package local
 
 import (
-	"bufio"
+	"crypto/tls"
 	"fmt"
 	"io"
 	"net"
@@ -13,6 +13,7 @@ import (
 
 	"github.com/yinqiwen/gsnova/common/channel"
 	"github.com/yinqiwen/gsnova/common/dns"
+	"github.com/yinqiwen/gsnova/common/dump"
 	"github.com/yinqiwen/gsnova/common/helper"
 	"github.com/yinqiwen/gsnova/common/hosts"
 	"github.com/yinqiwen/gsnova/common/logger"
@@ -45,18 +46,31 @@ func serveProxyConn(conn net.Conn, remoteHost, remotePort string, proxy *ProxyCo
 	protocol := "tcp"
 	localConn := conn
 	atomic.AddInt64(&runningProxyStreamCount, 1)
-	//runningProxyConns.Store(conn, true)
 	defer localConn.Close()
 	defer atomic.AddInt64(&runningProxyStreamCount, -1)
-	//defer runningProxyConns.Delete(conn)
 
 	isSocksProxy := false
 	isHttpsProxy := false
 	isHttp11Proto := false
+	mitmEnabled := false
 	isTransparentProxy := len(remoteHost) > 0
 	var initialHTTPReq *http.Request
 
-	var bufconn *bufio.Reader
+	var bufconn *helper.BufConn
+
+	buildMITMConn := func() error {
+		tlsCfg, err := helper.TLSConfig(remoteHost)
+		if nil != err {
+			logger.Error("Failed to get MITM TLS config for %s  with reason:%v", remoteHost, err)
+			return err
+		}
+		tlsConn := tls.Server(bufconn, tlsCfg)
+		localConn = tlsConn
+		bufconn = helper.NewBufConn(localConn, nil)
+		mitmEnabled = true
+		return nil
+	}
+
 	if !isTransparentProxy {
 		socksConn, sbufconn, err := socks.NewSocksConn(conn)
 		if nil == err {
@@ -76,18 +90,20 @@ func serveProxyConn(conn net.Conn, remoteHost, remotePort string, proxy *ProxyCo
 				logger.Error("Invalid socks target addresss:%s with reason %v", socksConn.Req.Target, err)
 				return
 			}
-			bufconn = sbufconn
-		} else {
+		} else { //not socks proxy
 			if nil == sbufconn {
 				localConn.Close()
 				return
 			}
-			bufconn = sbufconn
+			if sbufconn.Buffered() > 0 {
+				bufconn = helper.NewBufConn(conn, sbufconn)
+			}
 		}
 	}
 
 	if nil == bufconn {
-		bufconn = bufio.NewReader(localConn)
+		//bufconn = bufio.NewReader(localConn)
+		bufconn = helper.NewBufConn(conn, nil)
 	}
 
 	trySniffDomain := false
@@ -97,6 +113,7 @@ func serveProxyConn(conn net.Conn, remoteHost, remotePort string, proxy *ProxyCo
 	}
 
 	//1. sniff SNI first
+	var sniffedSNI string
 	if (isSocksProxy || isTransparentProxy) && trySniffDomain {
 		if remotePort == "80" {
 			conn.SetReadDeadline(time.Now().Add(10 * time.Millisecond))
@@ -118,6 +135,16 @@ func serveProxyConn(conn net.Conn, remoteHost, remotePort string, proxy *ProxyCo
 			logger.Debug("Sniffed SNI:%s:%s for IP:%s:%s", sni, remotePort, remoteHost, remotePort)
 			remoteHost = sni
 			trySniffDomain = false
+			sniffedSNI = sni
+		}
+	}
+
+	if proxy.MITM {
+		if len(sniffedSNI) > 0 || (isSocksProxy && !trySniffDomain && remotePort == "443") {
+			err := buildMITMConn()
+			if nil != err {
+				return
+			}
 		}
 	}
 
@@ -160,7 +187,7 @@ func serveProxyConn(conn net.Conn, remoteHost, remotePort string, proxy *ProxyCo
 		}
 		//log.Printf("[%d]]Method:%s", sid, method)
 		if isHttp11Proto {
-			initialHTTPReq, err = http.ReadRequest(bufconn)
+			initialHTTPReq, err = http.ReadRequest(bufconn.BR)
 			if nil != err {
 				logger.Error("Read first request failed from proxy connection for reason:%v", err)
 				return
@@ -181,6 +208,12 @@ func serveProxyConn(conn net.Conn, remoteHost, remotePort string, proxy *ProxyCo
 					localConn.Write([]byte("HTTP/1.0 200 Connection established\r\n\r\n"))
 					isHttpsProxy = true
 					initialHTTPReq = nil
+					if proxy.MITM {
+						err := buildMITMConn()
+						if nil != err {
+							return
+						}
+					}
 				}
 			} else {
 				protocol = "http"
@@ -235,7 +268,35 @@ START:
 	//clear read timeout
 	var zero time.Time
 	localConn.SetReadDeadline(zero)
-	streamReader, streamWriter := mux.GetCompressStreamReaderWriter(stream, conf.Compressor)
+	var streamReader io.Reader
+	var streamWriter io.Writer
+	if mitmEnabled {
+		streamConn := &mux.MuxStreamConn{
+			MuxStream: stream,
+		}
+		tlcClientCfg := &tls.Config{
+			InsecureSkipVerify: true,
+		}
+		tlsClient := tls.Client(streamConn, tlcClientCfg)
+		streamReader, streamWriter = mux.GetCompressStreamReaderWriter(tlsClient, conf.Compressor)
+	} else {
+		streamReader, streamWriter = mux.GetCompressStreamReaderWriter(stream, conf.Compressor)
+	}
+
+	if proxy.HTTPDump.MatchDomain(remoteHost) {
+		_, isTLSConn := localConn.(*tls.Conn)
+		options := &dump.HttpDumpOptions{
+			IsTLS:       isTLSConn,
+			Destination: proxy.HTTPDump.Dump,
+			ExcludeBody: proxy.HTTPDump.ExcludeBody,
+			IncludeBody: proxy.HTTPDump.IncludeBody,
+		}
+
+		dumpReadWriter := dump.NewHttpDumpReadWriter(streamReader, streamWriter, options)
+		streamReader = dumpReadWriter
+		streamWriter = dumpReadWriter
+		defer dumpReadWriter.Close()
+	}
 
 	streamCtx := &proxyStreamContext{}
 	streamCtx.stream = stream
@@ -263,6 +324,7 @@ START:
 			if isTimeoutErr(cerr) && time.Now().Sub(stream.LatestIOTime()) < maxIdleTime {
 				continue
 			}
+			//logger.Error("###%s %v after %v", remoteHost, cerr, time.Now().Sub(stream.LatestIOTime()))
 			break
 		}
 
@@ -285,13 +347,12 @@ START:
 			prevReq := proxyReq
 			for {
 				localConn.SetReadDeadline(time.Now().Add(maxIdleTime))
-				proxyReq, err = http.ReadRequest(bufconn)
+				proxyReq, err = http.ReadRequest(bufconn.BR)
 				if isTimeoutErr(err) && time.Now().Sub(stream.LatestIOTime()) < maxIdleTime {
 					continue
 				}
 				break
 			}
-
 			if nil != err {
 				if err, ok := err.(net.Error); ok && err.Timeout() {
 
@@ -386,7 +447,7 @@ func stopLocalServers() {
 	//closeAllProxySession()
 	closeAllUDPSession()
 	activeStreams.Range(func(key, value interface{}) bool {
-		ctx := key.(proxyStreamContext)
+		ctx := key.(*proxyStreamContext)
 		if nil != ctx.c {
 			ctx.c.Close()
 		}
