@@ -263,6 +263,7 @@ GSnova support more than ONE remote server as the next hops, just add moren `-re
 GSnova support running the client as a MITM proxy to capture HTTP(S) packets for web debuging. 
 ```shell
    ./gsnova -cmd -client -listen :48101 -remote direct -mitm -httpdump.dst ./httpdump.log -httpdump.filter "*.google.com" -httpdump.filter "*.facebook.com"
+```
 
 ## Mobile Client(Android)
 The client side can be compiled to android library by `gomobile`, eg:
