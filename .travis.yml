@@ -68,21 +68,21 @@ deploy:
     on:
       tags: true
       repo: yinqiwen/gsnova
-  - provider: script
-    script: 
-    - curl -O -L https://github.com/grammarly/rocker/releases/download/1.3.1/rocker-1.3.1-linux_amd64.tar.gz
-    - tar zxf rocker-1.3.1-linux_amd64.tar.gz
-    - ./rocker build -f Docker/server/Rockerfile --auth $DOCKER_USER:$DOCKER_PASS --push -var Version=${TRAVIS_TAG}
-    skip_cleanup: true
-    on:
-      tags: true
-  # - provider: heroku
-  #   api_key:
-  #     secure: "PsICvdYk4eDTxFyS1j/DPAF6H7GCsNpkWcZHyFBROh60gxXGU+XHdUTQrrFHSPzLi6b8mDe4NOCtdrfA1xuluv6IbdbGQB+gM2lvRKse9x8sojh57rqvVAcaeCc/NsY7W/eAnk8Rd8TcW5nqrEg3qpUbl/Vio74ZQW/ZY+P0ZaQ="
-  #   app: $HEROKU_APP
+  # - provider: script
+  #   script: 
+  #   - curl -O -L https://github.com/grammarly/rocker/releases/download/1.3.1/rocker-1.3.1-linux_amd64.tar.gz
+  #   - tar zxf rocker-1.3.1-linux_amd64.tar.gz
+  #   - ./rocker build -f Docker/server/Rockerfile --auth $DOCKER_USER:$DOCKER_PASS --push -var Version=${TRAVIS_TAG}
   #   skip_cleanup: true
   #   on:
   #     tags: true
-  #     condition: $TRAVIS_TAG = 'latest'
+  - provider: heroku
+    api_key:
+      secure: "PsICvdYk4eDTxFyS1j/DPAF6H7GCsNpkWcZHyFBROh60gxXGU+XHdUTQrrFHSPzLi6b8mDe4NOCtdrfA1xuluv6IbdbGQB+gM2lvRKse9x8sojh57rqvVAcaeCc/NsY7W/eAnk8Rd8TcW5nqrEg3qpUbl/Vio74ZQW/ZY+P0ZaQ="
+    app: $HEROKU_APP
+    skip_cleanup: true
+    on:
+      tags: true
+      condition: $TRAVIS_TAG = 'latest'
        
 
