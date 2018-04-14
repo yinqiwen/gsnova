@@ -451,6 +451,8 @@ func stopLocalServers() {
 		if nil != ctx.c {
 			ctx.c.Close()
 		}
+		activeStreams.Delete(key)
 		return true
 	})
+
 }

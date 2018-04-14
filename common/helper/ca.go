@@ -7,10 +7,13 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"errors"
+	"fmt"
 	"os"
 	"strings"
 	"sync"
 	"time"
+
+	"golang.org/x/net/publicsuffix"
 
 	"github.com/google/easypki/pkg/certificate"
 	"github.com/google/easypki/pkg/easypki"
@@ -55,9 +58,23 @@ func getCAByDomain(domain string) (*certificate.Bundle, error) {
 	}
 	caGenLock.Lock()
 	defer caGenLock.Unlock()
-	//rootDomain, _ := publicsuffix.EffectiveTLDPlusOne(domain)
-	rootDomain := domain
-	bundle, err := pkiStore.GetBundle("Root", rootDomain)
+	pubsuffix, _ := publicsuffix.PublicSuffix(domain)
+	if len(pubsuffix) == 0 {
+		return nil, fmt.Errorf("No publicsuffix found for %s", domain)
+	}
+	restLen := len(domain) - len(pubsuffix) - 1
+	rest := domain[0:restLen]
+	ss := strings.Split(rest, ".")
+	var bundleName string
+	var dnsNames []string
+	if len(ss) == 1 {
+		bundleName = domain
+		dnsNames = []string{domain}
+	} else {
+		bundleName = "*." + strings.Join(ss[1:], ".") + "." + pubsuffix
+		dnsNames = []string{bundleName}
+	}
+	bundle, err := pkiStore.GetBundle("Root", bundleName)
 	if nil == err {
 		return bundle, nil
 	}
@@ -65,13 +82,13 @@ func getCAByDomain(domain string) (*certificate.Bundle, error) {
 	if nil != err {
 		return nil, err
 	}
-	filename := rootDomain
-	subject := pkix.Name{CommonName: rootDomain}
+	filename := bundleName
+	subject := pkix.Name{CommonName: bundleName}
 	template := &x509.Certificate{
 		Subject:    subject,
 		NotAfter:   time.Now().AddDate(0, 0, 36500),
 		MaxPathLen: -1,
-		DNSNames:   []string{domain},
+		DNSNames:   dnsNames,
 		//IsCA:       true,
 	}
 	req := &easypki.Request{
@@ -83,7 +100,7 @@ func getCAByDomain(domain string) (*certificate.Bundle, error) {
 	if err = pkiStore.Sign(signer, req); err != nil {
 		return nil, err
 	}
-	return pkiStore.GetBundle("Root", rootDomain)
+	return pkiStore.GetBundle("Root", bundleName)
 }
 
 func TLSConfig(domain string) (*tls.Config, error) {
