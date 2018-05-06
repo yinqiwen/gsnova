@@ -9,6 +9,10 @@
 		//AllowedUser
 		"User": "*,gsnova"
 	},
+	"RateLimit":{
+		"*": "-1",
+		"gsnova_limit":"500K"
+	},
 	"Mux":{
 		"MaxStreamWindow": "512K",
 		"StreamMinRefresh":"32K",

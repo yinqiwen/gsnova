@@ -37,6 +37,9 @@ type AuthRequest struct {
 	CipherCounter  uint64
 	CipherMethod   string
 	CompressMethod string
+
+	NATunnId   string
+	NATunnUser string
 }
 type AuthResponse struct {
 	Code int

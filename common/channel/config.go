@@ -93,6 +93,10 @@ func (conf *CipherConfig) VerifyUser(user string) bool {
 	return false
 }
 
+type RateLimitConfig struct {
+	Limit map[string]string
+}
+
 type HTTPBaseConfig struct {
 	HTTPPushRateLimitPerSec int
 	UserAgent               string

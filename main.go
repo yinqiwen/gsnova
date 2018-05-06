@@ -239,6 +239,7 @@ func main() {
 			remote.ServerConf.Cipher.Key = cipherKey
 			logger.Notice("Server cipher key overide by env:GSNOVA_CIPHER_KEY")
 		}
+		channel.DefaultServerRateLimit = remote.ServerConf.RateLimit
 		channel.SetDefaultMuxConfig(remote.ServerConf.Mux)
 		remote.ServerConf.Cipher.AllowUsers(remote.ServerConf.Cipher.User)
 		channel.DefaultServerCipher = remote.ServerConf.Cipher

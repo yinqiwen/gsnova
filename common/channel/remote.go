@@ -8,11 +8,16 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/yinqiwen/pmux"
-
+	"github.com/juju/ratelimit"
+	"github.com/yinqiwen/gsnova/common/helper"
 	"github.com/yinqiwen/gsnova/common/logger"
 	"github.com/yinqiwen/gsnova/common/mux"
+	"github.com/yinqiwen/pmux"
 )
+
+var DefaultServerRateLimit RateLimitConfig
+var rateLimitBuckets = make(map[string]*ratelimit.Bucket)
+var rateLimitBucketLock sync.Mutex
 
 type sessionContext struct {
 	activeIOTime time.Time
@@ -25,6 +30,38 @@ func (ctx *sessionContext) close() {
 	ctx.closed = true
 	ctx.session.Close()
 	emptySessions.Delete(ctx)
+}
+
+func getRateLimitBucket(user string) *ratelimit.Bucket {
+	if nil == DefaultServerRateLimit.Limit {
+		return nil
+	}
+	l, exist := DefaultServerRateLimit.Limit[user]
+	if !exist {
+		l, exist = DefaultServerRateLimit.Limit["*"]
+		user = "*"
+	}
+	if !exist {
+		return nil
+	}
+	limitPerSec := int64(-1)
+	if len(l) > 0 {
+		v, err := helper.ToBytes(l)
+		if nil == err {
+			limitPerSec = int64(v)
+		}
+	}
+	if limitPerSec <= 0 {
+		return nil
+	}
+	rateLimitBucketLock.Lock()
+	defer rateLimitBucketLock.Unlock()
+	r, ok := rateLimitBuckets[user]
+	if !ok {
+		r = ratelimit.NewBucket(1*time.Second, limitPerSec)
+		rateLimitBuckets[user] = r
+	}
+	return r
 }
 
 var emptySessions sync.Map
@@ -66,7 +103,6 @@ func handleProxyStream(stream mux.MuxStream, auth *mux.AuthRequest, ctx *session
 			emptySessions.Store(ctx, true)
 		}
 	}()
-
 	creq, err := mux.ReadConnectRequest(stream)
 	if nil != err {
 		stream.Close()
@@ -136,12 +172,20 @@ func handleProxyStream(stream mux.MuxStream, auth *mux.AuthRequest, ctx *session
 		io.CopyBuffer(c, streamReader, buf)
 		closeSig <- true
 	}()
+
+	var connReader io.Reader
+	connReader = c
+	rateLimitBucket := getRateLimitBucket(auth.User)
+	if nil != rateLimitBucket {
+		connReader = ratelimit.Reader(c, rateLimitBucket)
+	}
+
 	buf := make([]byte, 128*1024)
 	for {
 		if d, ok := c.(DeadLineAccetor); ok {
 			d.SetReadDeadline(time.Now().Add(maxIdleTime))
 		}
-		_, err := io.CopyBuffer(streamWriter, c, buf)
+		_, err := io.CopyBuffer(streamWriter, connReader, buf)
 		if isTimeoutErr(err) && time.Now().Sub(stream.LatestIOTime()) < maxIdleTime {
 			continue
 		}
@@ -193,7 +237,9 @@ func ServProxyMuxSession(session mux.MuxSession) error {
 				return mux.ErrAuthFailed
 			}
 			authReq = auth
-			authRes := &mux.AuthResponse{Code: mux.AuthOK}
+			authRes := &mux.AuthResponse{
+				Code: mux.AuthOK,
+			}
 			mux.WriteMessage(stream, authRes)
 			stream.Close()
 			if tmp, ok := session.(*mux.ProxyMuxSession); ok {
