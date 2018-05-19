@@ -49,7 +49,7 @@ func servKCP(lp *kcp.Listener, config *channel.KCPConfig) {
 			continue
 		}
 		muxSession := &mux.ProxyMuxSession{Session: session}
-		go channel.ServProxyMuxSession(muxSession)
+		go channel.ServProxyMuxSession(muxSession, nil)
 	}
 	//ws.WriteMessage(websocket.CloseMessage, []byte{})
 }

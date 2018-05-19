@@ -157,7 +157,7 @@ func (tc *directMuxSession) OpenStream() (mux.MuxStream, error) {
 	return stream, nil
 }
 func (tc *directMuxSession) AcceptStream() (mux.MuxStream, error) {
-	return nil, nil
+	return nil, channel.ErrNotSupportedOperation
 }
 
 func (tc *directMuxSession) NumStreams() int {

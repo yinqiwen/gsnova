@@ -255,6 +255,7 @@ type LocalConfig struct {
 	Log             []string
 	Cipher          channel.CipherConfig
 	Mux             channel.MuxConfig
+	ProxyLimit      channel.ProxyLimitConfig
 	UserAgent       string
 	LocalDNS        dns.LocalDNSConfig
 	UDPGW           UDPGWConfig

@@ -20,14 +20,19 @@ var rateLimitBuckets = make(map[string]*ratelimit.Bucket)
 var rateLimitBucketLock sync.Mutex
 
 type sessionContext struct {
+	auth         *mux.AuthRequest
 	activeIOTime time.Time
 	streamCouter int32
 	session      mux.MuxSession
 	closed       bool
+	isP2SP       bool
 }
 
 func (ctx *sessionContext) close() {
 	ctx.closed = true
+	if ctx.isP2SP && nil != ctx.auth {
+		removeP2spSession(ctx.auth.P2SPRoomId, ctx.auth.P2SPConnId, ctx.session)
+	}
 	ctx.session.Close()
 	emptySessions.Delete(ctx)
 }
@@ -95,7 +100,7 @@ func isTimeoutErr(err error) bool {
 	return false
 }
 
-func handleProxyStream(stream mux.MuxStream, auth *mux.AuthRequest, ctx *sessionContext) {
+func handleProxyStream(stream mux.MuxStream, ctx *sessionContext) {
 	atomic.AddInt32(&ctx.streamCouter, 1)
 	emptySessions.Delete(ctx)
 	defer func() {
@@ -109,7 +114,12 @@ func handleProxyStream(stream mux.MuxStream, auth *mux.AuthRequest, ctx *session
 		logger.Error("[ERROR]:Failed to read connect request:%v", err)
 		return
 	}
-	logger.Debug("[%d]Start handle stream:%v with comprresor:%s", stream.StreamID(), creq, auth.CompressMethod)
+	logger.Debug("[%d]Start handle stream:%v with comprresor:%s", stream.StreamID(), creq, ctx.auth.CompressMethod)
+	if !defaultProxyLimitConfig.Allowed(creq.Addr) {
+		logger.Error("'%s' is NOT allowed by proxy limit config.", creq.Addr)
+		stream.Close()
+		return
+	}
 
 	maxIdleTime := time.Duration(defaultMuxConfig.StreamIdleTimeout) * time.Second
 	if maxIdleTime == 0 {
@@ -140,7 +150,7 @@ func handleProxyStream(stream mux.MuxStream, auth *mux.AuthRequest, ctx *session
 		nextHops := creq.Hops[1:]
 		nextURL, err = url.Parse(next)
 		if nil == err {
-			nextStream, _, err = GetMuxStreamByURL(nextURL, auth.User, &DefaultServerCipher)
+			nextStream, _, err = GetMuxStreamByURL(nextURL, ctx.auth.User, &DefaultServerCipher)
 			if nil == err {
 				opt := mux.StreamOptions{
 					DialTimeout: creq.DialTimeout,
@@ -163,7 +173,7 @@ func handleProxyStream(stream mux.MuxStream, auth *mux.AuthRequest, ctx *session
 		stream.Close()
 		return
 	}
-	streamReader, streamWriter := mux.GetCompressStreamReaderWriter(stream, auth.CompressMethod)
+	streamReader, streamWriter := mux.GetCompressStreamReaderWriter(stream, ctx.auth.CompressMethod)
 	defer c.Close()
 	closeSig := make(chan bool, 1)
 
@@ -175,7 +185,7 @@ func handleProxyStream(stream mux.MuxStream, auth *mux.AuthRequest, ctx *session
 
 	var connReader io.Reader
 	connReader = c
-	rateLimitBucket := getRateLimitBucket(auth.User)
+	rateLimitBucket := getRateLimitBucket(ctx.auth.User)
 	if nil != rateLimitBucket {
 		connReader = ratelimit.Reader(c, rateLimitBucket)
 	}
@@ -204,49 +214,59 @@ func handleProxyStream(stream mux.MuxStream, auth *mux.AuthRequest, ctx *session
 
 var DefaultServerCipher CipherConfig
 
-func ServProxyMuxSession(session mux.MuxSession) error {
-	var authReq *mux.AuthRequest
+func ServProxyMuxSession(session mux.MuxSession, auth *mux.AuthRequest) error {
 	ctx := &sessionContext{}
+	ctx.auth = auth
 	ctx.activeIOTime = time.Now()
 	ctx.session = session
 	defer ctx.close()
-
 	for {
 		stream, err := session.AcceptStream()
 		if nil != err {
-			//session.Close()
 			if err != pmux.ErrSessionShutdown {
 				logger.Error("Failed to accept stream with error:%v", err)
 			}
 			return err
 		}
-		if nil == authReq {
-			auth, err := mux.ReadAuthRequest(stream)
+		if nil == ctx.auth {
+			recvAuth, err := mux.ReadAuthRequest(stream)
 			if nil != err {
 				logger.Error("[ERROR]:Failed to read auth request:%v", err)
 				continue
 			}
-			logger.Info("Recv auth:%v", auth)
-			if !DefaultServerCipher.VerifyUser(auth.User) {
+			logger.Info("Recv auth:%v", recvAuth)
+			if !DefaultServerCipher.VerifyUser(recvAuth.User) {
 				session.Close()
 				return mux.ErrAuthFailed
 			}
-			if !mux.IsValidCompressor(auth.CompressMethod) {
-				logger.Error("[ERROR]Invalid compressor:%s", auth.CompressMethod)
+			if !mux.IsValidCompressor(recvAuth.CompressMethod) {
+				logger.Error("[ERROR]Invalid compressor:%s", recvAuth.CompressMethod)
 				session.Close()
 				return mux.ErrAuthFailed
 			}
-			authReq = auth
+			ctx.auth = recvAuth
+			if len(recvAuth.P2SPRoomId) > 0 {
+				if !addP2spSession(recvAuth.P2SPRoomId, recvAuth.P2SPConnId, session) {
+					session.Close()
+					return mux.ErrAuthFailed
+				}
+				ctx.isP2SP = true
+			}
 			authRes := &mux.AuthResponse{
 				Code: mux.AuthOK,
 			}
 			mux.WriteMessage(stream, authRes)
 			stream.Close()
 			if tmp, ok := session.(*mux.ProxyMuxSession); ok {
-				tmp.Session.ResetCryptoContext(auth.CipherMethod, auth.CipherCounter)
+				tmp.Session.ResetCryptoContext(recvAuth.CipherMethod, recvAuth.CipherCounter)
 			}
 			continue
 		}
-		go handleProxyStream(stream, authReq, ctx)
+		if ctx.isP2SP {
+			go handleP2spProxyStream(stream, ctx)
+		} else {
+			go handleProxyStream(stream, ctx)
+		}
+
 	}
 }

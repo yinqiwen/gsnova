@@ -13,6 +13,10 @@
 		"*": "-1",
 		"gsnova_limit":"500K"
 	},
+	"ProxyLimit":{
+		"WhiteList":[],
+		"BlackList":[]
+	},
 	"Mux":{
 		"MaxStreamWindow": "512K",
 		"StreamMinRefresh":"32K",

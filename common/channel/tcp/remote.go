@@ -23,7 +23,7 @@ func servTCP(lp net.Listener) {
 		}
 
 		muxSession := &mux.ProxyMuxSession{Session: session}
-		go channel.ServProxyMuxSession(muxSession)
+		go channel.ServProxyMuxSession(muxSession, nil)
 	}
 	//ws.WriteMessage(websocket.CloseMessage, []byte{})
 }

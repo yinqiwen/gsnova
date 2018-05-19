@@ -17,6 +17,12 @@ import (
 	"github.com/yinqiwen/pmux"
 )
 
+var p2spConnID string
+
+func init() {
+	p2spConnID = helper.RandAsciiString(32)
+}
+
 type DeadLineAccetor interface {
 	SetReadDeadline(t time.Time) error
 	SetWriteDeadline(t time.Time) error
@@ -142,6 +148,10 @@ func (s *muxSessionHolder) init(lock bool) error {
 			CipherCounter:  counter,
 			CipherMethod:   cipherMethod,
 			CompressMethod: s.conf.Compressor,
+			P2SPRoomId:     s.conf.P2SPRoom,
+		}
+		if len(s.conf.P2SPRoom) > 0 {
+			authReq.P2SPConnId = p2spConnID
 		}
 		err = authStream.Auth(authReq)
 		authStream.Close()
@@ -169,6 +179,12 @@ func (s *muxSessionHolder) init(lock bool) error {
 		if features.Pingable && s.conf.HeartBeatPeriod > 0 {
 			go s.heartbeat(s.conf.HeartBeatPeriod)
 		}
+		if DirectChannelName != s.conf.Name {
+			if len(defaultProxyLimitConfig.BlackList) > 0 || len(defaultProxyLimitConfig.WhiteList) > 0 {
+				go ServProxyMuxSession(session, authReq)
+			}
+		}
+
 		return nil
 	}
 	if nil == err {

@@ -12,11 +12,12 @@ type ServerListenConfig struct {
 }
 
 type ServerConfig struct {
-	Cipher    channel.CipherConfig
-	RateLimit channel.RateLimitConfig
-	Mux       channel.MuxConfig
-	Log       []string
-	Server    []ServerListenConfig
+	Cipher     channel.CipherConfig
+	RateLimit  channel.RateLimitConfig
+	ProxyLimit channel.ProxyLimitConfig
+	Mux        channel.MuxConfig
+	Log        []string
+	Server     []ServerListenConfig
 }
 
 var ServerConf ServerConfig

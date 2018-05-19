@@ -38,8 +38,8 @@ type AuthRequest struct {
 	CipherMethod   string
 	CompressMethod string
 
-	NATunnId   string
-	NATunnUser string
+	P2SPRoomId string
+	P2SPConnId string
 }
 type AuthResponse struct {
 	Code int

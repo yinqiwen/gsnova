@@ -59,6 +59,9 @@ func main() {
 	windowRefresh := flag.String("window_refresh", "", "Mux stream window refresh size, default 32K")
 	pingInterval := flag.Int("ping_interval", 30, "Channel ping interval seconds.")
 	user := flag.String("user", "gsnova", "Username for remote server to authorize.")
+	var whilteList, blackList channel.HopServers
+	flag.Var(&whilteList, "whitelist", "Proxy whitelist item config")
+	flag.Var(&blackList, "blackList", "Proxy blacklist item config")
 
 	//client options
 	admin := flag.String("admin", "", "Client Admin listen address")
@@ -71,6 +74,8 @@ func main() {
 	home, _ := filepath.Split(path)
 	hosts := flag.String("hosts", "./hosts.json", "Hosts file of gsnova client.")
 	flag.Var(&hops, "remote", "Next remote proxy hop server to connect for client, eg:wss://xxx.paas.com")
+	p2spRoomID := flag.String("p2sp", "", "P2SP Room Id")
+	servable := flag.Bool("servable", false, "Client as a proxy server for peer p2sp client")
 
 	//client or server listen
 	var listens channel.HopServers
@@ -152,8 +157,20 @@ func main() {
 				ch.HeartBeatPeriod = *pingInterval
 				ch.ServerList = []string{hops[0]}
 				ch.Hops = hops[1:]
+				ch.P2SPRoom = *p2spRoomID
 				local.GConf.Channel = []channel.ProxyChannelConfig{ch}
 			}
+
+			local.GConf.ProxyLimit.WhiteList = whilteList
+			local.GConf.ProxyLimit.BlackList = blackList
+			if len(whilteList) == 0 && len(blackList) == 0 && *servable {
+				local.GConf.ProxyLimit.WhiteList = []string{"*"}
+			}
+			remote.InitDefaultConf()
+			remote.ServerConf.Cipher = local.GConf.Cipher
+			remote.ServerConf.Mux = local.GConf.Mux
+			remote.ServerConf.Cipher.AllowUsers(remote.ServerConf.Cipher.User)
+			channel.DefaultServerCipher = remote.ServerConf.Cipher
 
 			options.WatchConf = false
 			err = local.Start(options)

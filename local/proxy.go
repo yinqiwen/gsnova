@@ -203,6 +203,7 @@ func Start(options ProxyOptions) error {
 		}
 	}
 	GConf.LocalDNS.CNIPSet = options.CNIP
+	channel.SetDefaultProxyLimitConfig(GConf.ProxyLimit)
 	loadHostsConf(hostsConf)
 	return StartProxy()
 }

@@ -11,6 +11,10 @@
 		"StreamIdleTimeout":10,
 		"SessionIdleTimeout":300
 	},
+	"ProxyLimit":{
+		"WhiteList":[],
+		"BlackList":[]
+	},
 
     "LocalDNS":{
     	//only listen UDP

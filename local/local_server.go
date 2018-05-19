@@ -311,6 +311,7 @@ START:
 	go func() {
 		buf := make([]byte, 128*1024)
 		io.CopyBuffer(localConn, streamReader, buf)
+		localConn.Close()
 		closeCh <- 1
 	}()
 
