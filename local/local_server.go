@@ -49,6 +49,11 @@ func serveProxyConn(conn net.Conn, remoteHost, remotePort string, proxy *ProxyCo
 	defer localConn.Close()
 	defer atomic.AddInt64(&runningProxyStreamCount, -1)
 
+	if len(proxy.Forward) > 0 {
+		logger.Notice("Server:%s forward connection to %s, ", proxy.Local, proxy.Forward)
+		remoteHost, remotePort, _ = net.SplitHostPort(proxy.Forward)
+	}
+
 	isSocksProxy := false
 	isHttpsProxy := false
 	isHttp11Proto := false
@@ -243,10 +248,21 @@ START:
 	}
 	defer stream.Close()
 
+	var maxIdleTime time.Duration
+	if GConf.Mux.StreamIdleTimeout < 0 {
+		maxIdleTime = 24 * 3600 * time.Second
+	} else {
+		maxIdleTime = time.Duration(GConf.Mux.StreamIdleTimeout) * time.Second
+		if maxIdleTime == 0 {
+			maxIdleTime = 10 * time.Second
+		}
+	}
+
 	ssid := stream.StreamID()
 	opt := mux.StreamOptions{
 		DialTimeout: conf.RemoteDialMSTimeout,
 		Hops:        conf.Hops,
+		ReadTimeout: int(maxIdleTime.Seconds()),
 	}
 
 	if remotePort == "443" && nil == net.ParseIP(remoteHost) {
@@ -303,10 +319,6 @@ START:
 	streamCtx.c = localConn
 	activeStreams.Store(streamCtx, true)
 
-	maxIdleTime := time.Duration(GConf.Mux.StreamIdleTimeout) * time.Second
-	if maxIdleTime == 0 {
-		maxIdleTime = 10 * time.Second
-	}
 	closeCh := make(chan int, 1)
 	go func() {
 		buf := make([]byte, 128*1024)
@@ -435,6 +447,7 @@ func startLocalServers() error {
 	for i := range GConf.Proxy {
 		startLocalProxyServer(i)
 	}
+
 	return nil
 }
 

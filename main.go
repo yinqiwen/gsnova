@@ -58,6 +58,7 @@ func main() {
 	window := flag.String("window", "", "Max mux stream window size, default 512K")
 	windowRefresh := flag.String("window_refresh", "", "Mux stream window refresh size, default 32K")
 	pingInterval := flag.Int("ping_interval", 30, "Channel ping interval seconds.")
+	streamIdle := flag.Int("stream_idle", 10, "Mux stream idle timout seconds.")
 	user := flag.String("user", "gsnova", "Username for remote server to authorize.")
 	var whilteList, blackList channel.HopServers
 	flag.Var(&whilteList, "whitelist", "Proxy whitelist item config")
@@ -70,10 +71,11 @@ func main() {
 	httpDumpDest := flag.String("httpdump.dst", "", "HTTP Dump destination file or http url")
 	var httpDumpFilters channel.HopServers
 	flag.Var(&httpDumpFilters, "httpdump.filter", "HTTP Dump Domain Filter, eg:*.google.com")
-	var hops channel.HopServers
+	var hops, forwards channel.HopServers
 	home, _ := filepath.Split(path)
 	hosts := flag.String("hosts", "./hosts.json", "Hosts file of gsnova client.")
 	flag.Var(&hops, "remote", "Next remote proxy hop server to connect for client, eg:wss://xxx.paas.com")
+	flag.Var(&forwards, "forward", "Forward connection to specified address")
 	p2spRoomID := flag.String("p2sp", "", "P2SP Room Id")
 	servable := flag.Bool("servable", false, "Client as a proxy server for peer p2sp client")
 
@@ -135,6 +137,8 @@ func main() {
 			}
 			local.GConf.Mux.MaxStreamWindow = *window
 			local.GConf.Mux.StreamMinRefresh = *windowRefresh
+			local.GConf.Mux.StreamIdleTimeout = *streamIdle
+
 			local.GConf.Cipher.Key = *key
 			local.GConf.Cipher.Method = "auto"
 			local.GConf.Cipher.User = *user
@@ -147,6 +151,11 @@ func main() {
 				proxyConf.HTTPDump.Domain = httpDumpFilters
 				proxyConf.PAC = []local.PACConfig{{Remote: channelName}}
 				local.GConf.Proxy = append(local.GConf.Proxy, proxyConf)
+			}
+			for i, forward := range forwards {
+				if len(local.GConf.Proxy) > i {
+					local.GConf.Proxy[i].Forward = forward
+				}
 			}
 
 			if !strings.EqualFold(hops[0], channel.DirectChannelName) {

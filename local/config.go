@@ -188,6 +188,7 @@ func (dump *HTTPDumpConfig) MatchDomain(host string) bool {
 
 type ProxyConfig struct {
 	Local    string
+	Forward  string
 	MITM     bool //Man-in-the-middle
 	HTTPDump HTTPDumpConfig
 	PAC      []PACConfig
@@ -283,6 +284,7 @@ func (cfg *LocalConfig) init() error {
 		}
 		GConf.Channel[i].Adjust()
 	}
+
 	if !haveDirect {
 		directProxyChannel := make([]channel.ProxyChannelConfig, 1)
 		directProxyChannel[0].Name = channel.DirectChannelName
