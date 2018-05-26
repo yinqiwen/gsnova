@@ -262,9 +262,8 @@ START:
 	opt := mux.StreamOptions{
 		DialTimeout: conf.RemoteDialMSTimeout,
 		Hops:        conf.Hops,
-		ReadTimeout: int(maxIdleTime.Seconds()),
+		ReadTimeout: int(maxIdleTime.Seconds()) * 1000,
 	}
-
 	if remotePort == "443" && nil == net.ParseIP(remoteHost) {
 		remoteSNI := conf.GetRemoteSNI(remoteHost)
 		if len(remoteSNI) > 0 {
@@ -383,6 +382,7 @@ START:
 		}
 	}
 	<-closeCh
+
 	activeStreams.Delete(streamCtx)
 }
 
