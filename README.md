@@ -45,10 +45,13 @@ GSnova: Private Proxy Solution.
 - HTTP(S) Packet Capture for Web Debugging
 	- Log HTTP(S) Packets in file
 	- Forward HTTP(S) Packets to Remote HTTP Server
+- P2P/P2S2P Proxy
+    - P2P: Use TCP NAT tunnel for direct P2P commnunication if possible
+    - P2S2P: Use middle server for two peers to communication
 
 
 # Usage
-**go1.9 is requied.**
+**go1.9 or higher is requied.**
 
 ## Compile
 ```shell
@@ -60,7 +63,9 @@ There is also prebuilt binary release at [here](https://github.com/yinqiwen/gsno
 ```
 Usage of ./gsnova:
   -admin string
-    	Admin listen address
+    	Client Admin listen address
+  -blackList value
+    	Proxy blacklist item config
   -client
     	Launch gsnova as client.
   -cmd
@@ -69,12 +74,14 @@ Usage of ./gsnova:
     	China IP list. (default "./cnipset.txt")
   -conf string
     	Config file of gsnova.
+  -forward value
+    	Forward connection to specified address
   -hosts string
     	Hosts file of gsnova client. (default "./hosts.json")
   -httpdump.dst string
     	HTTP Dump destination file or http url
   -httpdump.filter value
-    	Next remote proxy hop server to connect for client, eg:wss://xxx.paas.com
+    	HTTP Dump Domain Filter, eg:*.google.com
   -key string
     	Cipher key for transmission between local&remote. (default "809240d3a021449f6e67aa73221d42df942a308a")
   -listen value
@@ -83,14 +90,24 @@ Usage of ./gsnova:
     	Log file setting (default "color,gsnova.log")
   -mitm
     	Launch gsnova as a MITM Proxy
+  -ots string
+    	Online trouble shooting listen address
+  -p2p string
+    	P2P Token.
   -pid string
     	PID file (default ".gsnova.pid")
   -ping_interval int
     	Channel ping interval seconds. (default 30)
+  -proxy string
+    	Proxy setting to connect remote server.
   -remote value
     	Next remote proxy hop server to connect for client, eg:wss://xxx.paas.com
+  -servable
+    	Client as a proxy server for peer p2p client
   -server
     	Launch gsnova as server.
+  -stream_idle int
+    	Mux stream idle timout seconds. (default 10)
   -tls.cert string
     	TLS Cert file
   -tls.key string
@@ -99,6 +116,8 @@ Usage of ./gsnova:
     	Username for remote server to authorize. (default "gsnova")
   -version
     	Print version.
+  -whitelist value
+    	Proxy whitelist item config
   -window string
     	Max mux stream window size, default 512K
   -window_refresh string
@@ -144,6 +163,27 @@ GSnova support running the client as a MITM proxy to capture HTTP(S) packets for
 ```shell
    ./gsnova -cmd -client -listen :48101 -remote direct -mitm -httpdump.dst ./httpdump.log -httpdump.filter "*.google.com" -httpdump.filter "*.facebook.com"
 ```
+
+#### P2P/P2S2P Proxy
+P2P/P2S2P Proxy can help you to connect two nodes, and use one of them as a tcp proxy server for the other one.  This feature can be used for scenarios like:       
+- Expose any tcp based service behind a NAT or firewall to a specific node in the internet.
+
+There are 3 nodes which should install/run gsnova, a middle server(S) with public IP address, two client nodes(A & B)  behind a NAT or firewall.  
+For the middle server(S), run as a server with a cipher key.
+```shell
+   ./gsnova -cmd -server  -listen tcp://:48103 -key p2pkey -log color
+```
+For the node(B) as a proxy server, run as a client to connect server with a P2P token:
+```shell
+  ./gsnova -cmd -client -servable -key p2pkey -remote tcp://<server ip>:48103 -p2p testp2p  -log color  
+```
+For the node(A) as a client for peer proxy server, run as a client to connect server with same P2P token:
+```shell
+  ./gsnova -cmd -client -listen :7788 -key p2pkey -remote tcp://<server ip>:48103 -p2p testp2p -log color  
+```
+If there is no error, now the node A with listen address :7788 can be used as a http/socks4/socks5 proxy to access servers behind a NAT or firewall which node B located in.       
+
+And in gsnova, it would try to run with P2P mode first, if it's not pissible, it would use P2S2P mode which would use the middle server to forward tcp stream to remote peeer.  
 
 ## Mobile Client(Android)
 The client side can be compiled to android library by `gomobile`, eg:
