@@ -80,7 +80,7 @@ func servHTTP2(lp net.Listener, addr string, config *tls.Config) {
 			continue
 		}
 		muxSession := mux.NewHTTP2ServerMuxSession(conn)
-		go channel.ServProxyMuxSession(muxSession, nil)
+		go channel.ServProxyMuxSession(muxSession, nil, nil)
 		server := &http.Server{
 			Addr:      addr,
 			TLSConfig: config,

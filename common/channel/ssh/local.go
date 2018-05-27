@@ -28,8 +28,8 @@ func (s *sshStream) LatestIOTime() time.Time {
 	return s.latestIOTime
 }
 
-func (tc *sshStream) Auth(req *mux.AuthRequest) error {
-	return nil
+func (tc *sshStream) Auth(req *mux.AuthRequest) *mux.AuthResponse {
+	return &mux.AuthResponse{Code: mux.AuthOK}
 }
 
 func (tc *sshStream) Connect(network string, addr string, opt mux.StreamOptions) error {

@@ -21,9 +21,12 @@ func servTCP(lp net.Listener) {
 			logger.Error("[ERROR]Failed to create mux session for tcp server with reason:%v", err)
 			continue
 		}
-
+		//conn.RemoteAddr().String()
 		muxSession := &mux.ProxyMuxSession{Session: session}
-		go channel.ServProxyMuxSession(muxSession, nil)
+		go func() {
+			channel.ServProxyMuxSession(muxSession, nil, conn.RemoteAddr())
+			conn.Close()
+		}()
 	}
 	//ws.WriteMessage(websocket.CloseMessage, []byte{})
 }

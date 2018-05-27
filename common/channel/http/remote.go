@@ -255,7 +255,7 @@ func HTTPInvoke(w http.ResponseWriter, r *http.Request) {
 		}
 		muxSession := &mux.ProxyMuxSession{Session: session}
 		go func() {
-			err := channel.ServProxyMuxSession(muxSession, nil)
+			err := channel.ServProxyMuxSession(muxSession, nil, nil)
 			if nil != err {
 				c.shutdown(err)
 			}

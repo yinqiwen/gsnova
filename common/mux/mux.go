@@ -38,11 +38,22 @@ type AuthRequest struct {
 	CipherMethod   string
 	CompressMethod string
 
-	P2SPRoomId string
-	P2SPConnId string
+	P2PToken   string
+	P2PConnID  string
+	P2PPriAddr string
 }
 type AuthResponse struct {
-	Code int
+	Code        int
+	PeerPriAddr string
+	PeerPubAddr string
+	PubAddr     string
+}
+
+func (res *AuthResponse) Error() error {
+	if AuthOK == res.Code {
+		return nil
+	}
+	return ErrAuthFailed
 }
 
 func ReadConnectRequest(stream io.Reader) (*ConnectRequest, error) {
@@ -101,7 +112,7 @@ type StreamOptions struct {
 type MuxStream interface {
 	io.ReadWriteCloser
 	Connect(network string, addr string, opt StreamOptions) error
-	Auth(req *AuthRequest) error
+	Auth(req *AuthRequest) *AuthResponse
 	StreamID() uint32
 	SetReadDeadline(t time.Time) error
 	SetWriteDeadline(t time.Time) error
@@ -190,27 +201,24 @@ func (s *ProxyMuxStream) Connect(network string, addr string, opt StreamOptions)
 	}
 	return WriteMessage(s, req)
 }
-func (s *ProxyMuxStream) Auth(req *AuthRequest) error {
+func (s *ProxyMuxStream) Auth(req *AuthRequest) *AuthResponse {
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	req.Rand = helper.RandAsciiString(int(r.Int31n(128)))
 	err := WriteMessage(s, req)
+	res := &AuthResponse{Code: -1}
 	if nil != err {
-		return err
+		return res
 	}
-	res := &AuthResponse{}
+
 	err = ReadMessage(s, res)
 	if nil != err {
-		return err
+		return res
 	}
 	if nil == err {
 		//wait remote close
 		ioutil.ReadAll(s)
 	}
-	//s.Read(make([]byte, 1))
-	if res.Code != AuthOK {
-		return ErrAuthFailed
-	}
-	return nil
+	return res
 }
 
 type ProxyMuxSession struct {

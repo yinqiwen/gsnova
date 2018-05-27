@@ -40,6 +40,7 @@ func main() {
 	// if err := agent.Listen(agent.Options{}); err != nil {
 	// 	log.Fatal(err)
 	// }
+
 	path, err := filepath.Abs(os.Args[0])
 	if nil != err {
 		fmt.Println(err)
@@ -76,8 +77,8 @@ func main() {
 	hosts := flag.String("hosts", "./hosts.json", "Hosts file of gsnova client.")
 	flag.Var(&hops, "remote", "Next remote proxy hop server to connect for client, eg:wss://xxx.paas.com")
 	flag.Var(&forwards, "forward", "Forward connection to specified address")
-	p2spRoomID := flag.String("p2sp", "", "P2SP Room Id")
-	servable := flag.Bool("servable", false, "Client as a proxy server for peer p2sp client")
+	p2p := flag.String("p2p", "", "P2P Token.")
+	servable := flag.Bool("servable", false, "Client as a proxy server for peer p2p client")
 	proxy := flag.String("proxy", "", "Proxy setting to connect remote server.")
 
 	//client or server listen
@@ -127,9 +128,11 @@ func main() {
 				return
 			}
 			if len(listens) == 0 {
-				logger.Error("At least one -listen argument required.", err)
-				flag.PrintDefaults()
-				return
+				if len(*p2p) == 0 || !(*servable) {
+					logger.Error("At least one -listen argument required.", err)
+					flag.PrintDefaults()
+					return
+				}
 			}
 			local.GConf.Admin.Listen = *admin
 			channelName := "default"
@@ -167,7 +170,8 @@ func main() {
 				ch.HeartBeatPeriod = *pingInterval
 				ch.ServerList = []string{hops[0]}
 				ch.Hops = hops[1:]
-				ch.P2SPRoom = *p2spRoomID
+				ch.P2PToken = *p2p
+
 				ch.Proxy = *proxy
 				local.GConf.Channel = []channel.ProxyChannelConfig{ch}
 			}

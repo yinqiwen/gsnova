@@ -25,8 +25,8 @@ type directStream struct {
 	latestIOTime time.Time
 }
 
-func (tc *directStream) Auth(req *mux.AuthRequest) error {
-	return nil
+func (tc *directStream) Auth(req *mux.AuthRequest) *mux.AuthResponse {
+	return &mux.AuthResponse{Code: mux.AuthOK}
 }
 
 func (tc *directStream) Connect(network string, addr string, opt mux.StreamOptions) error {

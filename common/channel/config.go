@@ -249,7 +249,7 @@ type ProxyChannelConfig struct {
 	Hops                   HopServers
 	RemoteSNIProxy         map[string]string
 	HibernateAfterSecs     int
-	P2SPRoom               string
+	P2PToken               string
 
 	proxyURL    *url.URL
 	lazyConnect bool

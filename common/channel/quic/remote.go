@@ -16,7 +16,7 @@ func servQUIC(lp quic.Listener) {
 			continue
 		}
 		muxSession := &mux.QUICMuxSession{Session: sess}
-		go channel.ServProxyMuxSession(muxSession, nil)
+		go channel.ServProxyMuxSession(muxSession, nil, nil)
 	}
 	//ws.WriteMessage(websocket.CloseMessage, []byte{})
 }

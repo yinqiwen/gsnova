@@ -3,7 +3,7 @@ package channel
 import (
 	"fmt"
 	"io"
-	"math"
+	"net"
 	"net/url"
 	"reflect"
 	"strings"
@@ -17,10 +17,10 @@ import (
 	"github.com/yinqiwen/pmux"
 )
 
-var p2spConnID string
+var p2pConnID string
 
 func init() {
-	p2spConnID = helper.RandAsciiString(32)
+	p2pConnID = helper.RandAsciiString(32)
 }
 
 type DeadLineAccetor interface {
@@ -134,37 +134,16 @@ func (s *muxSessionHolder) init(lock bool) error {
 	}
 	session, err := s.Channel.CreateMuxSession(s.server, s.conf)
 	if nil == err && nil != session {
-		authStream, err := session.OpenStream()
-		if nil != err {
-			return err
-		}
-		counter := uint64(helper.RandBetween(0, math.MaxInt32))
 		cipherMethod := s.conf.Cipher.Method
 		if strings.HasPrefix(s.server, "https://") || strings.HasPrefix(s.server, "wss://") || strings.HasPrefix(s.server, "tls://") || strings.HasPrefix(s.server, "quic://") || strings.HasPrefix(s.server, "http2://") {
 			cipherMethod = "none"
 		}
-		authReq := &mux.AuthRequest{
-			User:           s.conf.Cipher.User,
-			CipherCounter:  counter,
-			CipherMethod:   cipherMethod,
-			CompressMethod: s.conf.Compressor,
-			P2SPRoomId:     s.conf.P2SPRoom,
-		}
-		if len(s.conf.P2SPRoom) > 0 {
-			authReq.P2SPConnId = p2spConnID
-		}
-		err = authStream.Auth(authReq)
-		authStream.Close()
+		err, authReq, _ := clientAuthMuxSession(session, cipherMethod, s.conf, "", true, false)
 		if nil != err {
+
 			return err
 		}
-		if psession, ok := session.(*mux.ProxyMuxSession); ok {
-			err = psession.Session.ResetCryptoContext(cipherMethod, counter)
-			if nil != err {
-				logger.Error("[ERROR]Failed to reset cipher context with reason:%v, while cipher method:%s", err, cipherMethod)
-				return err
-			}
-		}
+
 		s.creatTime = time.Now()
 		s.muxSession = session
 		features := s.Channel.Features()
@@ -181,7 +160,7 @@ func (s *muxSessionHolder) init(lock bool) error {
 		}
 		if DirectChannelName != s.conf.Name {
 			if len(defaultProxyLimitConfig.BlackList) > 0 || len(defaultProxyLimitConfig.WhiteList) > 0 {
-				go ServProxyMuxSession(session, authReq)
+				go ServProxyMuxSession(session, authReq, nil)
 			}
 		}
 
@@ -201,6 +180,37 @@ type LocalProxyChannel struct {
 	sessions       map[*muxSessionHolder]bool
 	lastActiveTime time.Time
 	autoExpire     bool
+	p2pSessions    sync.Map
+}
+
+func (ch *LocalProxyChannel) isP2PSessionEstablisehd() bool {
+	empty := true
+	ch.p2pSessions.Range(func(key, value interface{}) bool {
+		empty = false
+		return false
+	})
+	return !empty
+}
+
+func (ch *LocalProxyChannel) setP2PSession(c net.Conn, s mux.MuxSession, authReq *mux.AuthRequest) {
+	ch.p2pSessions.Store(s, true)
+	if nil != s {
+		go func() {
+			for {
+				zero := []byte{}
+				if _, err := c.Read(zero); nil != err {
+					logger.Error("P2P Tunnl Conn error:%v", err)
+					c.Close()
+					ch.p2pSessions.Delete(s)
+					return
+				}
+				time.Sleep(1 * time.Second)
+			}
+		}()
+		if len(defaultProxyLimitConfig.BlackList) > 0 || len(defaultProxyLimitConfig.WhiteList) > 0 {
+			go ServProxyMuxSession(s, authReq, nil)
+		}
+	}
 }
 
 func (ch *LocalProxyChannel) createMuxSessionByProxy(p LocalChannel, server string, init bool) (*muxSessionHolder, error) {
@@ -223,6 +233,18 @@ func (ch *LocalProxyChannel) createMuxSessionByProxy(p LocalChannel, server stri
 }
 
 func (ch *LocalProxyChannel) getMuxStream() (stream mux.MuxStream, err error) {
+	ch.p2pSessions.Range(func(key, value interface{}) bool {
+		session := key.(mux.MuxSession)
+		stream, err = session.OpenStream()
+		if nil == err {
+			return false
+		}
+		return true
+	})
+	if nil != stream {
+		return
+	}
+
 	for holder := range ch.sessions {
 		stream, err = holder.getNewStream()
 		if nil != err {
@@ -252,6 +274,7 @@ func (ch *LocalProxyChannel) Init(lock bool) bool {
 			logger.Error("Invalid server url:%s with reason:%v", server, err)
 			continue
 		}
+
 		schema := strings.ToLower(u.Scheme)
 		if t, ok := LocalChannelTypeTable[schema]; !ok {
 			logger.Error("[ERROR]No registe proxy for schema:%s", schema)
@@ -266,6 +289,11 @@ func (ch *LocalProxyChannel) Init(lock bool) bool {
 					break
 				} else {
 					success = true
+				}
+			}
+			if success{
+				if len(conf.P2PToken) > 0 && strings.EqualFold(schema, "tcp"){
+					go startP2PSession(u.Host, ch)
 				}
 			}
 		}

@@ -34,6 +34,6 @@ func WebsocketInvoke(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	muxSession := &mux.ProxyMuxSession{Session: session}
-	channel.ServProxyMuxSession(muxSession, nil)
+	channel.ServProxyMuxSession(muxSession, nil, nil)
 	//ws.WriteMessage(websocket.CloseMessage, []byte{})
 }

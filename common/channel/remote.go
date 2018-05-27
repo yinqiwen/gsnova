@@ -25,13 +25,14 @@ type sessionContext struct {
 	streamCouter int32
 	session      mux.MuxSession
 	closed       bool
-	isP2SP       bool
+	isP2P        bool
+	isP2PExahnge bool
 }
 
 func (ctx *sessionContext) close() {
 	ctx.closed = true
-	if ctx.isP2SP && nil != ctx.auth {
-		removeP2spSession(ctx.auth.P2SPRoomId, ctx.auth.P2SPConnId, ctx.session)
+	if ctx.isP2P && nil != ctx.auth {
+		removeP2PSession(ctx.auth, ctx.session)
 	}
 	ctx.session.Close()
 	emptySessions.Delete(ctx)
@@ -214,13 +215,82 @@ func handleProxyStream(stream mux.MuxStream, ctx *sessionContext) {
 
 var DefaultServerCipher CipherConfig
 
-func ServProxyMuxSession(session mux.MuxSession, auth *mux.AuthRequest) error {
+func serverAuthSession(session mux.MuxSession, raddr net.Addr, isFirst bool) (*mux.AuthRequest, error) {
+	stream, err := session.AcceptStream()
+	if nil != err {
+		if err != pmux.ErrSessionShutdown {
+			logger.Error("Failed to accept stream with error:%v", err)
+		}
+		return nil, err
+	}
+	recvAuth, err := mux.ReadAuthRequest(stream)
+	if nil != err {
+		logger.Error("[ERROR]:Failed to read auth request:%v", err)
+		return nil, err
+	}
+	logger.Info("Recv auth:%v", recvAuth)
+	if !DefaultServerCipher.VerifyUser(recvAuth.User) {
+		session.Close()
+		return nil, mux.ErrAuthFailed
+	}
+	if !mux.IsValidCompressor(recvAuth.CompressMethod) {
+		logger.Error("[ERROR]Invalid compressor:%s", recvAuth.CompressMethod)
+		session.Close()
+		return nil, mux.ErrAuthFailed
+	}
+	if len(recvAuth.P2PToken) > 0 {
+		if !addP2PSession(recvAuth, session, raddr) {
+			session.Close()
+			return nil, mux.ErrAuthFailed
+		}
+		//ctx.isP2P = true
+	}
+	authRes := &mux.AuthResponse{
+		Code: mux.AuthOK,
+	}
+	if len(recvAuth.P2PPriAddr) > 0 {
+		peerPriAddr, peerPubAddr := getPeerAddr(recvAuth)
+		logger.Info("Remote peer private addr:%v & public addr:%v for auth:%v", peerPriAddr, peerPubAddr, recvAuth)
+		if len(peerPriAddr) > 0 {
+			authRes.PeerPriAddr = peerPriAddr
+			authRes.PeerPubAddr = peerPubAddr
+			authRes.PubAddr = raddr.String()
+		}
+	}
+	mux.WriteMessage(stream, authRes)
+	stream.Close()
+	if isFirst {
+		if tmp, ok := session.(*mux.ProxyMuxSession); ok {
+			tmp.Session.ResetCryptoContext(recvAuth.CipherMethod, recvAuth.CipherCounter)
+		}
+	}
+
+	return recvAuth, nil
+}
+
+func ServProxyMuxSession(session mux.MuxSession, auth *mux.AuthRequest, raddr net.Addr) error {
 	ctx := &sessionContext{}
 	ctx.auth = auth
 	ctx.activeIOTime = time.Now()
 	ctx.session = session
 	defer ctx.close()
+	isFirst := true
 	for {
+		if nil == ctx.auth || ctx.isP2PExahnge {
+			recvAuth, err := serverAuthSession(session, raddr, isFirst)
+			if nil != err {
+				return err
+			}
+			isFirst = false
+			ctx.auth = recvAuth
+			if len(recvAuth.P2PPriAddr) > 0 {
+				ctx.isP2PExahnge = true
+			}
+			if len(recvAuth.P2PToken) > 0 {
+				ctx.isP2P = true
+			}
+			continue
+		}
 		stream, err := session.AcceptStream()
 		if nil != err {
 			if err != pmux.ErrSessionShutdown {
@@ -228,45 +298,10 @@ func ServProxyMuxSession(session mux.MuxSession, auth *mux.AuthRequest) error {
 			}
 			return err
 		}
-		if nil == ctx.auth {
-			recvAuth, err := mux.ReadAuthRequest(stream)
-			if nil != err {
-				logger.Error("[ERROR]:Failed to read auth request:%v", err)
-				continue
-			}
-			logger.Info("Recv auth:%v", recvAuth)
-			if !DefaultServerCipher.VerifyUser(recvAuth.User) {
-				session.Close()
-				return mux.ErrAuthFailed
-			}
-			if !mux.IsValidCompressor(recvAuth.CompressMethod) {
-				logger.Error("[ERROR]Invalid compressor:%s", recvAuth.CompressMethod)
-				session.Close()
-				return mux.ErrAuthFailed
-			}
-			ctx.auth = recvAuth
-			if len(recvAuth.P2SPRoomId) > 0 {
-				if !addP2spSession(recvAuth.P2SPRoomId, recvAuth.P2SPConnId, session) {
-					session.Close()
-					return mux.ErrAuthFailed
-				}
-				ctx.isP2SP = true
-			}
-			authRes := &mux.AuthResponse{
-				Code: mux.AuthOK,
-			}
-			mux.WriteMessage(stream, authRes)
-			stream.Close()
-			if tmp, ok := session.(*mux.ProxyMuxSession); ok {
-				tmp.Session.ResetCryptoContext(recvAuth.CipherMethod, recvAuth.CipherCounter)
-			}
-			continue
-		}
-		if ctx.isP2SP {
-			go handleP2spProxyStream(stream, ctx)
+		if ctx.isP2P {
+			go handleP2PProxyStream(stream, ctx)
 		} else {
 			go handleProxyStream(stream, ctx)
 		}
-
 	}
 }

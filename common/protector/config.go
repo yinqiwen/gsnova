@@ -13,6 +13,12 @@ const (
 	dnsPort          = 53
 )
 
+type NetOptions struct {
+	ReusePort   bool
+	LocalAddr   string
+	DialTimeout time.Duration
+}
+
 type Protect func(fileDescriptor int) error
 
 var (
