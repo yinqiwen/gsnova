@@ -80,6 +80,7 @@ func main() {
 	p2p := flag.String("p2p", "", "P2P Token.")
 	servable := flag.Bool("servable", false, "Client as a proxy server for peer p2p client")
 	proxy := flag.String("proxy", "", "Proxy setting to connect remote server.")
+	withUPNP := flag.Bool("with_upnp", false, "Detect UPNP device for p2p client.")
 
 	//client or server listen
 	var listens channel.HopServers
@@ -171,6 +172,7 @@ func main() {
 				ch.ServerList = []string{hops[0]}
 				ch.Hops = hops[1:]
 				ch.P2PToken = *p2p
+				ch.WithUPNP = *withUPNP
 
 				ch.Proxy = *proxy
 				local.GConf.Channel = []channel.ProxyChannelConfig{ch}

@@ -291,9 +291,9 @@ func (ch *LocalProxyChannel) Init(lock bool) bool {
 					success = true
 				}
 			}
-			if success{
-				if len(conf.P2PToken) > 0 && strings.EqualFold(schema, "tcp"){
-					go startP2PSession(u.Host, ch)
+			if success {
+				if len(conf.P2PToken) > 0 && strings.EqualFold(schema, "tcp") {
+					go startP2PSession(server, p, ch)
 				}
 			}
 		}

@@ -28,7 +28,7 @@ func (tc *TcpProxy) CreateMuxSession(server string, conf *channel.ProxyChannelCo
 	if nil != err {
 		return nil, err
 	}
-	return &mux.ProxyMuxSession{Session: ps}, nil
+	return &mux.ProxyMuxSession{Session: ps, NetConn: conn}, nil
 }
 
 func init() {

@@ -1,6 +1,7 @@
 package channel
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"net"
@@ -14,6 +15,7 @@ import (
 	"github.com/yinqiwen/gsnova/common/hosts"
 	"github.com/yinqiwen/gsnova/common/logger"
 	"github.com/yinqiwen/gsnova/common/netx"
+	"github.com/yinqiwen/gsnova/common/protector"
 )
 
 func NewTLSConfig(conf *ProxyChannelConfig) *tls.Config {
@@ -85,9 +87,22 @@ func DialServerByConf(server string, conf *ProxyChannelConfig) (net.Conn, error)
 			}
 			hostport = net.JoinHostPort(iphost, tcpPort)
 		}
-		conn, err = netx.DialTimeout("tcp", hostport, timeout)
+		if len(conf.P2PToken) > 0 {
+			opt := &protector.NetOptions{
+				ReusePort:   true,
+				DialTimeout: timeout,
+			}
+			conn, err = protector.DialContextOptions(context.Background(), "tcp", hostport, opt)
+		} else {
+			conn, err = netx.DialTimeout("tcp", hostport, timeout)
+		}
+
 	} else {
-		conn, err = helper.ProxyDial(conf.Proxy, hostport, timeout)
+		if len(conf.P2PToken) > 0 {
+			conn, err = helper.ProxyDial(conf.Proxy, "", hostport, timeout, true)
+		} else {
+			conn, err = helper.ProxyDial(conf.Proxy, "", hostport, timeout, false)
+		}
 		connAddr = conf.Proxy
 	}
 	if nil == err {

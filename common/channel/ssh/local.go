@@ -89,6 +89,13 @@ type sshMuxSession struct {
 	sshClient    *ssh.Client
 }
 
+func (s *sshMuxSession) RemoteAddr() net.Addr {
+	return nil
+}
+func (s *sshMuxSession) LocalAddr() net.Addr {
+	return nil
+}
+
 func (tc *sshMuxSession) getSSHClient() *ssh.Client {
 	return tc.sshClient
 }

@@ -135,6 +135,13 @@ type directMuxSession struct {
 	proxyServer  string
 }
 
+func (s *directMuxSession) RemoteAddr() net.Addr {
+	return nil
+}
+func (s *directMuxSession) LocalAddr() net.Addr {
+	return nil
+}
+
 func (tc *directMuxSession) closeStream(s *directStream) {
 	tc.streamsMutex.Lock()
 	defer tc.streamsMutex.Unlock()

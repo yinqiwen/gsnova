@@ -101,6 +101,13 @@ type HTTP2MuxSession struct {
 	streams  sync.Map
 }
 
+func (s *HTTP2MuxSession) RemoteAddr() net.Addr {
+	return nil
+}
+func (s *HTTP2MuxSession) LocalAddr() net.Addr {
+	return nil
+}
+
 func (q *HTTP2MuxSession) CloseStream(stream MuxStream) error {
 	q.streams.Delete(stream)
 	atomic.AddInt64(&q.streamCounter, -1)

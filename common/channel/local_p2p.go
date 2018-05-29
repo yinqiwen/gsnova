@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	upnp "github.com/NebulousLabs/go-upnp"
+	"github.com/yinqiwen/gsnova/common/helper"
 	"github.com/yinqiwen/gsnova/common/logger"
 	"github.com/yinqiwen/gsnova/common/mux"
 	"github.com/yinqiwen/gsnova/common/protector"
@@ -48,11 +50,25 @@ func startP2PServer(addr string, ch *LocalProxyChannel) (net.Listener, error) {
 	return lp, nil
 }
 
-func startP2PSession(raddr string, ch *LocalProxyChannel) error {
-	logger.Info("Start P2P TCP client to %s", raddr)
+func initUDNP() (*upnp.IGD, error) {
+	d, err := upnp.DiscoverCtx(context.Background())
+	if err != nil {
+		logger.Error("Failed to discover upnp device with error:%v", err)
+		return nil, err
+	}
+	return d, nil
+}
+
+func startP2PSession(server string, pch LocalChannel, ch *LocalProxyChannel) error {
+	logger.Info("Start P2P TCP client to %s", server)
 	maxRetry := 10
 	waitAfterErr := 3 * time.Second
 	var priLocalAddr, pubLocalAddr string
+	var lastFailPeerPriIP, lastFailPubPeerIP string
+	var upnpIGD *upnp.IGD
+	if ch.Conf.WithUPNP {
+		upnpIGD, _ = initUDNP()
+	}
 	for {
 		if ch.isP2PSessionEstablisehd() {
 			time.Sleep(3 * time.Second)
@@ -63,33 +79,27 @@ func startP2PSession(raddr string, ch *LocalProxyChannel) error {
 			DialTimeout: 3 * time.Second,
 			//LocalAddr: priLocalAddr,
 		}
-		c, err := protector.DialContextOptions(context.Background(), "tcp", raddr, opt)
-		if nil != err {
-			logger.Error("Failed to connect %s with err:%v", raddr, err)
-			time.Sleep(waitAfterErr)
-			continue
-		}
-		session, err := pmux.Client(c, InitialPMuxConfig(&ch.Conf.Cipher))
+		session, err := pch.CreateMuxSession(server, &ch.Conf)
 		if nil != err {
 			logger.Error("Failed to init mux session:%v", err)
-			c.Close()
+			session.Close()
 			time.Sleep(waitAfterErr)
 			continue
 		}
-		ps := &mux.ProxyMuxSession{Session: session}
-		priLocalAddr = c.LocalAddr().String()
+		//ps := &mux.ProxyMuxSession{Session: session}
+		priLocalAddr = session.LocalAddr().String()
 
 		var peerPriAddr, peerPubAddr string
 		cipherMethod := ch.Conf.Cipher.Method
 		isFirst := true
 		for len(peerPriAddr) == 0 {
 			//logger.Debug("Peer address is empty.")
-			err, authReq, authRes := clientAuthMuxSession(ps, cipherMethod, &ch.Conf, priLocalAddr, isFirst, false)
+			err, authReq, authRes := clientAuthMuxSession(session, cipherMethod, &ch.Conf, priLocalAddr, isFirst, false)
 			isFirst = false
 			if nil != err {
 				logger.Error("Failed to auth p2p with err:%v", err)
 				time.Sleep(1 * time.Second)
-				c.Close()
+				session.Close()
 				break
 			}
 			priLocalAddr = authReq.P2PPriAddr
@@ -100,20 +110,39 @@ func startP2PSession(raddr string, ch *LocalProxyChannel) error {
 				time.Sleep(1 * time.Second)
 				continue
 			}
+			if len(lastFailPeerPriIP) > 0 {
+				//do not try to connect remote with same failed IPs
+				if strings.HasPrefix(peerPriAddr, lastFailPeerPriIP+":") && strings.HasPrefix(peerPubAddr, lastFailPubPeerIP+":") {
+					peerPriAddr = ""
+					peerPubAddr = ""
+					time.Sleep(waitAfterErr)
+					continue
+				}
+			}
 		}
 		if len(peerPriAddr) == 0 {
 			time.Sleep(waitAfterErr)
-			c.Close()
+			session.Close()
 			continue
 		}
 		logger.Info("Recv P2P peer private address:%s & public address:%s", peerPriAddr, peerPubAddr)
 
+		tryStartTime := time.Now()
 		lp, err := startP2PServer(priLocalAddr, ch)
 		if nil != err {
 			logger.Error("Failed to listen on %s with err:%v", priLocalAddr, err)
 			time.Sleep(waitAfterErr)
-			c.Close()
+			session.Close()
 			continue
+		}
+		upnpMappingPort := -1
+		if nil != upnpIGD {
+			upnpMappingPort = session.LocalAddr().(*net.TCPAddr).Port
+			err = upnpIGD.Forward(uint16(upnpMappingPort), "gsnova_"+ch.Conf.P2PToken)
+			if nil != err {
+				logger.Error("Failed to add port mapping with upnp by error:%v", err)
+				upnpMappingPort = -1
+			}
 		}
 		peerConnOpt := &protector.NetOptions{
 			ReusePort:   true,
@@ -124,14 +153,21 @@ func startP2PSession(raddr string, ch *LocalProxyChannel) error {
 
 		connFunc := func(addr string) {
 			for i := 0; i < maxRetry && !ch.isP2PSessionEstablisehd(); i++ {
-				p2pConn, cerr := protector.DialContextOptions(context.Background(), "tcp", addr, peerConnOpt)
+				var p2pConn net.Conn
+				var cerr error
+				if len(ch.Conf.Proxy) > 0 {
+					p2pConn, cerr = helper.ProxyDial(ch.Conf.Proxy, opt.LocalAddr, addr, opt.DialTimeout, true)
+				} else {
+					p2pConn, cerr = protector.DialContextOptions(context.Background(), "tcp", addr, peerConnOpt)
+				}
+
 				if nil != cerr {
 					logger.Error("Failed to connect peer %s with err:%v", addr, cerr)
 					time.Sleep(1 * time.Second)
 					continue
 				}
 
-				logger.Info("P2P connection established %s->%s", c.LocalAddr(), c.RemoteAddr())
+				logger.Info("P2P connection established %s->%s", p2pConn.LocalAddr(), p2pConn.RemoteAddr())
 				asClient := false
 				if strings.Compare(pubLocalAddr, peerPubAddr) < 0 {
 					asClient = true
@@ -141,7 +177,7 @@ func startP2PSession(raddr string, ch *LocalProxyChannel) error {
 				if asClient {
 					err, recvAuth, _, p2pSession = clientAuthConn(p2pConn, cipherMethod, &ch.Conf, true)
 					if nil != err {
-						logger.Error("Failed to auth to remote p2p node:%v with err:%v", c.RemoteAddr(), err)
+						logger.Error("Failed to auth to remote p2p node:%v with err:%v", p2pConn.RemoteAddr(), err)
 						time.Sleep(waitAfterErr)
 						p2pConn.Close()
 						continue
@@ -174,6 +210,20 @@ func startP2PSession(raddr string, ch *LocalProxyChannel) error {
 		<-sig
 		<-sig
 		lp.Close()
-		c.Close()
+
+		if upnpMappingPort > 0 {
+			err = upnpIGD.Clear(uint16(upnpMappingPort))
+			if nil != err {
+				logger.Error("Failed to clear port mapping with upnp by error:%v", err)
+			}
+		}
+		session.Close()
+		for time.Now().Sub(tryStartTime) < time.Duration(maxRetry)*waitAfterErr {
+			time.Sleep(1 * time.Second)
+		}
+		if !ch.isP2PSessionEstablisehd() {
+			lastFailPeerPriIP, _, _ = net.SplitHostPort(peerPriAddr)
+			lastFailPubPeerIP, _, _ = net.SplitHostPort(peerPubAddr)
+		}
 	}
 }

@@ -1,6 +1,7 @@
 package mux
 
 import (
+	"net"
 	"sync/atomic"
 	"time"
 
@@ -45,4 +46,10 @@ func (q *QUICMuxSession) NumStreams() int {
 func (q *QUICMuxSession) Close() error {
 	q.streamCounter = 0
 	return q.Session.Close(nil)
+}
+func (s *QUICMuxSession) RemoteAddr() net.Addr {
+	return nil
+}
+func (s *QUICMuxSession) LocalAddr() net.Addr {
+	return nil
 }

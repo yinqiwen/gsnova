@@ -3,6 +3,7 @@ package helper
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/tls"
@@ -22,6 +23,7 @@ import (
 
 	"github.com/yinqiwen/gsnova/common/logger"
 	"github.com/yinqiwen/gsnova/common/netx"
+	"github.com/yinqiwen/gsnova/common/protector"
 )
 
 var ErrWriteTimeout = errors.New("write timeout")
@@ -256,12 +258,23 @@ func HTTPProxyConnect(proxyURL *url.URL, c net.Conn, addr string) error {
 	return nil
 }
 
-func ProxyDial(proxyURL string, addr string, timeout time.Duration) (net.Conn, error) {
+func ProxyDial(proxyURL string, laddr, raddr string, timeout time.Duration, reuse bool) (net.Conn, error) {
 	u, err := url.Parse(proxyURL)
 	if nil != err {
 		return nil, err
 	}
-	c, err := netx.DialTimeout("tcp", u.Host, timeout)
+	var c net.Conn
+	if len(laddr) > 0 || reuse {
+		opt := &protector.NetOptions{
+			ReusePort:   true,
+			LocalAddr:   laddr,
+			DialTimeout: timeout,
+		}
+		c, err = protector.DialContextOptions(context.Background(), "tcp", u.Host, opt)
+	} else {
+		c, err = netx.DialTimeout("tcp", u.Host, timeout)
+	}
+
 	if err != nil {
 		return nil, err
 	}
@@ -269,10 +282,19 @@ func ProxyDial(proxyURL string, addr string, timeout time.Duration) (net.Conn, e
 	case "http":
 		fallthrough
 	case "https":
-		err = HTTPProxyConnect(u, c, addr)
+		if timeout > 0 {
+			c.SetReadDeadline(time.Now().Add(timeout))
+		}
+		err = HTTPProxyConnect(u, c, raddr)
+		if nil == err {
+			if timeout > 0 {
+				var zero time.Time
+				c.SetReadDeadline(zero)
+			}
+		}
 	case "socks":
 	case "socks5":
-		err = Socks5ProxyConnect(u, c, addr)
+		err = Socks5ProxyConnect(u, c, raddr)
 	default:
 		return nil, fmt.Errorf("invalid proxy schema:%s", u.Scheme)
 	}

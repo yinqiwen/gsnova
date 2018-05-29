@@ -6,6 +6,7 @@ import (
 	"io"
 	"io/ioutil"
 	"math/rand"
+	"net"
 	"sync/atomic"
 	"time"
 
@@ -126,6 +127,8 @@ type MuxSession interface {
 	Ping() (time.Duration, error)
 	NumStreams() int
 	Close() error
+	RemoteAddr() net.Addr
+	LocalAddr() net.Addr
 }
 
 type ProxyMuxStream struct {
@@ -223,6 +226,7 @@ func (s *ProxyMuxStream) Auth(req *AuthRequest) *AuthResponse {
 
 type ProxyMuxSession struct {
 	*pmux.Session
+	NetConn net.Conn
 }
 
 func (s *ProxyMuxSession) CloseStream(stream MuxStream) error {
@@ -247,6 +251,19 @@ func (s *ProxyMuxSession) AcceptStream() (MuxStream, error) {
 	stream := &ProxyMuxStream{TimeoutReadWriteCloser: ss}
 	ss.IOCallback = stream
 	return stream, nil
+}
+
+func (s *ProxyMuxSession) RemoteAddr() net.Addr {
+	if nil != s.NetConn {
+		return s.NetConn.RemoteAddr()
+	}
+	return nil
+}
+func (s *ProxyMuxSession) LocalAddr() net.Addr {
+	if nil != s.NetConn {
+		return s.NetConn.LocalAddr()
+	}
+	return nil
 }
 
 func init() {
