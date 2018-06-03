@@ -2,7 +2,6 @@ package local
 
 import (
 	"encoding/json"
-	"errors"
 	"io/ioutil"
 	"net/http"
 	"sync/atomic"
@@ -198,9 +197,9 @@ func Start(options ProxyOptions) error {
 			return err
 		}
 	} else {
-		if len(GConf.Proxy) == 0 {
-			return errors.New("Can NOT start proxy without any config")
-		}
+		// if len(GConf.Proxy) == 0 {
+		// 	return errors.New("Can NOT start proxy without any config")
+		// }
 	}
 	GConf.LocalDNS.CNIPSet = options.CNIP
 	channel.SetDefaultProxyLimitConfig(GConf.ProxyLimit)

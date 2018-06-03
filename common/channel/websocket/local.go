@@ -34,12 +34,12 @@ func (ws *WebsocketProxy) CreateMuxSession(server string, conf *channel.ProxyCha
 		logger.Notice("dial websocket error:%v %v", err, u.String())
 		return nil, err
 	}
-	logger.Debug("Connect %s success.", server)
+	logger.Info("Connect %s success from %v->%v", server, c.LocalAddr(), c.RemoteAddr())
 	ps, err := pmux.Client(&mux.WsConn{Conn: c}, channel.InitialPMuxConfig(&conf.Cipher))
 	if nil != err {
 		return nil, err
 	}
-	return &mux.ProxyMuxSession{Session: ps}, nil
+	return &mux.ProxyMuxSession{Session: ps, NetConn: c}, nil
 }
 
 func init() {

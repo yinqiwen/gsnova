@@ -224,9 +224,14 @@ func (s *ProxyMuxStream) Auth(req *AuthRequest) *AuthResponse {
 	return res
 }
 
+type ConnAddr interface {
+	LocalAddr() net.Addr
+	RemoteAddr() net.Addr
+}
+
 type ProxyMuxSession struct {
 	*pmux.Session
-	NetConn net.Conn
+	NetConn ConnAddr
 }
 
 func (s *ProxyMuxSession) CloseStream(stream MuxStream) error {

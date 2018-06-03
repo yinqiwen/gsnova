@@ -26,6 +26,16 @@ var proxyServerRunning = true
 var runningProxyStreamCount int64
 var activeStreams sync.Map
 
+var bytesPool *sync.Pool
+
+func init() {
+	bytesPool = &sync.Pool{
+		New: func() interface{} {
+			return make([]byte, 128*1024)
+		},
+	}
+}
+
 func isTimeoutErr(err error) bool {
 	if err == pmux.ErrTimeout {
 		return true
@@ -320,16 +330,19 @@ START:
 
 	closeCh := make(chan int, 1)
 	go func() {
-		buf := make([]byte, 128*1024)
+		//buf := make([]byte, 128*1024)
+		buf := bytesPool.Get().([]byte)
 		io.CopyBuffer(localConn, streamReader, buf)
 		localConn.Close()
+		bytesPool.Put(buf)
 		closeCh <- 1
 	}()
 
 	//start task to check stream timeout(if the stream has no read&write action more than 10s)
 
 	if (isSocksProxy || isHttpsProxy || isTransparentProxy) && nil == initialHTTPReq {
-		buf := make([]byte, 128*1024)
+		//buf := make([]byte, 128*1024)
+		buf := bytesPool.Get().([]byte)
 		for {
 			localConn.SetReadDeadline(time.Now().Add(maxIdleTime))
 			_, cerr := io.CopyBuffer(streamWriter, bufconn, buf)
@@ -339,7 +352,7 @@ START:
 			//logger.Error("###%s %v after %v", remoteHost, cerr, time.Now().Sub(stream.LatestIOTime()))
 			break
 		}
-
+		bytesPool.Put(buf)
 		if close, ok := streamWriter.(io.Closer); ok {
 			close.Close()
 		}

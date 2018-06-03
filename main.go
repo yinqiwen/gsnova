@@ -5,6 +5,8 @@ import (
 	"flag"
 	"fmt"
 	"io/ioutil"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"path/filepath"
 	"strings"
@@ -48,6 +50,7 @@ func main() {
 	}
 	//common options
 	otsListen := flag.String("ots", "", "Online trouble shooting listen address")
+	pprofAddr := flag.String("pprof", "", "PProf trouble shooting listen address")
 	version := flag.Bool("version", false, "Print version.")
 	cmd := flag.Bool("cmd", false, "Launch gsnova by command line without config file.")
 	isClient := flag.Bool("client", false, "Launch gsnova as client.")
@@ -115,6 +118,11 @@ func main() {
 		if nil != err {
 			logger.Error("Failed to start admin server with reason:%v", err)
 		}
+	}
+	if len(*pprofAddr) > 0 {
+		go func() {
+			http.ListenAndServe(*pprofAddr, nil)
+		}()
 	}
 	if runAsClient {
 		options := local.ProxyOptions{

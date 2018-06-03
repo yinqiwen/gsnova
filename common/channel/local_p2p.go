@@ -51,16 +51,18 @@ func startP2PServer(addr string, ch *LocalProxyChannel) (net.Listener, error) {
 }
 
 func initUDNP() (*upnp.IGD, error) {
+	logger.Info("Start get upnp")
 	d, err := upnp.DiscoverCtx(context.Background())
 	if err != nil {
 		logger.Error("Failed to discover upnp device with error:%v", err)
 		return nil, err
 	}
+	logger.Info("Success get upnp %v", d)
 	return d, nil
 }
 
 func startP2PSession(server string, pch LocalChannel, ch *LocalProxyChannel) error {
-	logger.Info("Start P2P TCP client to %s", server)
+	logger.Info("Start P2P TCP client to %s  %v", server, ch.Conf.WithUPNP)
 	maxRetry := 10
 	waitAfterErr := 3 * time.Second
 	var priLocalAddr, pubLocalAddr string
@@ -69,6 +71,7 @@ func startP2PSession(server string, pch LocalChannel, ch *LocalProxyChannel) err
 	if ch.Conf.WithUPNP {
 		upnpIGD, _ = initUDNP()
 	}
+
 	for {
 		if ch.isP2PSessionEstablisehd() {
 			time.Sleep(3 * time.Second)
@@ -107,7 +110,7 @@ func startP2PSession(server string, pch LocalChannel, ch *LocalProxyChannel) err
 			peerPubAddr = authRes.PeerPubAddr
 			pubLocalAddr = authRes.PubAddr
 			if len(peerPriAddr) == 0 {
-				time.Sleep(1 * time.Second)
+				time.Sleep(waitAfterErr)
 				continue
 			}
 			if len(lastFailPeerPriIP) > 0 {
@@ -142,6 +145,8 @@ func startP2PSession(server string, pch LocalChannel, ch *LocalProxyChannel) err
 			if nil != err {
 				logger.Error("Failed to add port mapping with upnp by error:%v", err)
 				upnpMappingPort = -1
+			} else {
+				logger.Info("UPNP port:%d success.", upnpMappingPort)
 			}
 		}
 		peerConnOpt := &protector.NetOptions{
