@@ -125,6 +125,8 @@ func serveProxyConn(conn net.Conn, remoteHost, remotePort string, proxy *ProxyCo
 			}
 			if sbufconn.Buffered() > 0 {
 				bufconn = helper.NewBufConn(conn, sbufconn)
+			} else {
+				pmux.RecycleBufReaderToPool(sbufconn)
 			}
 		}
 	}
@@ -133,6 +135,8 @@ func serveProxyConn(conn net.Conn, remoteHost, remotePort string, proxy *ProxyCo
 		//bufconn = bufio.NewReader(localConn)
 		bufconn = helper.NewBufConn(conn, nil)
 	}
+
+	defer pmux.RecycleBufReaderToPool(bufconn.BR)
 
 	trySniffDomain := false
 	if len(remoteHost) == 0 || (net.ParseIP(remoteHost) != nil && !helper.IsPrivateIP(remoteHost)) {
@@ -179,38 +183,43 @@ func serveProxyConn(conn net.Conn, remoteHost, remotePort string, proxy *ProxyCo
 	//2. sniff domain via http
 	if trySniffDomain {
 		localConn.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
-		headChunk, err := bufconn.Peek(7)
-		if len(headChunk) != 7 {
+		//ss := time.Now()
+		headChunk, err := bufconn.Peek(3)
+		if len(headChunk) != 3 {
 			if err != io.EOF {
 				logger.Error("Peek:%s %d %v to %s:%s", string(headChunk), len(headChunk), err, remoteHost, remotePort)
+			} else {
+				return
 			}
+			//logger.Error("Peek %d %v %v %v", len(headChunk), err, time.Now().Sub(ss), string(headChunk))
 			goto START
 		}
 		method := string(headChunk)
-		if tmp := strings.Fields(method); len(tmp) > 0 {
-			method = tmp[0]
-		}
-		method = strings.ToUpper(method)
+		// if tmp := strings.Fields(method); len(tmp) > 0 {
+		// 	method = tmp[0]
+		// }
+		// method = strings.ToUpper(method)
 		switch method {
 		case "GET":
 			fallthrough
-		case "POST":
+		case "POS":
 			fallthrough
-		case "HEAD":
+		case "HEA":
 			fallthrough
 		case "PUT":
 			fallthrough
-		case "DELETE":
+		case "DEL":
 			fallthrough
-		case "CONNECT":
+		case "CON":
 			fallthrough
-		case "OPTIONS":
+		case "OPT":
 			fallthrough
-		case "TRACE":
+		case "TRAC":
 			fallthrough
-		case "PATCH":
+		case "PAT":
 			isHttp11Proto = true
 		default:
+			logger.Error("Method:%s", method)
 			isHttp11Proto = false
 		}
 		//log.Printf("[%d]]Method:%s", sid, method)

@@ -536,3 +536,11 @@ func GenerateTLSConfig() *tls.Config {
 	}
 	return &tls.Config{Certificates: []tls.Certificate{tlsCert}}
 }
+
+func IsConnClosed(c net.Conn) error {
+	zero := []byte{}
+	if _, err := c.Read(zero); nil != err {
+		return err
+	}
+	return nil
+}
