@@ -62,6 +62,8 @@ type MuxConfig struct {
 	StreamMinRefresh   string
 	StreamIdleTimeout  int
 	SessionIdleTimeout int
+	UpBufferSize int
+	DownBufferSize int
 }
 
 func (m *MuxConfig) ToPMuxConf() *pmux.Config {

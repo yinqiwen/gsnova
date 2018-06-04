@@ -23,11 +23,12 @@ func (tc *TcpProxy) CreateMuxSession(server string, conf *channel.ProxyChannelCo
 	if err != nil {
 		return nil, err
 	}
-	logger.Info("TCP Session:%v", server)
+
 	ps, err := pmux.Client(conn, channel.InitialPMuxConfig(&conf.Cipher))
 	if nil != err {
 		return nil, err
 	}
+	logger.Info("TCP Session:%v", server)
 	return &mux.ProxyMuxSession{Session: ps, NetConn: conn}, nil
 }
 

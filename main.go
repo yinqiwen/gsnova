@@ -123,6 +123,12 @@ func main() {
 		go func() {
 			http.ListenAndServe(*pprofAddr, nil)
 		}()
+		// go func() {
+		// 	for {
+		// 		debug.FreeOSMemory()
+		// 		time.Sleep(1 * time.Second)
+		// 	}
+		// }()
 	}
 	if runAsClient {
 		options := local.ProxyOptions{

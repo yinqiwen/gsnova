@@ -81,7 +81,6 @@ func clientAuthMuxSession(session mux.MuxSession, cipherMethod string, conf *Pro
 		authReq.P2PConnID = ""
 		authReq.P2PPriAddr = ""
 	}
-
 	authRes := authStream.Auth(authReq)
 	authStream.Close()
 	err = authRes.Error()

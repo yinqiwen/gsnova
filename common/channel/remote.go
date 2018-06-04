@@ -19,7 +19,7 @@ var DefaultServerRateLimit RateLimitConfig
 var rateLimitBuckets = make(map[string]*ratelimit.Bucket)
 var rateLimitBucketLock sync.Mutex
 
-var bytesPool *sync.Pool
+var upBytesPool, downBytesPool *sync.Pool
 
 type sessionContext struct {
 	auth         *mux.AuthRequest
@@ -75,9 +75,22 @@ func getRateLimitBucket(user string) *ratelimit.Bucket {
 var emptySessions sync.Map
 
 func init() {
-	bytesPool = &sync.Pool{
+	upBytesPool = &sync.Pool{
 		New: func() interface{} {
-			return make([]byte, 128*1024)
+			blen := defaultMuxConfig.UpBufferSize
+			if 0 == blen {
+				blen = 16 * 1024
+			}
+			return make([]byte, blen)
+		},
+	}
+	downBytesPool = &sync.Pool{
+		New: func() interface{} {
+			blen := defaultMuxConfig.DownBufferSize
+			if 0 == blen {
+				blen = 128 * 1024
+			}
+			return make([]byte, blen)
 		},
 	}
 	go func() {
@@ -187,9 +200,9 @@ func handleProxyStream(stream mux.MuxStream, ctx *sessionContext) {
 
 	go func() {
 		//buf := make([]byte, 128*1024)
-		buf := bytesPool.Get().([]byte)
+		buf := upBytesPool.Get().([]byte)
 		io.CopyBuffer(c, streamReader, buf)
-		bytesPool.Put(buf)
+		upBytesPool.Put(buf)
 		closeSig <- true
 	}()
 
@@ -201,7 +214,7 @@ func handleProxyStream(stream mux.MuxStream, ctx *sessionContext) {
 	}
 
 	//buf := make([]byte, 128*1024)
-	buf := bytesPool.Get().([]byte)
+	buf := downBytesPool.Get().([]byte)
 	for {
 		if d, ok := c.(DeadLineAccetor); ok {
 			d.SetReadDeadline(time.Now().Add(maxIdleTime))
@@ -214,7 +227,7 @@ func handleProxyStream(stream mux.MuxStream, ctx *sessionContext) {
 		stream.Close()
 		break
 	}
-	bytesPool.Put(buf)
+	downBytesPool.Put(buf)
 	<-closeSig
 	if close, ok := streamWriter.(io.Closer); ok {
 		close.Close()
