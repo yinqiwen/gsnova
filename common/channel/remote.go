@@ -200,9 +200,15 @@ func handleProxyStream(stream mux.MuxStream, ctx *sessionContext) {
 
 	go func() {
 		//buf := make([]byte, 128*1024)
-		buf := upBytesPool.Get().([]byte)
+		//buf := upBytesPool.Get().([]byte)
+		var buf []byte
+		if _, ok := c.(io.ReaderFrom); !ok {
+			buf = upBytesPool.Get().([]byte)
+		}
 		io.CopyBuffer(c, streamReader, buf)
-		upBytesPool.Put(buf)
+		if len(buf) > 0 {
+			upBytesPool.Put(buf)
+		}
 		closeSig <- true
 	}()
 
@@ -214,7 +220,10 @@ func handleProxyStream(stream mux.MuxStream, ctx *sessionContext) {
 	}
 
 	//buf := make([]byte, 128*1024)
-	buf := downBytesPool.Get().([]byte)
+	var buf []byte
+	if _, ok := streamWriter.(io.ReaderFrom); !ok {
+		buf = downBytesPool.Get().([]byte)
+	}
 	for {
 		if d, ok := c.(DeadLineAccetor); ok {
 			d.SetReadDeadline(time.Now().Add(maxIdleTime))
@@ -227,7 +236,9 @@ func handleProxyStream(stream mux.MuxStream, ctx *sessionContext) {
 		stream.Close()
 		break
 	}
-	downBytesPool.Put(buf)
+	if len(buf) > 0 {
+		downBytesPool.Put(buf)
+	}
 	<-closeSig
 	if close, ok := streamWriter.(io.Closer); ok {
 		close.Close()

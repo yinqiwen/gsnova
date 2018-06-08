@@ -281,6 +281,7 @@ func reuseTCPAddr(conn *ProtectedConn) error {
 func dialContext(ctx context.Context, network, raddr string, options *NetOptions) (net.Conn, error) {
 	host, port, err := SplitHostPort(raddr)
 	if err != nil {
+		log.Printf("###Split %v error:%v", raddr, err)
 		return nil, err
 	}
 
@@ -328,17 +329,20 @@ func dialContext(ctx context.Context, network, raddr string, options *NetOptions
 	if nil != options {
 		if isTCP && options.ReusePort {
 			if nil != err {
+				log.Printf("SO_REUSEADDR fail: %v", err)
 				syscall.Close(socketFd)
 				return nil, err
 			}
 			err = reuseTCPAddr(conn)
 			if nil != err {
+				log.Printf("reuseTCPAddr fail: %v", err)
 				return nil, err
 			}
 		}
 		if isTCP && len(options.LocalAddr) > 0 {
 			ltcpAddr, err := net.ResolveTCPAddr("tcp", options.LocalAddr)
 			if nil != err {
+				log.Printf("ResolveTCPAddr %v fail: %v", options.LocalAddr, err)
 				syscall.Close(socketFd)
 				return nil, err
 			}

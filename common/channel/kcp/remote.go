@@ -36,6 +36,7 @@ func servKCP(lp *kcp.Listener, config *channel.KCPConfig) {
 		if nil != err {
 			continue
 		}
+
 		//config := &remote.ServerConf.KCP
 		conn.SetStreamMode(true)
 		conn.SetWriteDelay(true)

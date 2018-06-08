@@ -141,6 +141,27 @@ type ProxyMuxStream struct {
 func (s *ProxyMuxStream) OnIO(read bool) {
 	s.latestIOTime = time.Now()
 }
+func (s *ProxyMuxStream) ReadFrom(r io.Reader) (n int64, err error) {
+	if readFrom, ok := s.TimeoutReadWriteCloser.(io.ReaderFrom); ok {
+		return readFrom.ReadFrom(r)
+	}
+	var nn int
+	buf := make([]byte, 8192)
+	for {
+		nn, err = r.Read(buf)
+		if nn > 0 {
+			n += int64(nn)
+			_, werr := s.Write(buf[0:nn])
+			if nil != werr {
+				return n, werr
+			}
+		}
+		if nil != err {
+			return n, err
+		}
+	}
+}
+
 func (s *ProxyMuxStream) WriteTo(w io.Writer) (n int64, err error) {
 	if writerTo, ok := s.TimeoutReadWriteCloser.(io.WriterTo); ok {
 		return writerTo.WriteTo(w)
@@ -160,7 +181,6 @@ func (s *ProxyMuxStream) WriteTo(w io.Writer) (n int64, err error) {
 			return n, err
 		}
 	}
-	return
 }
 
 func (s *ProxyMuxStream) Read(p []byte) (int, error) {

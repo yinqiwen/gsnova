@@ -18,6 +18,7 @@ func (ws *WsConn) writeBuffers(bufs *net.Buffers) (n int64, err error) {
 	if nil != err {
 		return 0, err
 	}
+	defer w.Close()
 	for _, b := range *bufs {
 		nn, err := w.Write(b)
 		if nil != err {
@@ -25,6 +26,7 @@ func (ws *WsConn) writeBuffers(bufs *net.Buffers) (n int64, err error) {
 		}
 		n += int64(nn)
 	}
+
 	return n, nil
 }
 
