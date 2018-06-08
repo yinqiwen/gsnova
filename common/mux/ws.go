@@ -2,6 +2,7 @@ package mux
 
 import (
 	"io"
+	"net"
 
 	"github.com/gorilla/websocket"
 	"github.com/yinqiwen/gsnova/common/logger"
@@ -10,6 +11,21 @@ import (
 type WsConn struct {
 	*websocket.Conn
 	msgReader io.Reader
+}
+
+func (ws *WsConn) writeBuffers(bufs *net.Buffers) (n int64, err error) {
+	w, err := ws.NextWriter(websocket.BinaryMessage)
+	if nil != err {
+		return 0, err
+	}
+	for _, b := range *bufs {
+		nn, err := w.Write(b)
+		if nil != err {
+			return n, err
+		}
+		n += int64(nn)
+	}
+	return n, nil
 }
 
 func (ws *WsConn) Write(p []byte) (int, error) {
