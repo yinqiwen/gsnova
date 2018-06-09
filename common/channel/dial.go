@@ -89,7 +89,7 @@ func DialServerByConf(server string, conf *ProxyChannelConfig) (net.Conn, error)
 		}
 		if len(conf.P2PToken) > 0 {
 			opt := &protector.NetOptions{
-				ReusePort:   true,
+				ReusePort:   protector.SupportReusePort(),
 				DialTimeout: timeout,
 			}
 			conn, err = protector.DialContextOptions(context.Background(), "tcp", hostport, opt)

@@ -138,7 +138,7 @@ func (s *muxSessionHolder) init(lock bool) error {
 		if strings.HasPrefix(s.server, "https://") || strings.HasPrefix(s.server, "wss://") || strings.HasPrefix(s.server, "tls://") || strings.HasPrefix(s.server, "quic://") || strings.HasPrefix(s.server, "http2://") {
 			cipherMethod = "none"
 		}
-		err, authReq, _ := clientAuthMuxSession(session, cipherMethod, s.conf, "", true, false)
+		err, authReq, _ := clientAuthMuxSession(session, cipherMethod, s.conf, "", "", true, false)
 		if nil != err {
 
 			return err
@@ -196,16 +196,18 @@ func (ch *LocalProxyChannel) setP2PSession(c net.Conn, s mux.MuxSession, authReq
 	ch.p2pSessions.Store(s, true)
 	if nil != s {
 		go func() {
-			for {
-				zero := []byte{}
-				if _, err := c.Read(zero); nil != err {
-					logger.Error("P2P Tunnl Conn error:%v", err)
-					c.Close()
-					ch.p2pSessions.Delete(s)
-					return
+			failCount := 0
+			for failCount < 3 {
+				time.Sleep(3 * time.Second)
+				if duration, err := s.Ping(); nil != err {
+					logger.Error("P2P Tunnl Ping error:%v after %v", err, duration)
+					failCount++
+					time.Sleep(3 * time.Second)
+					continue
 				}
-				time.Sleep(1 * time.Second)
+				failCount = 0
 			}
+			ch.p2pSessions.Delete(s)
 		}()
 		if len(defaultProxyLimitConfig.BlackList) > 0 || len(defaultProxyLimitConfig.WhiteList) > 0 {
 			go ServProxyMuxSession(s, authReq, nil)

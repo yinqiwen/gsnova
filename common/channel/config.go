@@ -62,8 +62,8 @@ type MuxConfig struct {
 	StreamMinRefresh   string
 	StreamIdleTimeout  int
 	SessionIdleTimeout int
-	UpBufferSize int
-	DownBufferSize int
+	UpBufferSize       int
+	DownBufferSize     int
 }
 
 func (m *MuxConfig) ToPMuxConf() *pmux.Config {
@@ -252,7 +252,6 @@ type ProxyChannelConfig struct {
 	RemoteSNIProxy         map[string]string
 	HibernateAfterSecs     int
 	P2PToken               string
-	WithUPNP               bool
 
 	proxyURL    *url.URL
 	lazyConnect bool

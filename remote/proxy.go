@@ -91,7 +91,7 @@ func StartRemoteProxy() {
 				}
 			}
 		default:
-			logger.Error("Invalid listen scheme in listen url:%s", lis.Listen)
+			logger.Error("Invalid listen scheme:%s in listen url:%s", scheme, lis.Listen)
 		}
 	}
 }

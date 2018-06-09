@@ -7,6 +7,10 @@ import (
 	"net"
 )
 
+func SupportReusePort() bool {
+	return true
+}
+
 func ListenTCP(laddr *net.TCPAddr, options *NetOptions) (net.Listener, error) {
 	return net.ListenTCP("tcp", laddr)
 }

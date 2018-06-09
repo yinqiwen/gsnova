@@ -9,14 +9,6 @@
 		//AllowedUser
 		"User": "*,gsnova"
 	},
-	"RateLimit":{
-		"*": "-1",
-		"gsnova_limit":"500K"
-	},
-	"ProxyLimit":{
-		"WhiteList":[],
-		"BlackList":[]
-	},
 	"Mux":{
 		"MaxStreamWindow": "512K",
 		"StreamMinRefresh":"32K",
@@ -47,7 +39,7 @@
 	        //"Cert":"/etc/letsencrypt/live/testdomain.tk/fullchain.pem"
 		},
 		{
-			"Listen":"http2//:48103",
+			"Listen":"http2://:48103",
 			"Key": "",
 			"Cert":""
 		}

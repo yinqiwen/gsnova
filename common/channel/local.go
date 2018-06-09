@@ -59,7 +59,7 @@ func AllowedSchema() []string {
 	return schemes
 }
 
-func clientAuthMuxSession(session mux.MuxSession, cipherMethod string, conf *ProxyChannelConfig, tunnelPriAddr string, isFirst bool, isP2P bool) (error, *mux.AuthRequest, *mux.AuthResponse) {
+func clientAuthMuxSession(session mux.MuxSession, cipherMethod string, conf *ProxyChannelConfig, tunnelPriAddr, tunnelPubAddr string, isFirst bool, isP2P bool) (error, *mux.AuthRequest, *mux.AuthResponse) {
 	authStream, err := session.OpenStream()
 	if nil != err {
 		return err, nil, nil
@@ -72,6 +72,7 @@ func clientAuthMuxSession(session mux.MuxSession, cipherMethod string, conf *Pro
 		CompressMethod: conf.Compressor,
 		P2PToken:       conf.P2PToken,
 		P2PPriAddr:     tunnelPriAddr,
+		P2PPubAddr:     tunnelPubAddr,
 	}
 	if len(conf.P2PToken) > 0 {
 		authReq.P2PConnID = p2pConnID
@@ -80,13 +81,14 @@ func clientAuthMuxSession(session mux.MuxSession, cipherMethod string, conf *Pro
 		authReq.P2PToken = ""
 		authReq.P2PConnID = ""
 		authReq.P2PPriAddr = ""
+		authReq.P2PPubAddr = ""
 	}
 	authRes := authStream.Auth(authReq)
-	authStream.Close()
 	err = authRes.Error()
 	if nil != err {
 		return err, nil, nil
 	}
+	authStream.Close()
 	if isFirst {
 		if psession, ok := session.(*mux.ProxyMuxSession); ok {
 			err = psession.Session.ResetCryptoContext(cipherMethod, counter)
@@ -111,7 +113,7 @@ func clientAuthConn(c net.Conn, cipherMethod string, conf *ProxyChannelConfig, p
 	if !p2pTunnel {
 		tunnelPriAddr = c.LocalAddr().String()
 	}
-	err, req, res := clientAuthMuxSession(ps, cipherMethod, conf, tunnelPriAddr, true, p2pTunnel)
+	err, req, res := clientAuthMuxSession(ps, cipherMethod, conf, tunnelPriAddr, "", true, p2pTunnel)
 	if nil != err {
 		logger.Error("Failed to auth mux session:%v", err)
 		c.Close()

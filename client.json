@@ -11,10 +11,9 @@
 		"StreamIdleTimeout":10,
 		"SessionIdleTimeout":300
 	},
-	"ProxyLimit":{
-		"WhiteList":[],
-		"BlackList":[]
-	},
+
+	// expose port  by upnp for p2p
+	//"UPNPExposePort":56789,
 
     "LocalDNS":{
     	//only listen UDP
@@ -58,8 +57,6 @@
 			"Local": ":48100",
 			//used to indicate if it's a MITM proxy server, which would use generated cert for TLS connections
 			"MITM": false,  
-			//used to indicate the forward address
-			"Forward":"",
 			"HTTPDump":{
 				"Dump":"./httpdump-48100.txt",
 				"Domain":[],  

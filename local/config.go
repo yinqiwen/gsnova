@@ -258,6 +258,7 @@ type LocalConfig struct {
 	Mux             channel.MuxConfig
 	ProxyLimit      channel.ProxyLimitConfig
 	UserAgent       string
+	UPNPExposePort  int
 	LocalDNS        dns.LocalDNSConfig
 	UDPGW           UDPGWConfig
 	SNI             SNIConfig

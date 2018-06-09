@@ -137,6 +137,7 @@ func StartProxy() error {
 	logger.InitLogger(GConf.Log)
 	channel.SetDefaultMuxConfig(GConf.Mux)
 
+	channel.UPNPExposePort = GConf.UPNPExposePort
 	if GConf.TransparentMark > 0 {
 		enableTransparentSocketMark(GConf.TransparentMark)
 	}

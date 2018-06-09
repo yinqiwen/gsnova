@@ -40,9 +40,13 @@ func addP2PSession(auth *mux.AuthRequest, session mux.MuxSession, raddr net.Addr
 		logger.Info("P2P Room:%s have %d members, '%s' just joined.", auth.P2PToken, len(m1), auth.P2PConnID)
 	}
 	if len(auth.P2PPriAddr) > 0 {
-		logger.Info("Recv P2P Room:%s tunnel conn at from %v.", auth.P2PToken, raddr)
+		logger.Info("Recv P2P Room:%s tunnel conn at from %v with req:%v", auth.P2PToken, raddr, auth)
 		sessions.peerPriAddr = auth.P2PPriAddr
-		sessions.peerPubAddr = raddr.String()
+		if len(auth.P2PPubAddr) == 0 {
+			sessions.peerPubAddr = raddr.String()
+		} else {
+			sessions.peerPubAddr = auth.P2PPubAddr
+		}
 	} else {
 		sessions.sessions[session] = true
 	}

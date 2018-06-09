@@ -42,6 +42,7 @@ type AuthRequest struct {
 	P2PToken   string
 	P2PConnID  string
 	P2PPriAddr string
+	P2PPubAddr string
 }
 type AuthResponse struct {
 	Code        int

@@ -266,7 +266,7 @@ func ProxyDial(proxyURL string, laddr, raddr string, timeout time.Duration, reus
 	var c net.Conn
 	if len(laddr) > 0 || reuse {
 		opt := &protector.NetOptions{
-			ReusePort:   true,
+			ReusePort:   reuse,
 			LocalAddr:   laddr,
 			DialTimeout: timeout,
 		}

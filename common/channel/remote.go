@@ -263,7 +263,7 @@ func serverAuthSession(session mux.MuxSession, raddr net.Addr, isFirst bool) (*m
 		logger.Error("[ERROR]:Failed to read auth request:%v", err)
 		return nil, err
 	}
-	logger.Info("Recv auth:%v", recvAuth)
+	logger.Info("Recv auth:%v %v", recvAuth, isFirst)
 	if !DefaultServerCipher.VerifyUser(recvAuth.User) {
 		session.Close()
 		return nil, mux.ErrAuthFailed
@@ -289,8 +289,14 @@ func serverAuthSession(session mux.MuxSession, raddr net.Addr, isFirst bool) (*m
 		if len(peerPriAddr) > 0 {
 			authRes.PeerPriAddr = peerPriAddr
 			authRes.PeerPubAddr = peerPubAddr
+		}
+	}
+	if len(recvAuth.P2PPubAddr) == 0 {
+		if nil != raddr {
 			authRes.PubAddr = raddr.String()
 		}
+	} else {
+		authRes.PubAddr = recvAuth.P2PPubAddr
 	}
 	mux.WriteMessage(stream, authRes)
 	stream.Close()

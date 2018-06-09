@@ -26,6 +26,19 @@ const (
 
 var SocketMark int
 
+func SupportReusePort() bool {
+	fd, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_STREAM, syscall.IPPROTO_TCP)
+	if nil != err {
+		return false
+	}
+	defer syscall.Close(fd)
+	err = unix.SetsockoptInt(fd, unix.SOL_SOCKET, unix.SO_REUSEPORT, 1)
+	if nil != err {
+		return false
+	}
+	return true
+}
+
 type ProtectedConnBase struct {
 	mutex    sync.Mutex
 	isClosed bool
@@ -398,7 +411,7 @@ func ListenTCP(laddr *net.TCPAddr, options *NetOptions) (net.Listener, error) {
 	conn := &ProtectedConn{}
 	conn.ProtectedConnBase.port = laddr.Port
 	family := syscall.AF_INET
-	if laddr.IP.To4() == nil {
+	if len(laddr.IP) > 0 && laddr.IP.To4() == nil {
 		family = syscall.AF_INET6
 	}
 	socketFd, err := syscall.Socket(family, syscall.SOCK_STREAM, 0)
@@ -430,11 +443,14 @@ func ListenTCP(laddr *net.TCPAddr, options *NetOptions) (net.Listener, error) {
 	if err != nil {
 		return nil, fmt.Errorf("Could not bind socket to system device: %v", err)
 	}
-	err = conn.bindSocket(laddr.IP, laddr.Port, family == syscall.AF_INET6)
-	if err != nil {
-		log.Printf("Could not bind listen tcp socket: %v", err)
-		return nil, err
+	if len(laddr.IP) > 0 {
+		err = conn.bindSocket(laddr.IP, laddr.Port, family == syscall.AF_INET6)
+		if err != nil {
+			log.Printf("Could not bind listen tcp socket: %v", err)
+			return nil, err
+		}
 	}
+
 	err = syscall.Listen(conn.socketFd, 1024)
 	if nil != err {
 		log.Printf("Could not listen tcp socket: %v", err)
