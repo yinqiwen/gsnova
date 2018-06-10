@@ -9,6 +9,11 @@
 		//AllowedUser
 		"User": "*,gsnova"
 	},
+    //Limit user 'abc' bandwidth to 256KB/s
+	"RateLimit":{
+		"abc": "256K",
+		"*":"-1"
+	},
 	"Mux":{
 		"MaxStreamWindow": "512K",
 		"StreamMinRefresh":"32K",

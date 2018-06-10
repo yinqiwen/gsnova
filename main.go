@@ -9,7 +9,10 @@ import (
 	_ "net/http/pprof"
 	"os"
 	"path/filepath"
+	"runtime"
+	"runtime/debug"
 	"strings"
+	"time"
 
 	"github.com/yinqiwen/gotoolkit/ots"
 	"github.com/yinqiwen/gsnova/common/channel"
@@ -67,6 +70,7 @@ func main() {
 	var whilteList, blackList channel.HopServers
 	flag.Var(&whilteList, "whitelist", "Proxy whitelist item config")
 	flag.Var(&blackList, "blackList", "Proxy blacklist item config")
+	gcInterval := flag.Int("gc_interval", -1, "Manual GC every interval secs.")
 
 	//client options
 	admin := flag.String("admin", "", "Client Admin listen address")
@@ -123,12 +127,16 @@ func main() {
 		go func() {
 			http.ListenAndServe(*pprofAddr, nil)
 		}()
-		// go func() {
-		// 	for {
-		// 		debug.FreeOSMemory()
-		// 		time.Sleep(1 * time.Second)
-		// 	}
-		// }()
+
+	}
+	if *gcInterval > 0 {
+		go func() {
+			for {
+				runtime.GC()
+				debug.FreeOSMemory()
+				time.Sleep(time.Duration(*gcInterval) * time.Second)
+			}
+		}()
 	}
 	if runAsClient {
 		options := local.ProxyOptions{

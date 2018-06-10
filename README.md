@@ -1,4 +1,4 @@
-GSnova: Private Proxy Solution.    
+GSnova: Private Proxy Solution & Network Troubleshooting Tool.    
 [![Join the chat at https://gitter.im/gsnova/Lobby](https://badges.gitter.im/gsnova/Lobby.svg)](https://gitter.im/gsnova/Lobby?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 [![Build Status](https://travis-ci.org/yinqiwen/gsnova.svg?branch=master)](https://travis-ci.org/yinqiwen/gsnova)
 
@@ -24,8 +24,7 @@ GSnova: Private Proxy Solution.
     - http/https
     - http2
     - websocket
-    - tcp
-    - tls
+    - tcp/tls
     - quic
     - kcp
     - ssh
@@ -48,6 +47,9 @@ GSnova: Private Proxy Solution.
 - P2P/P2S2P Proxy
     - P2P: Use TCP NAT tunnel for direct P2P commnunication if possible
     - P2S2P: Use middle server for two peers to communication
+    - Use UPNP to expose port for remote p2p peer if possible.
+- Low-memory Environments Support
+    - Use less than 20MB RSS memory at client/server side
 
 
 # Usage
@@ -98,6 +100,8 @@ Usage of ./gsnova:
     	PID file (default ".gsnova.pid")
   -ping_interval int
     	Channel ping interval seconds. (default 30)
+  -pprof string
+    	PProf trouble shooting listen address
   -proxy string
     	Proxy setting to connect remote server.
   -remote value
@@ -112,6 +116,8 @@ Usage of ./gsnova:
     	TLS Cert file
   -tls.key string
     	TLS Key file
+  -upnp int
+    	UPNP port to expose for p2p.
   -user string
     	Username for remote server to authorize. (default "gsnova")
   -version
@@ -131,9 +137,9 @@ Usage of ./gsnova:
 ```
 This would launch a running instance listening at serveral ports with different transport protocol.  
 
-The server can also be deployed to serveral PAAS service like heroku/openshift and some docker host servce.  
+The server can also be deployed to serveral PAAS service like heroku/openshift and some docker host service.  
 
-## Deploy & Run Client(PC)
+## Deploy & Run Client
 
 ### Run From Command Line
 ```
@@ -150,7 +156,8 @@ This is a sample for [client.json](https://github.com/yinqiwen/gsnova/blob/maste
 
 ### Advanced Usage
 #### Multi-Hop Proxy
-GSnova support more than ONE remote server as the next hops, just add moren `-remote server` arguments to enable multi-hop proxy. 
+GSnova support more than ONE remote server as the next hops, just add more `-remote server` arguments to enable multi-hop proxy.     
+This would use `http2://app1.openshiftapps.com` as the first proxy ho and use `wss://app2.herokuapp.com` as the final proxy hop.
 ```shell
    ./gsnova -cmd -client -listen :48101 -remote http2://app1.openshiftapps.com -remote wss://app2.herokuapp.com -key 809240d3a021449f6e67aa73221d42df942a308a
 ```
@@ -159,7 +166,8 @@ GSnova support more than ONE remote server as the next hops, just add moren `-re
 - It's only works on linux.
 
 #### MITM Proxy
-GSnova support running the client as a MITM proxy to capture HTTP(S) packets for web debuging. 
+GSnova support running the client as a MITM proxy to capture HTTP(S) packets for web debuging.    
+This would capture HTTP(S) traffic packets into local dist file `httpdump.log`.
 ```shell
    ./gsnova -cmd -client -listen :48101 -remote direct -mitm -httpdump.dst ./httpdump.log -httpdump.filter "*.google.com" -httpdump.filter "*.facebook.com"
 ```
