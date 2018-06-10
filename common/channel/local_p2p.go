@@ -197,9 +197,11 @@ func startP2PSession(server string, pch LocalChannel, ch *LocalProxyChannel) err
 			continue
 		}
 		session, err := pch.CreateMuxSession(server, &ch.Conf)
-		if nil != err {
+		if nil != err || nil == session {
 			logger.Error("Failed to init mux session:%v", err)
-			session.Close()
+			if nil != session {
+				session.Close()
+			}
 			time.Sleep(waitAfterErr)
 			continue
 		}

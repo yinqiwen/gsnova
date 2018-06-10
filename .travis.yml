@@ -21,27 +21,27 @@ install:
 script:
 - godep save && tar cf tmp-deploy.tar Godeps vendor local common remote main.go  server.json && tar uf tmp-deploy.tar -C remote Procfile manifest.yml && cp remote/Procfile ./ && bzip2 tmp-deploy.tar && mv tmp-deploy.tar.bz2 gsnova-paas-deploy-with-dependencies-${TRAVIS_TAG}.tar.bz2
 - export CGO_ENABLED=0
-- GOOS=windows GOARCH=386 go build -o gsnova.exe github.com/yinqiwen/gsnova
+- GOOS=windows GOARCH=386 go build -ldflags="-s -w" -o gsnova.exe github.com/yinqiwen/gsnova
 - tar cjf gsnova_windows_386-${TRAVIS_TAG}.tar.bz2 client.json server.json hosts.json cnipset.txt gsnova.exe
-- GOOS=windows GOARCH=amd64 go build -o gsnova.exe github.com/yinqiwen/gsnova
+- GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o gsnova.exe github.com/yinqiwen/gsnova
 - tar cjf gsnova_windows_amd64-${TRAVIS_TAG}.tar.bz2 client.json server.json hosts.json cnipset.txt gsnova.exe
-- GOOS=linux GOARCH=386 go build  github.com/yinqiwen/gsnova
+- GOOS=linux GOARCH=386 go build -ldflags="-s -w"  github.com/yinqiwen/gsnova
 - tar cjf gsnova_linux_386-${TRAVIS_TAG}.tar.bz2 client.json server.json hosts.json cnipset.txt gsnova
-- GOOS=linux GOARCH=amd64 go build github.com/yinqiwen/gsnova
+- GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" github.com/yinqiwen/gsnova
 - tar cjf gsnova_linux_amd64-${TRAVIS_TAG}.tar.bz2 client.json server.json hosts.json cnipset.txt gsnova
-- GOOS=linux GOARCH=arm GOARM=5 go build github.com/yinqiwen/gsnova
+- GOOS=linux GOARCH=arm GOARM=5 go build -ldflags="-s -w" github.com/yinqiwen/gsnova
 - tar cjf gsnova_linux_armv5-${TRAVIS_TAG}.tar.bz2 client.json server.json hosts.json cnipset.txt gsnova
-- GOOS=linux GOARCH=arm GOARM=6 go build  github.com/yinqiwen/gsnova
+- GOOS=linux GOARCH=arm GOARM=6 go build -ldflags="-s -w"  github.com/yinqiwen/gsnova
 - tar cjf gsnova_linux_armv6-${TRAVIS_TAG}.tar.bz2 client.json server.json hosts.json cnipset.txt gsnova
-- GOOS=linux GOARCH=arm GOARM=7 go build  github.com/yinqiwen/gsnova
+- GOOS=linux GOARCH=arm GOARM=7 go build -ldflags="-s -w"  github.com/yinqiwen/gsnova
 - tar cjf gsnova_linux_armv7-${TRAVIS_TAG}.tar.bz2 client.json server.json hosts.json cnipset.txt gsnova
-- GOOS=linux GOARCH=arm64  go build  github.com/yinqiwen/gsnova
+- GOOS=linux GOARCH=arm64  go build -ldflags="-s -w"  github.com/yinqiwen/gsnova
 - tar cjf gsnova_linux_arm64-${TRAVIS_TAG}.tar.bz2 client.json server.json hosts.json cnipset.txt gsnova
-- GOOS=linux GOARCH=mipsle  go build  github.com/yinqiwen/gsnova
+- GOOS=linux GOARCH=mipsle  go build -ldflags="-s -w"  github.com/yinqiwen/gsnova
 - tar cjf gsnova_linux_mipsle-${TRAVIS_TAG}.tar.bz2 client.json server.json hosts.json cnipset.txt gsnova
-- GOOS=linux GOARCH=mips  go build  github.com/yinqiwen/gsnova
+- GOOS=linux GOARCH=mips  go build -ldflags="-s -w"  github.com/yinqiwen/gsnova
 - tar cjf gsnova_linux_mips-${TRAVIS_TAG}.tar.bz2 client.json server.json hosts.json cnipset.txt gsnova
-- GOOS=darwin GOARCH=amd64 go build  github.com/yinqiwen/gsnova
+- GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w"  github.com/yinqiwen/gsnova
 - tar cjf gsnova_macos_amd64-${TRAVIS_TAG}.tar.bz2 client.json server.json hosts.json cnipset.txt gsnova
 
 
