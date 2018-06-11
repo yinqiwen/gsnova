@@ -299,7 +299,7 @@ func serverAuthSession(session mux.MuxSession, raddr net.Addr, isFirst bool) (*m
 		authRes.PubAddr = recvAuth.P2PPubAddr
 	}
 	mux.WriteMessage(stream, authRes)
-	stream.Close()
+	stream.SyncClose()
 	if isFirst {
 		if tmp, ok := session.(*mux.ProxyMuxSession); ok {
 			tmp.Session.ResetCryptoContext(recvAuth.CipherMethod, recvAuth.CipherCounter)

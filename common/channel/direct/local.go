@@ -25,6 +25,19 @@ type directStream struct {
 	latestIOTime time.Time
 }
 
+func (tc *directStream) SetReadDeadline(t time.Time) error {
+	if nil == tc.Conn {
+		return io.EOF
+	}
+	return tc.Conn.SetReadDeadline(t)
+}
+func (tc *directStream) SetWriteDeadline(t time.Time) error {
+	if nil == tc.Conn {
+		return io.EOF
+	}
+	return tc.Conn.SetWriteDeadline(t)
+}
+
 func (tc *directStream) Auth(req *mux.AuthRequest) *mux.AuthResponse {
 	return &mux.AuthResponse{Code: mux.AuthOK}
 }
@@ -126,6 +139,9 @@ func (tc *directStream) Close() error {
 	}
 	tc.session.closeStream(tc)
 	return nil
+}
+func (tc *directStream) SyncClose() error {
+	return tc.Close()
 }
 
 type directMuxSession struct {

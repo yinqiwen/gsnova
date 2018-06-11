@@ -5,6 +5,7 @@ import (
 	"net"
 	"reflect"
 	"sort"
+	"time"
 
 	"github.com/yinqiwen/gsnova/common/helper"
 	"github.com/yinqiwen/gsnova/common/logger"
@@ -83,12 +84,17 @@ func clientAuthMuxSession(session mux.MuxSession, cipherMethod string, conf *Pro
 		authReq.P2PPriAddr = ""
 		authReq.P2PPubAddr = ""
 	}
+	authStream.SetReadDeadline(time.Now().Add(3 * time.Second))
 	authRes := authStream.Auth(authReq)
 	err = authRes.Error()
 	if nil != err {
 		return err, nil, nil
 	}
-	authStream.Close()
+	//wait auth stream close
+	var zero time.Time
+	authStream.SetReadDeadline(zero)
+	authStream.Read(make([]byte, 1))
+	//authStream.Close()
 	if isFirst {
 		if psession, ok := session.(*mux.ProxyMuxSession); ok {
 			err = psession.Session.ResetCryptoContext(cipherMethod, counter)

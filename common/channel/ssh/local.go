@@ -24,6 +24,19 @@ type sshStream struct {
 	latestIOTime time.Time
 }
 
+func (tc *sshStream) SetReadDeadline(t time.Time) error {
+	if nil == tc.Conn {
+		return io.EOF
+	}
+	return tc.Conn.SetReadDeadline(t)
+}
+func (tc *sshStream) SetWriteDeadline(t time.Time) error {
+	if nil == tc.Conn {
+		return io.EOF
+	}
+	return tc.Conn.SetWriteDeadline(t)
+}
+
 func (s *sshStream) LatestIOTime() time.Time {
 	return s.latestIOTime
 }
@@ -80,6 +93,10 @@ func (tc *sshStream) Close() error {
 	}
 	tc.session.closeStream(tc)
 	return nil
+}
+
+func (tc *sshStream) SyncClose() error {
+	return tc.Close()
 }
 
 type sshMuxSession struct {

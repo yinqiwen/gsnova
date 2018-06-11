@@ -271,7 +271,7 @@ func ProxyDial(proxyURL string, laddr, raddr string, timeout time.Duration, reus
 			DialTimeout: timeout,
 		}
 		c, err = protector.DialContextOptions(context.Background(), "tcp", u.Host, opt)
-		logger.Info("#####C %v with err:%v", u.Host, err)
+		//logger.Info("#####C %v with err:%v", u.Host, err)
 	} else {
 		c, err = netx.DialTimeout("tcp", u.Host, timeout)
 	}
