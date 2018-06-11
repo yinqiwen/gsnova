@@ -123,7 +123,6 @@ type MuxStream interface {
 	SetReadDeadline(t time.Time) error
 	SetWriteDeadline(t time.Time) error
 	LatestIOTime() time.Time
-	SyncClose() error
 }
 
 type MuxSession interface {
@@ -211,16 +210,6 @@ func (s *ProxyMuxStream) StreamID() uint32 {
 		s.sessionID = atomic.AddInt64(&streamIDSeed, 1)
 	}
 	return uint32(s.sessionID)
-}
-
-func (s *ProxyMuxStream) SyncClose() error {
-	if c, ok := s.TimeoutReadWriteCloser.(SyncCloser); ok {
-		if nil != s.session {
-			s.session.CloseStream(s)
-		}
-		return c.SyncClose()
-	}
-	return s.Close()
 }
 
 func (s *ProxyMuxStream) Close() error {

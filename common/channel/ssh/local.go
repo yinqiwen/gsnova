@@ -95,10 +95,6 @@ func (tc *sshStream) Close() error {
 	return nil
 }
 
-func (tc *sshStream) SyncClose() error {
-	return tc.Close()
-}
-
 type sshMuxSession struct {
 	conf         *channel.ProxyChannelConfig
 	streams      map[*sshStream]bool

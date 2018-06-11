@@ -140,9 +140,6 @@ func (tc *directStream) Close() error {
 	tc.session.closeStream(tc)
 	return nil
 }
-func (tc *directStream) SyncClose() error {
-	return tc.Close()
-}
 
 type directMuxSession struct {
 	conf         *channel.ProxyChannelConfig
