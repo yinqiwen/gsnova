@@ -88,6 +88,7 @@ func main() {
 	servable := flag.Bool("servable", false, "Client as a proxy server for peer p2p client")
 	proxy := flag.String("proxy", "", "Proxy setting to connect remote server.")
 	upnpPort := flag.Int("upnp", 0, "UPNP port to expose for p2p.")
+	p2s2p := flag.Bool("p2s2p", false, "Connect two peers by P2S2P mode.")
 
 	//client or server listen
 	var listens channel.HopServers
@@ -195,6 +196,7 @@ func main() {
 				ch.ServerList = []string{hops[0]}
 				ch.Hops = hops[1:]
 				ch.P2PToken = *p2p
+				ch.P2S2PEnable = *p2s2p
 
 				ch.Proxy = *proxy
 				local.GConf.Channel = []channel.ProxyChannelConfig{ch}

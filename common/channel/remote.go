@@ -135,6 +135,7 @@ func handleProxyStream(stream mux.MuxStream, ctx *sessionContext) {
 		logger.Error("[ERROR]:Failed to read connect request:%v", err)
 		return
 	}
+	start := time.Now()
 	logger.Debug("[%d]Start handle stream:%v with comprresor:%s", stream.StreamID(), creq, ctx.auth.CompressMethod)
 	if !defaultProxyLimitConfig.Allowed(creq.Addr) {
 		logger.Error("'%s' is NOT allowed by proxy limit config.", creq.Addr)
@@ -209,6 +210,7 @@ func handleProxyStream(stream mux.MuxStream, ctx *sessionContext) {
 		if len(buf) > 0 {
 			upBytesPool.Put(buf)
 		}
+		logger.Debug("[%d]1Cost %v to handle stream:%v ", stream.StreamID(), time.Now().Sub(start), creq)
 		closeSig <- true
 	}()
 
@@ -234,6 +236,7 @@ func handleProxyStream(stream mux.MuxStream, ctx *sessionContext) {
 		}
 		c.Close()
 		stream.Close()
+		logger.Debug("[%d]2Cost %v to handle stream:%v ", stream.StreamID(), time.Now().Sub(start), creq)
 		break
 	}
 	if len(buf) > 0 {
@@ -246,6 +249,7 @@ func handleProxyStream(stream mux.MuxStream, ctx *sessionContext) {
 	if close, ok := streamReader.(io.Closer); ok {
 		close.Close()
 	}
+	logger.Debug("[%d]Cost %v to handle stream:%v ", stream.StreamID(), time.Now().Sub(start), creq)
 }
 
 var DefaultServerCipher CipherConfig
@@ -331,6 +335,9 @@ func ServProxyMuxSession(session mux.MuxSession, auth *mux.AuthRequest, raddr ne
 				ctx.isP2P = true
 			}
 			continue
+		}
+		if 0 == atomic.LoadInt32(&ctx.streamCouter) {
+			emptySessions.Store(ctx, true)
 		}
 		stream, err := session.AcceptStream()
 		if nil != err {

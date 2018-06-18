@@ -155,6 +155,7 @@ func (s *muxSessionHolder) init(lock bool) error {
 			logger.Debug("Mux session woulde expired after %d seconds.", expireAfter)
 			s.expireTime = time.Now().Add(time.Duration(expireAfter) * time.Second)
 		}
+
 		if features.Pingable && s.conf.HeartBeatPeriod > 0 {
 			go s.heartbeat(s.conf.HeartBeatPeriod)
 		}
@@ -190,6 +191,14 @@ func (ch *LocalProxyChannel) isP2PSessionEstablisehd() bool {
 		return false
 	})
 	return !empty
+}
+
+func (ch *LocalProxyChannel) closeAll() {
+	for holder := range ch.sessions {
+		if nil != holder {
+			holder.close()
+		}
+	}
 }
 
 func (ch *LocalProxyChannel) setP2PSession(c net.Conn, s mux.MuxSession, authReq *mux.AuthRequest) {
@@ -284,18 +293,36 @@ func (ch *LocalProxyChannel) Init(lock bool) bool {
 		} else {
 			v := reflect.New(t)
 			p := v.Interface().(LocalChannel)
+			shouldInit := false
+			if ch.Conf.P2S2PEnable && len(conf.P2PToken) > 0 {
+				ch.Conf.lazyConnect = false
+				shouldInit = true
+				if ch.Conf.HeartBeatPeriod <= 0 || ch.Conf.HeartBeatPeriod >= 10 {
+					ch.Conf.HeartBeatPeriod = 3
+				}
+			}
 			for i := 0; i < conf.ConnsPerServer; i++ {
-				_, err := ch.createMuxSessionByProxy(p, server, i == 0)
+				if 0 == i {
+					shouldInit = true
+				}
+				holder, err := ch.createMuxSessionByProxy(p, server, shouldInit)
 				if nil != err {
 					logger.Error("[ERROR]Failed to create mux session for %s:%d with reason:%v", server, i, err)
 					break
 				} else {
 					success = true
+					if len(conf.P2PToken) > 0 {
+						if !conf.P2S2PEnable {
+							holder.close()
+						}
+					}
 				}
 			}
 			if success {
-				if len(conf.P2PToken) > 0 && strings.EqualFold(schema, "tcp") {
-					go startP2PSession(server, p, ch)
+				if len(conf.P2PToken) > 0 {
+					if !conf.P2S2PEnable {
+						go startP2PSession(server, p, ch)
+					}
 				}
 			}
 		}

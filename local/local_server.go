@@ -64,6 +64,8 @@ type proxyStreamContext struct {
 	c      io.ReadWriteCloser
 }
 
+var ssidSeed = uint32(0)
+
 func serveProxyConn(conn net.Conn, remoteHost, remotePort string, proxy *ProxyConfig) {
 	var proxyChannelName string
 	protocol := "tcp"
@@ -98,7 +100,7 @@ func serveProxyConn(conn net.Conn, remoteHost, remotePort string, proxy *ProxyCo
 		mitmEnabled = true
 		return nil
 	}
-
+	//logger.Info("###Enter with %v %v", isTransparentProxy, remoteHost)
 	if !isTransparentProxy {
 		socksConn, sbufconn, err := socks.NewSocksConn(conn)
 		if nil == err {
@@ -291,6 +293,9 @@ START:
 	}
 
 	ssid := stream.StreamID()
+	if 0 == ssid {
+		ssid = atomic.AddUint32(&ssidSeed, uint32(1))
+	}
 	opt := mux.StreamOptions{
 		DialTimeout: conf.RemoteDialMSTimeout,
 		Hops:        conf.Hops,
@@ -350,12 +355,15 @@ START:
 	streamCtx.c = localConn
 	activeStreams.Store(streamCtx, true)
 
+	start := time.Now()
 	closeCh := make(chan int, 1)
 	go func() {
 		//buf := make([]byte, 128*1024)
 		buf := downBytesPool.Get().([]byte)
 		io.CopyBuffer(localConn, streamReader, buf)
+		logger.Notice("Proxy stream[%d] cost %v to copy from  %s:%v", ssid, time.Now().Sub(start), remoteHost, remotePort)
 		localConn.Close()
+		bufconn.Close()
 		downBytesPool.Put(buf)
 		closeCh <- 1
 	}()
@@ -368,6 +376,7 @@ START:
 		for {
 			localConn.SetReadDeadline(time.Now().Add(maxIdleTime))
 			_, cerr := io.CopyBuffer(streamWriter, bufconn, buf)
+			//logger.Notice("Proxy stream[%d] cost %v to copy from local to %s:%v %v", ssid, time.Now().Sub(start), remoteHost, remotePort, cerr)
 			if isTimeoutErr(cerr) && time.Now().Sub(stream.LatestIOTime()) < maxIdleTime {
 				continue
 			}
@@ -377,7 +386,11 @@ START:
 		upBytesPool.Put(buf)
 		if close, ok := streamWriter.(io.Closer); ok {
 			close.Close()
+		} else {
+			stream.Close()
 		}
+		//localConn.Close()
+		logger.Notice("Proxy stream[%d] cost %v to copy from local to %s:%v", ssid, time.Now().Sub(start), remoteHost, remotePort)
 	} else {
 		proxyReq := initialHTTPReq
 		initialHTTPReq = nil
@@ -447,7 +460,7 @@ func startLocalProxyServer(proxyIdx int) (*net.TCPListener, error) {
 				continue
 			}
 			isTransparent := false
-			if supportTransparentProxy() {
+			if proxyConf.Transparent && supportTransparentProxy() {
 				tcpAddr, ok := conn.RemoteAddr().(*net.TCPAddr)
 				if ok {
 					_, exist := helper.GetLocalIPSet()[tcpAddr.IP.String()]

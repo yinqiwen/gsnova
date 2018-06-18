@@ -12,6 +12,11 @@
 		"SessionIdleTimeout":300
 	},
 
+	"ProxyLimit":{
+		"WhiteList":["*"],
+		"BlackList":[]
+	},
+
 	// expose port  by upnp for p2p
 	//"UPNPExposePort":56789,
 
@@ -72,6 +77,7 @@
 				//{"Host":["*"],"Remote":"direct"},
 				//{"URL":["*"],"Remote":"direct"},
 				//{"Method":["CONNECT"],"Remote":"direct"}
+				{"Rule":["IsPrivateIP"],"Remote":"direct"},
 				{"Remote":"Default"}
 			]
 		},

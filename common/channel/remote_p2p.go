@@ -4,6 +4,7 @@ import (
 	"io"
 	"net"
 	"sync"
+	"time"
 
 	"github.com/yinqiwen/gsnova/common/logger"
 	"github.com/yinqiwen/gsnova/common/mux"
@@ -130,14 +131,18 @@ func handleP2PProxyStream(stream mux.MuxStream, ctx *sessionContext) {
 		stream.Close()
 		return
 	}
+	start := time.Now()
 	closeSig := make(chan bool, 1)
 	go func() {
 		io.Copy(stream, peerStream)
-		closeSig <- true
+		logger.Info("P2P:Cost %v to copy local to remote", time.Now().Sub(start))
 		stream.Close()
+		closeSig <- true
 	}()
 	io.Copy(peerStream, stream)
+	logger.Info("P2P:Cost %v to copy remote to local", time.Now().Sub(start))
 	<-closeSig
 	stream.Close()
 	peerStream.Close()
+
 }

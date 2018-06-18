@@ -252,6 +252,7 @@ type ProxyChannelConfig struct {
 	RemoteSNIProxy         map[string]string
 	HibernateAfterSecs     int
 	P2PToken               string
+	P2S2PEnable            bool
 
 	proxyURL    *url.URL
 	lazyConnect bool
