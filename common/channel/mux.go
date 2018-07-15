@@ -177,8 +177,10 @@ var localChannelTable = make(map[string]*LocalProxyChannel)
 var localChannelMutex sync.Mutex
 
 type LocalProxyChannel struct {
-	Conf           ProxyChannelConfig
-	sessions       map[*muxSessionHolder]bool
+	Conf ProxyChannelConfig
+	//sessions       map[*muxSessionHolder]bool
+	sessions       []*muxSessionHolder
+	cursor         int32
 	lastActiveTime time.Time
 	autoExpire     bool
 	p2pSessions    sync.Map
@@ -194,7 +196,7 @@ func (ch *LocalProxyChannel) isP2PSessionEstablisehd() bool {
 }
 
 func (ch *LocalProxyChannel) closeAll() {
-	for holder := range ch.sessions {
+	for _, holder := range ch.sessions {
 		if nil != holder {
 			holder.close()
 		}
@@ -237,7 +239,8 @@ func (ch *LocalProxyChannel) createMuxSessionByProxy(p LocalChannel, server stri
 	}
 
 	if nil == err {
-		ch.sessions[holder] = true
+		ch.sessions = append(ch.sessions, holder)
+		//ch.sessions[holder] = true
 		return holder, nil
 	}
 	return nil, err
@@ -256,17 +259,24 @@ func (ch *LocalProxyChannel) getMuxStream() (stream mux.MuxStream, err error) {
 		return
 	}
 
-	for holder := range ch.sessions {
+	c := atomic.LoadInt32(&ch.cursor)
+	for i := 0; i < len(ch.sessions); i++ {
+		if int(c) >= len(ch.sessions) {
+			c = 0
+		}
+		holder := ch.sessions[c]
 		stream, err = holder.getNewStream()
 		if nil != err {
 			if err == pmux.ErrSessionShutdown {
 				holder.close()
 			}
 			logger.Debug("Try to get next session since current session failed to open new stream with err:%v", err)
+			c++
 		} else {
 			if ch.autoExpire {
 				ch.lastActiveTime = time.Now()
 			}
+			atomic.StoreInt32(&ch.cursor, c+1)
 			return
 		}
 	}
@@ -345,7 +355,7 @@ func (ch *LocalProxyChannel) Init(lock bool) bool {
 func DumpLoaclChannelStat(w io.Writer) {
 	for _, pch := range localChannelTable {
 		if pch.Conf.Name != DirectChannelName {
-			for holder := range pch.sessions {
+			for _, holder := range pch.sessions {
 				if nil != holder {
 					holder.dumpStat(w)
 				}
@@ -356,8 +366,8 @@ func DumpLoaclChannelStat(w io.Writer) {
 
 func NewProxyChannel(conf *ProxyChannelConfig) *LocalProxyChannel {
 	channel := &LocalProxyChannel{
-		Conf:     *conf,
-		sessions: make(map[*muxSessionHolder]bool),
+		Conf: *conf,
+		//sessions: make(map[*muxSessionHolder]bool),
 	}
 	return channel
 }
@@ -415,7 +425,7 @@ func GetMuxStreamByURL(u *url.URL, defaultUser string, defaultCipher *CipherConf
 
 func StopLocalChannels() {
 	for _, pch := range localChannelTable {
-		for holder := range pch.sessions {
+		for _, holder := range pch.sessions {
 			if nil != holder && nil != holder.muxSession {
 				holder.muxSession.Close()
 			}
@@ -440,7 +450,7 @@ func expireLocalChannels() {
 				continue
 			}
 			expire := true
-			for session := range ch.sessions {
+			for _, session := range ch.sessions {
 				session.check()
 				session.tryCloseRetiredSessions()
 				if len(session.retiredSessions) > 0 {

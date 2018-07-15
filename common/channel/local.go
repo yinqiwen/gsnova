@@ -1,13 +1,11 @@
 package channel
 
 import (
-	"math"
 	"net"
 	"reflect"
 	"sort"
 	"time"
 
-	"github.com/yinqiwen/gsnova/common/helper"
 	"github.com/yinqiwen/gsnova/common/logger"
 	"github.com/yinqiwen/gsnova/common/mux"
 	"github.com/yinqiwen/pmux"
@@ -65,7 +63,8 @@ func clientAuthMuxSession(session mux.MuxSession, cipherMethod string, conf *Pro
 	if nil != err {
 		return err, nil, nil
 	}
-	counter := uint64(helper.RandBetween(0, math.MaxInt32))
+	//counter := uint64(helper.RandBetween(0, math.MaxInt32))
+	counter := uint64(1)
 	authReq := &mux.AuthRequest{
 		User:           conf.Cipher.User,
 		CipherCounter:  counter,

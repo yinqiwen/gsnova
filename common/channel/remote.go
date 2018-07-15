@@ -210,7 +210,7 @@ func handleProxyStream(stream mux.MuxStream, ctx *sessionContext) {
 		if len(buf) > 0 {
 			upBytesPool.Put(buf)
 		}
-		logger.Debug("[%d]1Cost %v to handle stream:%v ", stream.StreamID(), time.Now().Sub(start), creq)
+		logger.Debug("[%d]1Cost %v to handle stream:%v", stream.StreamID(), time.Now().Sub(start), creq)
 		closeSig <- true
 	}()
 
@@ -227,16 +227,16 @@ func handleProxyStream(stream mux.MuxStream, ctx *sessionContext) {
 		buf = downBytesPool.Get().([]byte)
 	}
 	for {
-		if d, ok := c.(DeadLineAccetor); ok {
-			d.SetReadDeadline(time.Now().Add(maxIdleTime))
-		}
-		_, err := io.CopyBuffer(streamWriter, connReader, buf)
+		// if d, ok := c.(DeadLineAccetor); ok {
+		// 	d.SetReadDeadline(time.Now().Add(maxIdleTime))
+		// }
+		n, err := io.CopyBuffer(streamWriter, connReader, buf)
 		if isTimeoutErr(err) && time.Now().Sub(stream.LatestIOTime()) < maxIdleTime {
 			continue
 		}
 		c.Close()
 		stream.Close()
-		logger.Debug("[%d]2Cost %v to handle stream:%v ", stream.StreamID(), time.Now().Sub(start), creq)
+		logger.Debug("[%d]2Cost %v to handle stream:%v  with %d bytes err:%v", stream.StreamID(), time.Now().Sub(start), creq, n, err)
 		break
 	}
 	if len(buf) > 0 {
