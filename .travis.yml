@@ -17,6 +17,7 @@ install:
 - go get github.com/tools/godep
 - go get github.com/bifurcation/mint
 - go get github.com/cheekybits/genny/generic
+- go get github.com/hashicorp/golang-lru
 - go get -t github.com/yinqiwen/gsnova
 script:
 - godep save && tar cf tmp-deploy.tar Godeps vendor local common remote main.go  server.json && tar uf tmp-deploy.tar -C remote Procfile manifest.yml && cp remote/Procfile ./ && bzip2 tmp-deploy.tar && mv tmp-deploy.tar.bz2 gsnova-paas-deploy-with-dependencies-${TRAVIS_TAG}.tar.bz2
