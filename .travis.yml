@@ -14,13 +14,12 @@ env:
     - secure: "bRj17E9wb/iElTncxbIUO3ph3vbSXsTeXL/+nGQM6djDDDwzElieEs92ZeatGS0aET7xgXcEYALCEdUsve8giNRBSN3p6Zwg3OP2fT4E9fV778rc+0lpH/goVphUzRRn5bsbmM6epVBO/XvhGQMWZ2RCWsE3mtFt+EoCywIRhcs="
 
 install:
-- go get github.com/tools/godep
-- go get github.com/bifurcation/mint
-- go get github.com/cheekybits/genny/generic
-- go get github.com/hashicorp/golang-lru
+- go get github.com/golang/dep/cmd/dep
 - go get -t github.com/yinqiwen/gsnova
 script:
-- godep save && tar cf tmp-deploy.tar Godeps vendor local common remote main.go  server.json && tar uf tmp-deploy.tar -C remote Procfile manifest.yml && cp remote/Procfile ./ && bzip2 tmp-deploy.tar && mv tmp-deploy.tar.bz2 gsnova-paas-deploy-with-dependencies-${TRAVIS_TAG}.tar.bz2
+- dep init -gopath 
+- echo "\n[metadata.heroku]\n  root-package = \"github.com/yinqiwen/gsnova\"\n  go-version = \"go1.10.3\"\n  ensure = \"false\"\n" >> Gopkg.toml
+- tar cf tmp-deploy.tar Gopkg.toml Gopkg.lock vendor local common remote main.go  server.json && tar uf tmp-deploy.tar -C remote Procfile manifest.yml  && bzip2 tmp-deploy.tar && mv tmp-deploy.tar.bz2 gsnova-paas-deploy-with-dependencies-${TRAVIS_TAG}.tar.bz2
 - export CGO_ENABLED=0
 - GOOS=windows GOARCH=386 go build -ldflags="-s -w" -o gsnova.exe github.com/yinqiwen/gsnova
 - tar cjf gsnova_windows_386-${TRAVIS_TAG}.tar.bz2 client.json server.json hosts.json cnipset.txt gsnova.exe
