@@ -5,7 +5,7 @@ services:
 language: go
 
 go:
-- "1.10.1"
+- "1.10.3"
 
 env:
   global:

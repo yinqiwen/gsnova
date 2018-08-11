@@ -29,5 +29,8 @@ func (c *BufConn) Reset(conn net.Conn) {
 func NewBufConn(c net.Conn, r *bufio.Reader) *BufConn {
 	conn := &BufConn{Conn: c}
 	conn.BR = r
+	if nil == r {
+		conn.BR = bufio.NewReader(c)
+	}
 	return conn
 }
