@@ -127,8 +127,6 @@ func serveProxyConn(conn net.Conn, remoteHost, remotePort string, proxy *ProxyCo
 			}
 			if sbufconn.Buffered() > 0 {
 				bufconn = helper.NewBufConn(conn, sbufconn)
-			} else {
-				pmux.RecycleBufReaderToPool(sbufconn)
 			}
 		}
 	}
@@ -137,8 +135,6 @@ func serveProxyConn(conn net.Conn, remoteHost, remotePort string, proxy *ProxyCo
 		//bufconn = bufio.NewReader(localConn)
 		bufconn = helper.NewBufConn(conn, nil)
 	}
-
-	defer pmux.RecycleBufReaderToPool(bufconn.BR)
 
 	trySniffDomain := false
 	if len(remoteHost) == 0 || (net.ParseIP(remoteHost) != nil && !helper.IsPrivateIP(remoteHost)) {
@@ -360,8 +356,8 @@ START:
 	go func() {
 		//buf := make([]byte, 128*1024)
 		buf := downBytesPool.Get().([]byte)
-		io.CopyBuffer(localConn, streamReader, buf)
-		logger.Notice("Proxy stream[%d] cost %v to copy from  %s:%v", ssid, time.Now().Sub(start), remoteHost, remotePort)
+		_, cerr := io.CopyBuffer(localConn, streamReader, buf)
+		logger.Notice("Proxy stream[%d] cost %v to copy from  %s:%v %v", ssid, time.Now().Sub(start), remoteHost, remotePort, cerr)
 		localConn.Close()
 		bufconn.Close()
 		downBytesPool.Put(buf)

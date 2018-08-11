@@ -3,8 +3,6 @@ package helper
 import (
 	"bufio"
 	"net"
-
-	"github.com/yinqiwen/pmux"
 )
 
 type BufConn struct {
@@ -30,12 +28,6 @@ func (c *BufConn) Reset(conn net.Conn) {
 
 func NewBufConn(c net.Conn, r *bufio.Reader) *BufConn {
 	conn := &BufConn{Conn: c}
-	if nil != r {
-		conn.BR = r
-	} else {
-		//conn.BR = bufio.NewReader(c)
-		conn.BR = pmux.NewBufReaderFromPool(c)
-	}
-
+	conn.BR = r
 	return conn
 }

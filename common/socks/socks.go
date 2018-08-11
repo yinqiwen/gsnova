@@ -6,8 +6,6 @@ import (
 	"io"
 	"net"
 	"time"
-
-	"github.com/yinqiwen/pmux"
 )
 
 const (
@@ -202,8 +200,8 @@ func (ln *SocksListener) Accept() (net.Conn, error) {
 func NewSocksConn(c net.Conn) (*SocksConn, *bufio.Reader, error) {
 	conn := new(SocksConn)
 	conn.Conn = c
-	//bio := bufio.NewReader(c)
-	bio := pmux.NewBufReaderFromPool(c)
+	bio := bufio.NewReader(c)
+	//bio := pmux.NewBufReaderFromPool(c)
 	// Determine which SOCKS version the client is using and branch on it.
 	if version, err := socksPeekByte(bio); err != nil {
 		//conn.Close()
