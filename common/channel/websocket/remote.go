@@ -16,7 +16,7 @@ var (
 	}
 )
 
-// handleWebsocket connection. Update to
+// WebsocketInvoke connection. Update to
 func WebsocketInvoke(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "GET" {
 		http.Error(w, "Method not allowed", 405)

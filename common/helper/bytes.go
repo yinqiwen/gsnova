@@ -17,7 +17,7 @@ func PKCS7Pad(buf *bytes.Buffer, blen int) {
 	}
 }
 
-// Returns slice of the original data without padding.
+// PKCS7Unpad returns slice of the original data without padding.
 func PKCS7Unpad(in []byte) []byte {
 	if len(in) == 0 {
 		return nil

@@ -283,7 +283,7 @@ func (ln *SocksListener) AcceptSocks() (*SocksConn, error) {
 	return conn, nil
 }
 
-// Returns "socks5", suitable to be included in a call to Cmethod.
+// Version returns "socks5", suitable to be included in a call to Cmethod.
 func (ln *SocksListener) Version() string {
 	return "socks5"
 }
