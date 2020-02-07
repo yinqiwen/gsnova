@@ -18,7 +18,7 @@ GSnova: Private Proxy Solution & Network Troubleshooting Tool.
                                                                     
                                                                                                                                    
 ```
-** Deprecated, use the rust version [rsnova](https://github.com/yinqiwen/rsnova) instead. **
+**Deprecated, use the rust version [rsnova](https://github.com/yinqiwen/rsnova) instead.**
 
 # Features
 - Multiple transport channel support
