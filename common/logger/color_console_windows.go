@@ -73,7 +73,7 @@ func isCygwinPipeName(name string) bool {
 	return true
 }
 
-// IsCygwinTerminal() return true if the file descriptor is a cygwin or msys2
+// IsCygwinTerminal return true if the file descriptor is a cygwin or msys2
 // terminal.
 func IsCygwinTerminal(fd uintptr) bool {
 	if procGetFileInformationByHandleEx == nil {
