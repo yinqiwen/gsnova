@@ -1,6 +1,7 @@
 package quic
 
 import (
+	"context"
 	"crypto/tls"
 
 	quic "github.com/lucas-clemente/quic-go"
@@ -11,7 +12,7 @@ import (
 
 func servQUIC(lp quic.Listener) {
 	for {
-		sess, err := lp.Accept()
+		sess, err := lp.Accept(context.Background())
 		if nil != err {
 			continue
 		}
