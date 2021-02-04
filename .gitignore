@@ -7,4 +7,6 @@ vendor
 .DS_Store
 *.tar.gz
 *.tar.bz2
+.history
+.vscode
 
