@@ -1,6 +1,7 @@
 package mux
 
 import (
+	"context"
 	"net"
 	"sync/atomic"
 	"time"
@@ -23,7 +24,7 @@ func (q *QUICMuxSession) CloseStream(stream MuxStream) error {
 }
 
 func (q *QUICMuxSession) OpenStream() (MuxStream, error) {
-	s, err := q.OpenStreamSync()
+	s, err := q.OpenStreamSync(context.Background())
 	if nil != err {
 		return nil, err
 	}
@@ -32,7 +33,7 @@ func (q *QUICMuxSession) OpenStream() (MuxStream, error) {
 }
 
 func (q *QUICMuxSession) AcceptStream() (MuxStream, error) {
-	s, err := q.Session.AcceptStream()
+	s, err := q.Session.AcceptStream(context.Background())
 	if nil != err {
 		return nil, err
 	}
@@ -45,7 +46,7 @@ func (q *QUICMuxSession) NumStreams() int {
 
 func (q *QUICMuxSession) Close() error {
 	q.streamCounter = 0
-	return q.Session.Close()
+	return q.Session.CloseWithError(0, "")
 }
 func (s *QUICMuxSession) RemoteAddr() net.Addr {
 	return nil

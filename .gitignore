@@ -7,4 +7,15 @@ vendor
 .DS_Store
 *.tar.gz
 *.tar.bz2
+.history
+.vscode
+go.sum
+
+MITM
+
+# pidfile
+*.pid
+
+# binary
+gsnova
 
