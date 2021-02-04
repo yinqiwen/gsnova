@@ -9,4 +9,13 @@ vendor
 *.tar.bz2
 .history
 .vscode
+go.sum
+
+MITM
+
+# pidfile
+*.pid
+
+# binary
+gsnova
 
